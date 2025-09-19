@@ -1,0 +1,142 @@
+.canvas-container {
+  position: relative;
+  flex: 1;
+  border-radius: 18px;
+  background: radial-gradient(circle at top, rgba(59, 130, 246, 0.08), transparent 45%),
+    radial-gradient(circle at bottom, rgba(16, 185, 129, 0.08), transparent 35%),
+    #020617;
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.05);
+  touch-action: none;
+}
+
+.canvas-container.is-panning {
+  cursor: grabbing;
+}
+
+.canvas-grid {
+  position: absolute;
+  inset: 0;
+  background-color: rgba(15, 23, 42, 0.25);
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+.canvas-svg {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: block;
+  pointer-events: none;
+}
+
+.canvas-svg > g,
+.canvas-svg line,
+.diagram-connector,
+.diagram-node {
+  pointer-events: all;
+}
+
+.diagram-node {
+  transition: transform 0.12s ease;
+}
+
+.diagram-node__shadow {
+  pointer-events: none;
+  filter: blur(18px);
+}
+
+.diagram-node__shape {
+  fill: rgba(15, 23, 42, 0.8);
+  transition: fill 0.2s ease, stroke 0.2s ease, opacity 0.2s ease;
+}
+
+.diagram-node__outline {
+  fill: none;
+  pointer-events: none;
+  transition: stroke 0.2s ease, stroke-width 0.2s ease;
+}
+
+.diagram-node.is-selected .diagram-node__outline {
+  filter: drop-shadow(0 0 12px rgba(96, 165, 250, 0.5));
+}
+
+.diagram-node__label {
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.3;
+  color: #e2e8f0;
+  background: rgba(15, 23, 42, 0.55);
+  border-radius: 14px;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  min-height: 24px;
+  pointer-events: none;
+  user-select: none;
+  transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.diagram-node__label.is-editing {
+  pointer-events: auto;
+  background: rgba(15, 23, 42, 0.9);
+  box-shadow: 0 0 0 1px rgba(148, 163, 184, 0.35), 0 10px 30px rgba(15, 23, 42, 0.45);
+  cursor: text;
+  user-select: text;
+  outline: none;
+}
+
+.diagram-connector {
+  pointer-events: none;
+}
+
+.diagram-connector__hit {
+  fill: none;
+  stroke: transparent;
+  pointer-events: stroke;
+}
+
+.diagram-connector__line {
+  fill: none;
+  pointer-events: stroke;
+  stroke-linecap: round;
+  transition: stroke 0.2s ease, stroke-width 0.2s ease;
+}
+
+.diagram-connector.is-selected .diagram-connector__line {
+  stroke: #60a5fa !important;
+  stroke-width: calc(var(--connector-width, 2) + 1.5);
+  filter: drop-shadow(0 0 10px rgba(96, 165, 250, 0.35));
+}
+
+.diagram-connector__label {
+  pointer-events: auto;
+  font-size: 14px;
+  color: #f8fafc;
+  background: rgba(15, 23, 42, 0.85);
+  border-radius: 12px;
+  padding: 6px 10px;
+  text-align: center;
+  box-shadow: 0 6px 20px rgba(2, 6, 23, 0.45);
+  min-height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+}
+
+.diagram-connector__label.is-editing {
+  user-select: text;
+  cursor: text;
+  outline: none;
+}
+
+.connector-pending {
+  stroke: rgba(96, 165, 250, 0.65);
+  stroke-width: 2;
+  stroke-dasharray: 6 6;
+  pointer-events: none;
+}
