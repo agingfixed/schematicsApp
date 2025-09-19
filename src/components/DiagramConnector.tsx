@@ -1,5 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ConnectorModel, NodeModel } from '../types/scene';
+import {
+  getConnectorPath,
+  getPolylineMidpoint
+} from '../utils/connector';
 
 interface DiagramConnectorProps {
   connector: ConnectorModel;
@@ -7,15 +11,11 @@ interface DiagramConnectorProps {
   target?: NodeModel;
   selected: boolean;
   onPointerDown: (event: React.PointerEvent<SVGPathElement>) => void;
+  onHandlePointerDown: (event: React.PointerEvent<SVGCircleElement>, index: number) => void;
   onUpdateLabel: (value: string) => void;
 }
 
 const clampLabel = (value: string) => value.trim();
-
-const getNodeCenter = (node: NodeModel) => ({
-  x: node.position.x + node.size.width / 2,
-  y: node.position.y + node.size.height / 2
-});
 
 export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
   connector,
@@ -23,6 +23,7 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
   target,
   selected,
   onPointerDown,
+  onHandlePointerDown,
   onUpdateLabel
 }) => {
   const [isEditing, setIsEditing] = useState(false);
@@ -34,37 +35,35 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
     }
   }, [connector.label, isEditing]);
 
-  if (!source || !target) {
-    return null;
-  }
-
-  const start = getNodeCenter(source);
-  const end = getNodeCenter(target);
+  const geometry = useMemo(() => {
+    if (!source || !target) {
+      return null;
+    }
+    return getConnectorPath(connector, source, target);
+  }, [connector, source, target]);
 
   const pathData = useMemo(() => {
-    if (connector.type === 'orthogonal' && connector.points?.length) {
-      const points = [start, ...connector.points, end];
-      return points.reduce((acc, point, index) => {
-        if (index === 0) {
-          return `M ${point.x} ${point.y}`;
-        }
-        return `${acc} L ${point.x} ${point.y}`;
-      }, '');
+    if (!geometry) {
+      return '';
     }
-    return `M ${start.x} ${start.y} L ${end.x} ${end.y}`;
-  }, [connector, start, end]);
+    return geometry.points.reduce((acc, point, index) => {
+      if (index === 0) {
+        return `M ${point.x} ${point.y}`;
+      }
+      return `${acc} L ${point.x} ${point.y}`;
+    }, '');
+  }, [geometry]);
 
   const midpoint = useMemo(() => {
-    if (connector.type === 'orthogonal' && connector.points?.length) {
-      const points = [start, ...connector.points, end];
-      const midIndex = Math.floor(points.length / 2);
-      return points[midIndex];
+    if (!geometry) {
+      return { x: 0, y: 0 };
     }
-    return {
-      x: (start.x + end.x) / 2,
-      y: (start.y + end.y) / 2
-    };
-  }, [connector, start, end]);
+    return getPolylineMidpoint(geometry.points);
+  }, [geometry]);
+
+  if (!geometry) {
+    return null;
+  }
 
   const markerStart = connector.style.arrowStart === 'arrow'
     ? 'url(#arrow-start)'
@@ -102,7 +101,12 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
   };
 
   return (
-    <g className={`diagram-connector ${selected ? 'is-selected' : ''}`}>
+    <g
+      className={`diagram-connector ${selected ? 'is-selected' : ''}`}
+      style={{
+        ['--connector-width' as string]: `${connector.style.strokeWidth}`
+      } as React.CSSProperties}
+    >
       <path
         className="diagram-connector__hit"
         d={pathData}
@@ -119,6 +123,20 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
         markerStart={markerStart}
         onPointerDown={onPointerDown}
       />
+      {selected &&
+        geometry.waypoints.map((point, index) => (
+          <circle
+            key={`${connector.id}-handle-${index}`}
+            className="diagram-connector__handle"
+            cx={point.x}
+            cy={point.y}
+            r={8}
+            onPointerDown={(event) => {
+              event.stopPropagation();
+              onHandlePointerDown(event, index);
+            }}
+          />
+        ))}
       {(connector.label || isEditing) && (
         <foreignObject
           x={midpoint.x - 80}
