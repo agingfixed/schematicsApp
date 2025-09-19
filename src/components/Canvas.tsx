@@ -11,6 +11,7 @@ import React, {
 } from 'react';
 import {
   CanvasTransform,
+  ConnectorModel,
   NodeModel,
   Tool,
   Vec2
@@ -25,6 +26,11 @@ import {
   getDefaultNodeSize,
   screenToWorld
 } from '../utils/scene';
+import {
+  findClosestPointOnPolyline,
+  getConnectorAnchor,
+  getConnectorPath
+} from '../utils/connector';
 import {
   selectConnectors,
   selectGridVisible,
@@ -69,6 +75,16 @@ interface PendingConnection {
   worldPoint: Vec2;
 }
 
+interface ConnectorDragState {
+  pointerId: number;
+  connectorId: string;
+  pointIndex: number;
+  isNewPoint: boolean;
+  moved: boolean;
+  points: Vec2[];
+  originalPoints: Vec2[];
+}
+
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
 const CanvasComponent = (
@@ -84,6 +100,7 @@ const CanvasComponent = (
   const dragStateRef = useRef<DragState | null>(null);
   const connectionPointerRef = useRef<number | null>(null);
   const initialFitDoneRef = useRef(false);
+  const connectorDragStateRef = useRef<ConnectorDragState | null>(null);
 
   const nodes = useSceneStore(selectNodes);
   const connectors = useSceneStore(selectConnectors);
@@ -336,6 +353,17 @@ const CanvasComponent = (
       return;
     }
 
+    const connectorDragState = connectorDragStateRef.current;
+    if (connectorDragState && connectorDragState.pointerId === event.pointerId) {
+      const worldPoint = getWorldPoint(event);
+      connectorDragState.points[connectorDragState.pointIndex] = worldPoint;
+      connectorDragState.moved = true;
+      updateConnector(connectorDragState.connectorId, {
+        points: connectorDragState.points
+      });
+      return;
+    }
+
     if (connectionPointerRef.current === event.pointerId && pendingConnection) {
       const worldPoint = getWorldPoint(event);
       setPendingConnection({ ...pendingConnection, worldPoint });
@@ -353,6 +381,16 @@ const CanvasComponent = (
       dragStateRef.current = null;
       endTransaction();
       containerRef.current?.releasePointerCapture(event.pointerId);
+    }
+
+    if (connectorDragStateRef.current?.pointerId === event.pointerId) {
+      const drag = connectorDragStateRef.current;
+      connectorDragStateRef.current = null;
+      const nextPoints = drag.moved ? drag.points : drag.originalPoints;
+      updateConnector(drag.connectorId, { points: nextPoints });
+      endTransaction();
+      containerRef.current?.releasePointerCapture(event.pointerId);
+      return;
     }
 
     if (connectionPointerRef.current === event.pointerId) {
@@ -410,23 +448,94 @@ const CanvasComponent = (
     }
   };
 
-  const handleConnectorPointerDown = (event: React.PointerEvent, connectorId: string) => {
+  const handleConnectorPointerDown = (
+    event: React.PointerEvent<SVGPathElement>,
+    connector: ConnectorModel
+  ) => {
     if (tool !== 'select') {
       return;
     }
     if (event.button !== 0) {
       return;
     }
-    const alreadySelected = selectedConnectorIds.includes(connectorId);
+    const alreadySelected = selectedConnectorIds.includes(connector.id);
     let nextSelection = selectedConnectorIds;
     if (event.shiftKey) {
       nextSelection = alreadySelected
-        ? selectedConnectorIds.filter((id) => id !== connectorId)
-        : [...selectedConnectorIds, connectorId];
+        ? selectedConnectorIds.filter((id) => id !== connector.id)
+        : [...selectedConnectorIds, connector.id];
     } else if (!alreadySelected) {
-      nextSelection = [connectorId];
+      nextSelection = [connector.id];
     }
     setSelection({ nodeIds: [], connectorIds: nextSelection });
+
+    if (!alreadySelected || event.shiftKey) {
+      return;
+    }
+
+    const sourceNode = getNodeById({ nodes, connectors }, connector.sourceId);
+    const targetNode = getNodeById({ nodes, connectors }, connector.targetId);
+    if (!sourceNode || !targetNode) {
+      return;
+    }
+
+    const geometry = getConnectorPath(connector, sourceNode, targetNode);
+    const worldPoint = getWorldPoint(event);
+    const { index, point } = findClosestPointOnPolyline(worldPoint, geometry.points);
+
+    const basePoints = connector.points?.map((item) => ({ ...item })) ?? [];
+    const updatedPoints = [...basePoints];
+    updatedPoints.splice(index, 0, point);
+
+    beginTransaction();
+    connectorDragStateRef.current = {
+      pointerId: event.pointerId,
+      connectorId: connector.id,
+      pointIndex: index,
+      isNewPoint: true,
+      moved: false,
+      points: updatedPoints,
+      originalPoints: basePoints
+    };
+    updateConnector(connector.id, { points: updatedPoints });
+    containerRef.current?.setPointerCapture(event.pointerId);
+  };
+
+  const handleConnectorHandlePointerDown = (
+    event: React.PointerEvent<SVGCircleElement>,
+    connector: ConnectorModel,
+    pointIndex: number
+  ) => {
+    if (tool !== 'select') {
+      return;
+    }
+    if (event.button !== 0) {
+      return;
+    }
+
+    event.stopPropagation();
+
+    const alreadySelected = selectedConnectorIds.includes(connector.id);
+    if (!alreadySelected) {
+      setSelection({ nodeIds: [], connectorIds: [connector.id] });
+    }
+
+    const points = connector.points?.map((item) => ({ ...item })) ?? [];
+    if (!points[pointIndex]) {
+      return;
+    }
+
+    beginTransaction();
+    connectorDragStateRef.current = {
+      pointerId: event.pointerId,
+      connectorId: connector.id,
+      pointIndex,
+      isNewPoint: false,
+      moved: false,
+      points,
+      originalPoints: points.map((item) => ({ ...item }))
+    };
+    containerRef.current?.setPointerCapture(event.pointerId);
   };
 
   const handleDeleteSelection = useCallback(() => {
@@ -458,6 +567,15 @@ const CanvasComponent = (
       if (event.key === 'Escape') {
         clearSelection();
         setPendingConnection(null);
+        if (connectorDragStateRef.current) {
+          const drag = connectorDragStateRef.current;
+          connectorDragStateRef.current = null;
+          updateConnector(drag.connectorId, { points: drag.originalPoints });
+          endTransaction();
+          if (containerRef.current && drag.pointerId !== undefined) {
+            containerRef.current.releasePointerCapture(drag.pointerId);
+          }
+        }
         if (connectionPointerRef.current !== null) {
           containerRef.current?.releasePointerCapture(connectionPointerRef.current);
           connectionPointerRef.current = null;
@@ -493,10 +611,7 @@ const CanvasComponent = (
     if (!sourceNode) {
       return null;
     }
-    const start = {
-      x: sourceNode.position.x + sourceNode.size.width / 2,
-      y: sourceNode.position.y + sourceNode.size.height / 2
-    };
+    const start = getConnectorAnchor(sourceNode, pendingConnection.worldPoint);
     return { start, end: pendingConnection.worldPoint };
   }, [pendingConnection, nodes, connectors]);
 
@@ -563,7 +678,10 @@ const CanvasComponent = (
               source={getNodeById({ nodes, connectors }, connector.sourceId)}
               target={getNodeById({ nodes, connectors }, connector.targetId)}
               selected={selectedConnectorIds.includes(connector.id)}
-              onPointerDown={(event) => handleConnectorPointerDown(event, connector.id)}
+              onPointerDown={(event) => handleConnectorPointerDown(event, connector)}
+              onHandlePointerDown={(event, index) =>
+                handleConnectorHandlePointerDown(event, connector, index)
+              }
               onUpdateLabel={(value) =>
                 updateConnector(connector.id, {
                   label: value
