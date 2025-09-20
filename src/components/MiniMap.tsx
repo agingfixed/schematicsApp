@@ -123,8 +123,8 @@ export const MiniMap: React.FC<MiniMapProps> = ({ scene, transform, viewport, ca
               y={topLeft.y}
               width={projectSize(node.size.width)}
               height={projectSize(node.size.height)}
-              rx={node.type === 'ellipse' ? projectSize(node.size.width / 2) : 6}
-              ry={node.type === 'ellipse' ? projectSize(node.size.height / 2) : 6}
+              rx={node.shape === 'ellipse' ? projectSize(node.size.width / 2) : 6}
+              ry={node.shape === 'ellipse' ? projectSize(node.size.height / 2) : 6}
               fill="rgba(59, 130, 246, 0.25)"
               stroke="rgba(59, 130, 246, 0.6)"
             />

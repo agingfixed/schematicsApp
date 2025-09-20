@@ -74,7 +74,7 @@ export const getConnectorAnchor = (node: NodeModel, toward: Vec2): Vec2 => {
   const halfWidth = node.size.width / 2;
   const halfHeight = node.size.height / 2;
 
-  switch (node.type) {
+  switch (node.shape) {
     case 'ellipse':
       return getEllipseAnchor(center, halfWidth, halfHeight, toward);
     case 'diamond':

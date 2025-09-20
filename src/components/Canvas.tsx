@@ -24,7 +24,8 @@ import {
   getNodeById,
   getSceneBounds,
   getDefaultNodeSize,
-  screenToWorld
+  screenToWorld,
+  worldToScreen
 } from '../utils/scene';
 import {
   findClosestPointOnPolyline,
@@ -33,6 +34,7 @@ import {
 } from '../utils/connector';
 import {
   selectConnectors,
+  selectEditingNodeId,
   selectGridVisible,
   selectNodes,
   selectSelection,
@@ -41,6 +43,9 @@ import {
 } from '../state/sceneStore';
 import { DiagramNode } from './DiagramNode';
 import { DiagramConnector } from './DiagramConnector';
+import { SelectionToolbar } from './SelectionToolbar';
+import { InlineTextEditor, InlineTextEditorHandle } from './InlineTextEditor';
+import { useCommands } from '../state/commands';
 import '../styles/canvas.css';
 
 const MIN_SCALE = 0.2;
@@ -125,6 +130,7 @@ const CanvasComponent = (
   const selection = useSceneStore(selectSelection);
   const tool = useSceneStore(selectTool);
   const gridVisible = useSceneStore(selectGridVisible);
+  const editingNodeId = useSceneStore(selectEditingNodeId);
   const setSelection = useSceneStore((state) => state.setSelection);
   const clearSelection = useSceneStore((state) => state.clearSelection);
   const addNode = useSceneStore((state) => state.addNode);
@@ -134,14 +140,17 @@ const CanvasComponent = (
   const batchMove = useSceneStore((state) => state.batchMove);
   const addConnector = useSceneStore((state) => state.addConnector);
   const removeConnector = useSceneStore((state) => state.removeConnector);
-  const updateNode = useSceneStore((state) => state.updateNode);
   const updateConnector = useSceneStore((state) => state.updateConnector);
   const setGlobalTransform = useSceneStore((state) => state.setTransform);
+  const setEditingNode = useSceneStore((state) => state.setEditingNode);
+  const { applyStyles, setText } = useCommands();
 
   const selectedNodeIds = selection.nodeIds;
   const selectedConnectorIds = selection.connectorIds;
 
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
+  const [linkFocusSignal, setLinkFocusSignal] = useState(0);
+  const inlineEditorRef = useRef<InlineTextEditorHandle | null>(null);
 
   const hasConnectorBetween = useCallback(
     (sourceId: string, targetId: string, ignoreId?: string) =>
@@ -169,6 +178,89 @@ const CanvasComponent = (
     const relative = getRelativePoint(event);
     return screenToWorld(relative.x, relative.y, transform);
   };
+
+  const selectedNode = useMemo(() => {
+    if (selectedNodeIds.length !== 1) {
+      return null;
+    }
+    return nodes.find((node) => node.id === selectedNodeIds[0]) ?? null;
+  }, [nodes, selectedNodeIds]);
+
+  const editingNode = useMemo(() => {
+    if (!editingNodeId) {
+      return null;
+    }
+    return nodes.find((node) => node.id === editingNodeId) ?? null;
+  }, [nodes, editingNodeId]);
+
+  const editorNode = editingNode ?? selectedNode;
+
+  const toolbarAnchor = useMemo(() => {
+    if (!selectedNode) {
+      return null;
+    }
+    const topLeft = worldToScreen(selectedNode.position, transform);
+    const bottomRight = worldToScreen(
+      {
+        x: selectedNode.position.x + selectedNode.size.width,
+        y: selectedNode.position.y + selectedNode.size.height
+      },
+      transform
+    );
+    return {
+      x: topLeft.x,
+      y: topLeft.y,
+      width: bottomRight.x - topLeft.x,
+      height: bottomRight.y - topLeft.y
+    };
+  }, [selectedNode, transform]);
+
+  const editorBounds = useMemo(() => {
+    if (!editorNode) {
+      return null;
+    }
+    const padding = 12;
+    const topLeft = worldToScreen(
+      {
+        x: editorNode.position.x + padding,
+        y: editorNode.position.y + padding
+      },
+      transform
+    );
+    const bottomRight = worldToScreen(
+      {
+        x: editorNode.position.x + editorNode.size.width - padding,
+        y: editorNode.position.y + editorNode.size.height - padding
+      },
+      transform
+    );
+    return {
+      x: topLeft.x,
+      y: topLeft.y,
+      width: Math.max(24, bottomRight.x - topLeft.x),
+      height: Math.max(24, bottomRight.y - topLeft.y)
+    };
+  }, [editorNode, transform]);
+
+  const commitEditingIfNeeded = useCallback(() => {
+    if (editingNodeId) {
+      inlineEditorRef.current?.commit();
+    }
+  }, [editingNodeId]);
+
+  const handleTextCommit = useCallback(
+    (value: string) => {
+      if (editingNode) {
+        setText(editingNode.id, value);
+      }
+      setEditingNode(null);
+    },
+    [editingNode, setText, setEditingNode]
+  );
+
+  const handleTextCancel = useCallback(() => {
+    setEditingNode(null);
+  }, [setEditingNode]);
 
   useEffect(() => {
     setGlobalTransform(transform);
@@ -336,6 +428,8 @@ const CanvasComponent = (
       return;
     }
 
+    commitEditingIfNeeded();
+
     if (tool === 'select') {
       if (!event.shiftKey) {
         clearSelection();
@@ -441,6 +535,14 @@ const CanvasComponent = (
       return;
     }
 
+    if ((event.metaKey || event.ctrlKey) && node.link?.url) {
+      event.preventDefault();
+      window.open(node.link.url, '_blank', 'noopener');
+      return;
+    }
+
+    commitEditingIfNeeded();
+
     const isSelected = selectedNodeIds.includes(node.id);
     let nextSelection = selectedNodeIds;
     if (event.shiftKey) {
@@ -465,6 +567,20 @@ const CanvasComponent = (
       lastWorld: worldPoint
     };
     containerRef.current?.setPointerCapture(event.pointerId);
+  };
+
+  const handleNodeDoubleClick = (event: React.MouseEvent<SVGGElement>, node: NodeModel) => {
+    if (tool !== 'select') {
+      return;
+    }
+    event.stopPropagation();
+    if (editingNodeId && editingNodeId !== node.id) {
+      commitEditingIfNeeded();
+    }
+    if (!selectedNodeIds.includes(node.id)) {
+      setSelection({ nodeIds: [node.id], connectorIds: [] });
+    }
+    setEditingNode(node.id);
   };
 
   const handleNodePointerUp = (event: React.PointerEvent, node: NodeModel) => {
@@ -524,6 +640,7 @@ const CanvasComponent = (
     if (event.button !== 0) {
       return;
     }
+    commitEditingIfNeeded();
     const alreadySelected = selectedConnectorIds.includes(connector.id);
     let nextSelection = selectedConnectorIds;
     if (event.shiftKey) {
@@ -579,6 +696,7 @@ const CanvasComponent = (
       return;
     }
 
+    commitEditingIfNeeded();
     event.stopPropagation();
 
     const alreadySelected = selectedConnectorIds.includes(connector.id);
@@ -613,6 +731,7 @@ const CanvasComponent = (
       return;
     }
 
+    commitEditingIfNeeded();
     event.stopPropagation();
 
     const worldPoint = getWorldPoint(event);
@@ -642,9 +761,10 @@ const CanvasComponent = (
   };
 
   const handleDeleteSelection = useCallback(() => {
+    commitEditingIfNeeded();
     selectedNodeIds.forEach((id) => removeNode(id));
     selectedConnectorIds.forEach((id) => removeConnector(id));
-  }, [selectedNodeIds, selectedConnectorIds, removeNode, removeConnector]);
+  }, [selectedNodeIds, selectedConnectorIds, removeNode, removeConnector, commitEditingIfNeeded]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -658,12 +778,66 @@ const CanvasComponent = (
         return;
       }
 
+      const singleNodeSelected = selectedNodeIds.length === 1 ? selectedNode : null;
+
+      if (event.key === 'Enter' && !event.shiftKey) {
+        if (singleNodeSelected && tool === 'select' && !editingNodeId) {
+          event.preventDefault();
+          setEditingNode(singleNodeSelected.id);
+          return;
+        }
+      }
+
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'b') {
+        if (singleNodeSelected && !editingNodeId) {
+          event.preventDefault();
+          const nextWeight = singleNodeSelected.fontWeight >= 700 ? 600 : 700;
+          applyStyles([singleNodeSelected.id], { fontWeight: nextWeight });
+        }
+        return;
+      }
+
+      if ((event.metaKey || event.ctrlKey) && event.shiftKey) {
+        const key = event.key.toLowerCase();
+        if (singleNodeSelected && !editingNodeId) {
+          if (key === 'l' || key === 'c' || key === 'r') {
+            event.preventDefault();
+            const align = key === 'l' ? 'left' : key === 'c' ? 'center' : 'right';
+            applyStyles([singleNodeSelected.id], { textAlign: align });
+            return;
+          }
+        }
+      }
+
+      if (event.metaKey || event.ctrlKey) {
+        if (!event.shiftKey && singleNodeSelected && !editingNodeId) {
+          if (event.key === '=' || event.key === '+') {
+            event.preventDefault();
+            const next = Math.min(200, singleNodeSelected.fontSize + 1);
+            applyStyles([singleNodeSelected.id], { fontSize: next });
+            return;
+          }
+          if (event.key === '-' || event.key === '_') {
+            event.preventDefault();
+            const next = Math.max(8, singleNodeSelected.fontSize - 1);
+            applyStyles([singleNodeSelected.id], { fontSize: next });
+            return;
+          }
+          if (event.key.toLowerCase() === 'k') {
+            event.preventDefault();
+            setLinkFocusSignal((value) => value + 1);
+            return;
+          }
+        }
+      }
+
       if ((event.key === 'Delete' || event.key === 'Backspace')) {
         event.preventDefault();
         handleDeleteSelection();
       }
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'a') {
         event.preventDefault();
+        commitEditingIfNeeded();
         const allNodeIds = nodes.map((node) => node.id);
         setSelection({ nodeIds: allNodeIds, connectorIds: [] });
       }
@@ -688,7 +862,20 @@ const CanvasComponent = (
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [nodes, clearSelection, setSelection, handleDeleteSelection]);
+  }, [
+    nodes,
+    clearSelection,
+    setSelection,
+    handleDeleteSelection,
+    selectedNodeIds,
+    selectedNode,
+    tool,
+    applyStyles,
+    editingNodeId,
+    setEditingNode,
+    setLinkFocusSignal,
+    commitEditingIfNeeded
+  ]);
 
   const gridStyle = useMemo(() => {
     const scaledSpacing = Math.max(GRID_SIZE * transform.scale, 8);
@@ -812,24 +999,46 @@ const CanvasComponent = (
               selected={selectedNodeIds.includes(node.id)}
               hovered={hoveredNodeId === node.id}
               tool={tool as Tool}
+              editing={editingNodeId === node.id}
               onPointerDown={(event) => handleNodePointerDown(event, node)}
               onPointerUp={(event) => handleNodePointerUp(event, node)}
               onPointerEnter={() => setHoveredNodeId(node.id)}
               onPointerLeave={() => setHoveredNodeId((prev) => (prev === node.id ? null : prev))}
-              onLabelChange={(value) => updateNode(node.id, { label: value })}
+              onDoubleClick={(event) => handleNodeDoubleClick(event, node)}
             />
           ))}
         </g>
-        {pendingLine && (
-          <line
-            className="connector-pending"
-            x1={pendingLine.start.x * transform.scale + transform.x}
-            y1={pendingLine.start.y * transform.scale + transform.y}
-            x2={pendingLine.end.x * transform.scale + transform.x}
-            y2={pendingLine.end.y * transform.scale + transform.y}
-          />
-        )}
+      {pendingLine && (
+        <line
+          className="connector-pending"
+          x1={pendingLine.start.x * transform.scale + transform.x}
+          y1={pendingLine.start.y * transform.scale + transform.y}
+          x2={pendingLine.end.x * transform.scale + transform.x}
+          y2={pendingLine.end.y * transform.scale + transform.y}
+        />
+      )}
       </svg>
+      {selectedNode && (
+        <SelectionToolbar
+          node={selectedNode}
+          nodeIds={[selectedNode.id]}
+          anchor={toolbarAnchor}
+          viewportSize={viewport}
+          isVisible={tool === 'select' && !isPanning}
+          focusLinkSignal={linkFocusSignal}
+        />
+      )}
+      {editorNode && (
+        <InlineTextEditor
+          ref={inlineEditorRef}
+          node={editorNode}
+          bounds={editorBounds}
+          isEditing={Boolean(editingNode)}
+          scale={transform.scale}
+          onCommit={handleTextCommit}
+          onCancel={handleTextCancel}
+        />
+      )}
     </div>
   );
 };

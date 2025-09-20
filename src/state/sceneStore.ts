@@ -3,10 +3,12 @@ import { create } from 'zustand';
 import {
   CanvasTransform,
   ConnectorModel,
+  NodeFontWeight,
   NodeKind,
   NodeModel,
   SceneContent,
   SelectionState,
+  TextAlign,
   Tool,
   Vec2
 } from '../types/scene';
@@ -25,6 +27,15 @@ interface SceneHistory {
   future: SceneContent[];
 }
 
+export interface NodeStylePatch {
+  fill?: string;
+  strokeColor?: string;
+  strokeWidth?: number;
+  fontSize?: number;
+  fontWeight?: NodeFontWeight;
+  textAlign?: TextAlign;
+}
+
 interface SceneStoreState {
   scene: SceneContent;
   history: SceneHistory;
@@ -35,6 +46,7 @@ interface SceneStoreState {
   showMiniMap: boolean;
   isTransaction: boolean;
   transform: CanvasTransform;
+  editingNodeId: string | null;
 }
 
 interface SceneStoreActions {
@@ -57,6 +69,11 @@ interface SceneStoreActions {
   beginTransaction: () => void;
   endTransaction: () => void;
   setTransform: (transform: CanvasTransform) => void;
+  setEditingNode: (nodeId: string | null) => void;
+  applyNodeStyles: (nodeIds: string[], patch: NodeStylePatch) => void;
+  setNodeText: (nodeId: string, text: string) => void;
+  setNodeShape: (nodeIds: string[], shape: NodeKind) => void;
+  setNodeLink: (nodeId: string, url: string | null) => void;
 }
 
 export type SceneStore = SceneStoreState & SceneStoreActions;
@@ -106,6 +123,8 @@ const createInitialScene = (): SceneContent => {
   };
 };
 
+const normalizeNodeText = (value: string) => (value.trim().length ? value : 'Untitled');
+
 const initialState: SceneStoreState = {
   scene: createInitialScene(),
   history: { past: [], future: [] },
@@ -115,7 +134,8 @@ const initialState: SceneStoreState = {
   snapToGrid: true,
   showMiniMap: true,
   isTransaction: false,
-  transform: { x: 0, y: 0, scale: 1 }
+  transform: { x: 0, y: 0, scale: 1 },
+  editingNodeId: null
 };
 
 const withSceneChange = (state: SceneStoreState, nextScene: SceneContent) => {
@@ -139,7 +159,11 @@ const withSceneChange = (state: SceneStoreState, nextScene: SceneContent) => {
 
 export const useSceneStore = create<SceneStore>((set, get) => ({
   ...initialState,
-  setTool: (tool) => set({ tool }),
+  setTool: (tool) =>
+    set((state) => ({
+      tool,
+      ...(tool !== 'select' && state.editingNodeId ? { editingNodeId: null } : {})
+    })),
   addNode: (type, position) => {
     const state = get();
     const snappedPosition = state.snapToGrid
@@ -157,7 +181,8 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
       return {
         ...withSceneChange(current, scene),
         selection: { nodeIds: [node.id], connectorIds: [] },
-        tool: 'select'
+        tool: 'select',
+        editingNodeId: null
       };
     });
 
@@ -171,7 +196,7 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
         return {};
       }
 
-      const { position, size, style, ...rest } = patch;
+      const { position, size, stroke, link, ...rest } = patch;
 
       if (position) {
         node.position = { ...node.position, ...position };
@@ -179,8 +204,11 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
       if (size) {
         node.size = { ...node.size, ...size };
       }
-      if (style) {
-        node.style = { ...node.style, ...style };
+      if (stroke) {
+        node.stroke = { ...node.stroke, ...stroke };
+      }
+      if (link !== undefined) {
+        node.link = link ? { ...link } : undefined;
       }
 
       Object.assign(node, rest);
@@ -248,9 +276,12 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
         return {};
       }
 
+      const next = withSceneChange(current, scene);
+
       return {
-        ...withSceneChange(current, scene),
-        selection: { nodeIds: [], connectorIds: [] }
+        ...next,
+        selection: { nodeIds: [], connectorIds: [] },
+        editingNodeId: current.editingNodeId === id ? null : current.editingNodeId
       };
     }),
   addConnector: (sourceId, targetId) => {
@@ -281,7 +312,8 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
       return {
         ...withSceneChange(current, scene),
         selection: { nodeIds: [], connectorIds: [connector.id] },
-        tool: 'select'
+        tool: 'select',
+        editingNodeId: null
       };
     });
 
@@ -321,8 +353,16 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
         selection: { nodeIds: [], connectorIds: [] }
       };
     }),
-  setSelection: (selection) => set({ selection }),
-  clearSelection: () => set({ selection: { nodeIds: [], connectorIds: [] } }),
+  setSelection: (selection) =>
+    set((state) => {
+      const updates: Partial<SceneStoreState> = { selection };
+      if (state.editingNodeId && !selection.nodeIds.includes(state.editingNodeId)) {
+        updates.editingNodeId = null;
+      }
+      return updates;
+    }),
+  clearSelection: () =>
+    set({ selection: { nodeIds: [], connectorIds: [] }, editingNodeId: null }),
   toggleGrid: () => set((state) => ({ gridVisible: !state.gridVisible })),
   toggleSnap: () => set((state) => ({ snapToGrid: !state.snapToGrid })),
   setShowMiniMap: (value) => set({ showMiniMap: value }),
@@ -338,7 +378,8 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
         scene: cloneScene(previous),
         history: { past, future },
         selection: { nodeIds: [], connectorIds: [] },
-        isTransaction: false
+        isTransaction: false,
+        editingNodeId: null
       };
     }),
   redo: () =>
@@ -355,7 +396,8 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
         scene: cloneScene(next),
         history: { past, future: rest },
         selection: { nodeIds: [], connectorIds: [] },
-        isTransaction: false
+        isTransaction: false,
+        editingNodeId: null
       };
     }),
   beginTransaction: () =>
@@ -374,7 +416,120 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
     }),
   endTransaction: () =>
     set((state) => (state.isTransaction ? { isTransaction: false } : {})),
-  setTransform: (transform) => set({ transform })
+  setTransform: (transform) => set({ transform }),
+  setEditingNode: (nodeId) => set({ editingNodeId: nodeId }),
+  applyNodeStyles: (nodeIds, patch) =>
+    set((current) => {
+      if (!nodeIds.length) {
+        return {};
+      }
+
+      const scene = cloneScene(current.scene);
+      let changed = false;
+
+      scene.nodes.forEach((node) => {
+        if (!nodeIds.includes(node.id)) {
+          return;
+        }
+
+        if (patch.fill !== undefined && node.fill !== patch.fill) {
+          node.fill = patch.fill;
+          changed = true;
+        }
+        if (patch.strokeColor !== undefined && node.stroke.color !== patch.strokeColor) {
+          node.stroke = { ...node.stroke, color: patch.strokeColor };
+          changed = true;
+        }
+        if (patch.strokeWidth !== undefined && node.stroke.width !== patch.strokeWidth) {
+          node.stroke = { ...node.stroke, width: patch.strokeWidth };
+          changed = true;
+        }
+        if (patch.fontSize !== undefined && node.fontSize !== patch.fontSize) {
+          node.fontSize = patch.fontSize;
+          changed = true;
+        }
+        if (patch.fontWeight !== undefined && node.fontWeight !== patch.fontWeight) {
+          node.fontWeight = patch.fontWeight;
+          changed = true;
+        }
+        if (patch.textAlign !== undefined && node.textAlign !== patch.textAlign) {
+          node.textAlign = patch.textAlign;
+          changed = true;
+        }
+      });
+
+      if (!changed) {
+        return {};
+      }
+
+      return withSceneChange(current, scene);
+    }),
+  setNodeText: (nodeId, text) =>
+    set((current) => {
+      const scene = cloneScene(current.scene);
+      const node = scene.nodes.find((item) => item.id === nodeId);
+      if (!node) {
+        return {};
+      }
+
+      const nextText = normalizeNodeText(text);
+      if (node.text === nextText) {
+        return {};
+      }
+
+      node.text = nextText;
+      return withSceneChange(current, scene);
+    }),
+  setNodeShape: (nodeIds, shape) =>
+    set((current) => {
+      if (!nodeIds.length) {
+        return {};
+      }
+
+      const scene = cloneScene(current.scene);
+      let changed = false;
+
+      scene.nodes.forEach((node) => {
+        if (!nodeIds.includes(node.id)) {
+          return;
+        }
+
+        if (node.shape === shape) {
+          return;
+        }
+
+        node.shape = shape;
+        if (shape === 'rounded-rectangle') {
+          node.cornerRadius = node.cornerRadius ?? 24;
+        } else if (shape !== 'rectangle') {
+          node.cornerRadius = undefined;
+        }
+        changed = true;
+      });
+
+      if (!changed) {
+        return {};
+      }
+
+      return withSceneChange(current, scene);
+    }),
+  setNodeLink: (nodeId, url) =>
+    set((current) => {
+      const scene = cloneScene(current.scene);
+      const node = scene.nodes.find((item) => item.id === nodeId);
+      if (!node) {
+        return {};
+      }
+
+      const currentUrl = node.link?.url ?? null;
+      const nextUrl = url ? url : null;
+      if (currentUrl === nextUrl) {
+        return {};
+      }
+
+      node.link = nextUrl ? { url: nextUrl } : undefined;
+      return withSceneChange(current, scene);
+    })
 }));
 
 export const selectScene = (state: SceneStore) => state.scene;
@@ -386,6 +541,7 @@ export const selectGridVisible = (state: SceneStore) => state.gridVisible;
 export const selectSnapToGrid = (state: SceneStore) => state.snapToGrid;
 export const selectShowMiniMap = (state: SceneStore) => state.showMiniMap;
 export const selectTransform = (state: SceneStore) => state.transform;
+export const selectEditingNodeId = (state: SceneStore) => state.editingNodeId;
 export const selectSceneBounds = (state: SceneStore, ids?: string[]) =>
   getSceneBounds(state.scene, ids);
 export const selectNodeById = (id: string) => (state: SceneStore) =>
