@@ -89,6 +89,28 @@
   outline: none;
 }
 
+.diagram-node__connector-handles {
+  pointer-events: none;
+}
+
+.diagram-node__connector-handle {
+  pointer-events: all;
+  fill: rgba(15, 23, 42, 0.92);
+  stroke: rgba(96, 165, 250, 0.9);
+  stroke-width: 2;
+  cursor: crosshair;
+  transition: transform 0.15s ease, fill 0.2s ease, stroke 0.2s ease;
+}
+
+.diagram-node__connector-handle:hover {
+  transform: scale(1.1);
+  fill: rgba(37, 99, 235, 0.35);
+}
+
+.diagram-node__connector-handle:active {
+  transform: scale(0.92);
+}
+
 .diagram-connector {
   pointer-events: none;
 }
@@ -151,6 +173,24 @@
 .diagram-connector__handle:active {
   cursor: grabbing;
   transform: scale(0.95);
+}
+
+.diagram-connector__endpoint {
+  pointer-events: all;
+  fill: rgba(15, 23, 42, 0.92);
+  stroke: #60a5fa;
+  stroke-width: 2;
+  cursor: crosshair;
+  transition: transform 0.15s ease, fill 0.2s ease, stroke 0.2s ease, opacity 0.2s ease;
+}
+
+.diagram-connector__endpoint:hover {
+  transform: scale(1.12);
+  fill: rgba(37, 99, 235, 0.3);
+}
+
+.diagram-connector__endpoint:active {
+  transform: scale(0.9);
 }
 
 .connector-pending {

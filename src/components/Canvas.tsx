@@ -70,10 +70,22 @@ interface DragState {
   lastWorld: Vec2;
 }
 
-interface PendingConnection {
-  sourceId: string;
-  worldPoint: Vec2;
-}
+type PendingConnection =
+  | { type: 'create'; sourceId: string; worldPoint: Vec2 }
+  | {
+      type: 'reconnect-target';
+      connectorId: string;
+      sourceId: string;
+      initialTargetId: string;
+      worldPoint: Vec2;
+    }
+  | {
+      type: 'reconnect-source';
+      connectorId: string;
+      targetId: string;
+      initialSourceId: string;
+      worldPoint: Vec2;
+    };
 
 interface ConnectorDragState {
   pointerId: number;
@@ -101,6 +113,12 @@ const CanvasComponent = (
   const connectionPointerRef = useRef<number | null>(null);
   const initialFitDoneRef = useRef(false);
   const connectorDragStateRef = useRef<ConnectorDragState | null>(null);
+  const releasePointerCapture = useCallback((pointerId: number) => {
+    const element = containerRef.current;
+    if (element && element.hasPointerCapture(pointerId)) {
+      element.releasePointerCapture(pointerId);
+    }
+  }, []);
 
   const nodes = useSceneStore(selectNodes);
   const connectors = useSceneStore(selectConnectors);
@@ -124,6 +142,17 @@ const CanvasComponent = (
   const selectedConnectorIds = selection.connectorIds;
 
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
+
+  const hasConnectorBetween = useCallback(
+    (sourceId: string, targetId: string, ignoreId?: string) =>
+      connectors.some(
+        (connector) =>
+          connector.sourceId === sourceId &&
+          connector.targetId === targetId &&
+          connector.id !== ignoreId
+      ),
+    [connectors]
+  );
 
   const getRelativePoint = (event: PointerEvent | React.PointerEvent) => {
     const rect = containerRef.current?.getBoundingClientRect();
@@ -364,9 +393,9 @@ const CanvasComponent = (
       return;
     }
 
-    if (connectionPointerRef.current === event.pointerId && pendingConnection) {
+    if (connectionPointerRef.current === event.pointerId) {
       const worldPoint = getWorldPoint(event);
-      setPendingConnection({ ...pendingConnection, worldPoint });
+      setPendingConnection((current) => (current ? { ...current, worldPoint } : current));
     }
   };
 
@@ -374,13 +403,13 @@ const CanvasComponent = (
     if (panStateRef.current?.pointerId === event.pointerId) {
       panStateRef.current = null;
       setIsPanning(false);
-      containerRef.current?.releasePointerCapture(event.pointerId);
+      releasePointerCapture(event.pointerId);
     }
 
     if (dragStateRef.current?.pointerId === event.pointerId) {
       dragStateRef.current = null;
       endTransaction();
-      containerRef.current?.releasePointerCapture(event.pointerId);
+      releasePointerCapture(event.pointerId);
     }
 
     if (connectorDragStateRef.current?.pointerId === event.pointerId) {
@@ -389,23 +418,22 @@ const CanvasComponent = (
       const nextPoints = drag.moved ? drag.points : drag.originalPoints;
       updateConnector(drag.connectorId, { points: nextPoints });
       endTransaction();
-      containerRef.current?.releasePointerCapture(event.pointerId);
+      releasePointerCapture(event.pointerId);
       return;
     }
 
     if (connectionPointerRef.current === event.pointerId) {
       setPendingConnection(null);
       connectionPointerRef.current = null;
-      containerRef.current?.releasePointerCapture(event.pointerId);
+      releasePointerCapture(event.pointerId);
     }
   };
 
   const handleNodePointerDown = (event: React.PointerEvent, node: NodeModel) => {
     if (tool === 'connector') {
       const worldPoint = getWorldPoint(event);
-      setPendingConnection({ sourceId: node.id, worldPoint });
+      setPendingConnection({ type: 'create', sourceId: node.id, worldPoint });
       connectionPointerRef.current = event.pointerId;
-      containerRef.current?.setPointerCapture(event.pointerId);
       return;
     }
 
@@ -440,12 +468,50 @@ const CanvasComponent = (
   };
 
   const handleNodePointerUp = (event: React.PointerEvent, node: NodeModel) => {
-    if (tool === 'connector' && pendingConnection && pendingConnection.sourceId !== node.id) {
-      addConnector(pendingConnection.sourceId, node.id);
-      setPendingConnection(null);
-      connectionPointerRef.current = null;
-      containerRef.current?.releasePointerCapture(event.pointerId);
+    if (!pendingConnection) {
+      return;
     }
+
+    if (connectionPointerRef.current !== event.pointerId) {
+      return;
+    }
+
+    if (pendingConnection.type === 'create') {
+      if (pendingConnection.sourceId !== node.id) {
+        addConnector(pendingConnection.sourceId, node.id);
+      }
+    } else if (pendingConnection.type === 'reconnect-target') {
+      const isSameAsBefore = node.id === pendingConnection.initialTargetId;
+      const isSelfLoop = node.id === pendingConnection.sourceId;
+      if (!isSameAsBefore && !isSelfLoop) {
+        const exists = hasConnectorBetween(
+          pendingConnection.sourceId,
+          node.id,
+          pendingConnection.connectorId
+        );
+        if (!exists) {
+          updateConnector(pendingConnection.connectorId, { targetId: node.id, points: [] });
+          setSelection({ nodeIds: [], connectorIds: [pendingConnection.connectorId] });
+        }
+      }
+    } else if (pendingConnection.type === 'reconnect-source') {
+      const isSameAsBefore = node.id === pendingConnection.initialSourceId;
+      const isSelfLoop = node.id === pendingConnection.targetId;
+      if (!isSameAsBefore && !isSelfLoop) {
+        const exists = hasConnectorBetween(
+          node.id,
+          pendingConnection.targetId,
+          pendingConnection.connectorId
+        );
+        if (!exists) {
+          updateConnector(pendingConnection.connectorId, { sourceId: node.id, points: [] });
+          setSelection({ nodeIds: [], connectorIds: [pendingConnection.connectorId] });
+        }
+      }
+    }
+
+    setPendingConnection(null);
+    connectionPointerRef.current = null;
   };
 
   const handleConnectorPointerDown = (
@@ -538,6 +604,43 @@ const CanvasComponent = (
     containerRef.current?.setPointerCapture(event.pointerId);
   };
 
+  const handleConnectorEndpointPointerDown = (
+    event: React.PointerEvent<SVGCircleElement>,
+    connector: ConnectorModel,
+    endpoint: 'start' | 'end'
+  ) => {
+    if (event.button !== 0) {
+      return;
+    }
+
+    event.stopPropagation();
+
+    const worldPoint = getWorldPoint(event);
+    connectionPointerRef.current = event.pointerId;
+
+    if (!selectedConnectorIds.includes(connector.id)) {
+      setSelection({ nodeIds: [], connectorIds: [connector.id] });
+    }
+
+    if (endpoint === 'end') {
+      setPendingConnection({
+        type: 'reconnect-target',
+        connectorId: connector.id,
+        sourceId: connector.sourceId,
+        initialTargetId: connector.targetId,
+        worldPoint
+      });
+    } else {
+      setPendingConnection({
+        type: 'reconnect-source',
+        connectorId: connector.id,
+        targetId: connector.targetId,
+        initialSourceId: connector.sourceId,
+        worldPoint
+      });
+    }
+  };
+
   const handleDeleteSelection = useCallback(() => {
     selectedNodeIds.forEach((id) => removeNode(id));
     selectedConnectorIds.forEach((id) => removeConnector(id));
@@ -573,11 +676,11 @@ const CanvasComponent = (
           updateConnector(drag.connectorId, { points: drag.originalPoints });
           endTransaction();
           if (containerRef.current && drag.pointerId !== undefined) {
-            containerRef.current.releasePointerCapture(drag.pointerId);
+            releasePointerCapture(drag.pointerId);
           }
         }
         if (connectionPointerRef.current !== null) {
-          containerRef.current?.releasePointerCapture(connectionPointerRef.current);
+          releasePointerCapture(connectionPointerRef.current);
           connectionPointerRef.current = null;
         }
       }
@@ -607,6 +710,16 @@ const CanvasComponent = (
     if (!pendingConnection) {
       return null;
     }
+
+    if (pendingConnection.type === 'reconnect-source') {
+      const targetNode = getNodeById({ nodes, connectors }, pendingConnection.targetId);
+      if (!targetNode) {
+        return null;
+      }
+      const end = getConnectorAnchor(targetNode, pendingConnection.worldPoint);
+      return { start: pendingConnection.worldPoint, end };
+    }
+
     const sourceNode = getNodeById({ nodes, connectors }, pendingConnection.sourceId);
     if (!sourceNode) {
       return null;
@@ -681,6 +794,9 @@ const CanvasComponent = (
               onPointerDown={(event) => handleConnectorPointerDown(event, connector)}
               onHandlePointerDown={(event, index) =>
                 handleConnectorHandlePointerDown(event, connector, index)
+              }
+              onEndpointPointerDown={(event, endpoint) =>
+                handleConnectorEndpointPointerDown(event, connector, endpoint)
               }
               onUpdateLabel={(value) =>
                 updateConnector(connector.id, {

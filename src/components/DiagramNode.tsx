@@ -121,6 +121,14 @@ export const DiagramNode: React.FC<DiagramNodeProps> = ({
 
   const cursor = tool === 'connector' ? 'crosshair' : 'move';
 
+  const connectorHandleOffset = 18;
+  const connectorHandles = [
+    { key: 'top', x: node.size.width / 2, y: -connectorHandleOffset },
+    { key: 'right', x: node.size.width + connectorHandleOffset, y: node.size.height / 2 },
+    { key: 'bottom', x: node.size.width / 2, y: node.size.height + connectorHandleOffset },
+    { key: 'left', x: -connectorHandleOffset, y: node.size.height / 2 }
+  ];
+
   return (
     <g
       className={`diagram-node ${selected ? 'is-selected' : ''} ${hovered ? 'is-hovered' : ''}`}
@@ -144,6 +152,19 @@ export const DiagramNode: React.FC<DiagramNodeProps> = ({
       </g>
       {shapeElement}
       {outlineElement}
+      {tool === 'connector' && (
+        <g className="diagram-node__connector-handles">
+          {connectorHandles.map((handle) => (
+            <circle
+              key={handle.key}
+              className="diagram-node__connector-handle"
+              cx={handle.x}
+              cy={handle.y}
+              r={7}
+            />
+          ))}
+        </g>
+      )}
       <foreignObject x={12} y={12} width={Math.max(24, node.size.width - 24)} height={Math.max(24, node.size.height - 24)}>
         <div
           className={`diagram-node__label ${isEditing ? 'is-editing' : ''}`}
