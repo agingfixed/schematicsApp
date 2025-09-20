@@ -4,6 +4,7 @@ import {
   selectCanRedo,
   selectCanUndo,
   selectGridVisible,
+  selectSnapSettings,
   selectShowMiniMap,
   selectTool,
   selectTransform,
@@ -34,7 +35,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({ canvasRef }) => {
   const canRedo = useSceneStore(selectCanRedo);
   const gridVisible = useSceneStore(selectGridVisible);
   const toggleGrid = useSceneStore((state) => state.toggleGrid);
-  const snapToGrid = useSceneStore((state) => state.snapToGrid);
+  const snapSettings = useSceneStore(selectSnapSettings);
   const toggleSnap = useSceneStore((state) => state.toggleSnap);
   const showMiniMap = useSceneStore(selectShowMiniMap);
   const setShowMiniMap = useSceneStore((state) => state.setShowMiniMap);
@@ -119,9 +120,9 @@ export const Toolbar: React.FC<ToolbarProps> = ({ canvasRef }) => {
         </button>
         <button
           type="button"
-          className={`toolbar__button ${snapToGrid ? 'is-active' : ''}`}
+          className={`toolbar__button ${snapSettings.enabled ? 'is-active' : ''}`}
           onClick={toggleSnap}
-          title="Snap to Grid"
+          title="Toggle Smart Snap"
         >
           Snap
         </button>
