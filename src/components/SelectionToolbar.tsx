@@ -1,4 +1,5 @@
 import React, {
+  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -7,6 +8,9 @@ import React, {
 } from 'react';
 import { NodeModel, NodeKind, TextAlign } from '../types/scene';
 import { useCommands } from '../state/commands';
+import { useSceneStore } from '../state/sceneStore';
+import { ColorPicker } from './ColorPicker';
+import { clamp01, parseHexColor, rgbaToCss, rgbToHex, RGBColor } from '../utils/color';
 import '../styles/selection-toolbar.css';
 
 const FONT_SIZE_MIN = 8;
@@ -71,21 +75,67 @@ export const SelectionToolbar: React.FC<SelectionToolbarProps> = ({
   focusLinkSignal
 }) => {
   const commands = useCommands();
+  const beginTransaction = useSceneStore((state) => state.beginTransaction);
+  const endTransaction = useSceneStore((state) => state.endTransaction);
   const toolbarRef = useRef<HTMLDivElement>(null);
+  const fillButtonRef = useRef<HTMLButtonElement>(null);
+  const fillPopoverRef = useRef<HTMLDivElement>(null);
   const linkButtonRef = useRef<HTMLButtonElement>(null);
   const linkInputRef = useRef<HTMLInputElement>(null);
   const linkPopoverRef = useRef<HTMLDivElement>(null);
   const previousFocusSignalRef = useRef(focusLinkSignal);
+  const fillInteractionRef = useRef(false);
 
   const [placement, setPlacement] = useState<'top' | 'bottom'>('top');
   const [fontSizeValue, setFontSizeValue] = useState(node.fontSize.toString());
   const [strokeWidthValue, setStrokeWidthValue] = useState(node.stroke.width.toString());
+  const [fillOpen, setFillOpen] = useState(false);
   const [linkOpen, setLinkOpen] = useState(false);
   const [linkDraft, setLinkDraft] = useState(node.link?.url ?? '');
   const [linkError, setLinkError] = useState<string | null>(null);
 
   const hasText = node.text.trim().length > 0;
   const isBold = node.fontWeight >= 700;
+  const fillColor = useMemo<RGBColor>(() => {
+    const parsed = parseHexColor(node.fill);
+    if (parsed) {
+      return { r: parsed.r, g: parsed.g, b: parsed.b };
+    }
+    return { r: 31, g: 41, b: 55 };
+  }, [node.fill]);
+  const fillOpacity = useMemo(() => clamp01(node.fillOpacity ?? 1), [node.fillOpacity]);
+  const fillPreview = useMemo(() => rgbaToCss(fillColor, fillOpacity), [fillColor, fillOpacity]);
+  const fillTitle = useMemo(
+    () => `Fill color (${Math.round(fillOpacity * 100)}% opacity)`,
+    [fillOpacity]
+  );
+
+  const startFillInteraction = useCallback(() => {
+    if (!fillInteractionRef.current) {
+      beginTransaction();
+      fillInteractionRef.current = true;
+    }
+  }, [beginTransaction]);
+
+  const finishFillInteraction = useCallback(() => {
+    if (fillInteractionRef.current) {
+      endTransaction();
+      fillInteractionRef.current = false;
+    }
+  }, [endTransaction]);
+
+  const handleFillChange = useCallback(
+    (nextColor: RGBColor, alpha: number, options?: { commit?: boolean }) => {
+      startFillInteraction();
+      const hex = rgbToHex(nextColor);
+      const opacity = clamp01(alpha);
+      commands.applyStyles(nodeIds, { fill: hex, fillOpacity: opacity });
+      if (options?.commit) {
+        finishFillInteraction();
+      }
+    },
+    [commands, nodeIds, startFillInteraction, finishFillInteraction]
+  );
 
   useEffect(() => {
     setFontSizeValue(node.fontSize.toString());
@@ -96,6 +146,18 @@ export const SelectionToolbar: React.FC<SelectionToolbarProps> = ({
   }, [node.stroke.width]);
 
   useEffect(() => {
+    setFillOpen(false);
+  }, [node.id]);
+
+  useEffect(() => () => finishFillInteraction(), [finishFillInteraction]);
+
+  useEffect(() => {
+    if (!fillOpen) {
+      finishFillInteraction();
+    }
+  }, [fillOpen, finishFillInteraction]);
+
+  useEffect(() => {
     if (linkOpen) {
       setLinkDraft(node.link?.url ?? '');
       setLinkError(null);
@@ -104,10 +166,12 @@ export const SelectionToolbar: React.FC<SelectionToolbarProps> = ({
 
   useEffect(() => {
     if (!isVisible) {
+      setFillOpen(false);
       setLinkOpen(false);
       setLinkError(null);
+      finishFillInteraction();
     }
-  }, [isVisible]);
+  }, [isVisible, finishFillInteraction]);
 
   useEffect(() => {
     if (focusLinkSignal !== previousFocusSignalRef.current) {
@@ -148,6 +212,27 @@ export const SelectionToolbar: React.FC<SelectionToolbarProps> = ({
     document.addEventListener('mousedown', handlePointerDown);
     return () => document.removeEventListener('mousedown', handlePointerDown);
   }, [linkOpen]);
+
+  useEffect(() => {
+    if (!fillOpen) {
+      return;
+    }
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (
+        fillPopoverRef.current &&
+        fillPopoverRef.current.contains(target)
+      ) {
+        return;
+      }
+      if (fillButtonRef.current && fillButtonRef.current.contains(target)) {
+        return;
+      }
+      setFillOpen(false);
+    };
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => document.removeEventListener('mousedown', handlePointerDown);
+  }, [fillOpen]);
 
   useEffect(() => {
     setPlacement('top');
@@ -255,10 +340,6 @@ export const SelectionToolbar: React.FC<SelectionToolbarProps> = ({
 
   const handleShapeChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
     commands.setShape(nodeIds, event.target.value as NodeKind);
-  };
-
-  const handleFillChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    commands.applyStyles(nodeIds, { fill: event.target.value });
   };
 
   const handleStrokeColorChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -390,10 +471,31 @@ export const SelectionToolbar: React.FC<SelectionToolbarProps> = ({
         </div>
       </div>
       <div className="selection-toolbar__group">
-        <label className="selection-toolbar__swatch" title="Fill color">
+        <div className="selection-toolbar__swatch" title={fillTitle}>
           <span className="selection-toolbar__swatch-indicator">Fill</span>
-          <input type="color" value={node.fill} onChange={handleFillChange} />
-        </label>
+          <button
+            type="button"
+            ref={fillButtonRef}
+            className={`selection-toolbar__color-button ${fillOpen ? 'is-active' : ''}`}
+            onClick={() => {
+              setFillOpen((prev) => !prev);
+              setLinkOpen(false);
+            }}
+            aria-haspopup="dialog"
+            aria-expanded={fillOpen}
+            aria-label="Edit fill color"
+          >
+            <span
+              className="selection-toolbar__color-preview"
+              style={{ ['--selection-fill-preview' as const]: fillPreview }}
+            />
+          </button>
+          {fillOpen && (
+            <div className="selection-toolbar__color-popover" ref={fillPopoverRef}>
+              <ColorPicker color={fillColor} alpha={fillOpacity} onChange={handleFillChange} />
+            </div>
+          )}
+        </div>
         <label className="selection-toolbar__swatch" title="Stroke color">
           <span className="selection-toolbar__swatch-indicator">Stroke</span>
           <input type="color" value={node.stroke.color} onChange={handleStrokeColorChange} />

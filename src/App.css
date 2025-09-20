@@ -167,6 +167,24 @@
   gap: 12px;
 }
 
+.properties__slider-control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.properties__slider-control input[type='range'] {
+  flex: 1;
+  accent-color: #38bdf8;
+}
+
+.properties__slider-value {
+  min-width: 40px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: rgba(226, 232, 240, 0.72);
+}
+
 .properties__danger {
   margin-top: 8px;
   padding: 8px 12px;
