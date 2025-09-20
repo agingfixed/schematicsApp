@@ -11,6 +11,9 @@ export const PropertiesPanel: React.FC = () => {
   const nodes = useSceneStore(selectNodes);
   const connectors = useSceneStore(selectConnectors);
   const updateNode = useSceneStore((state) => state.updateNode);
+  const setNodeText = useSceneStore((state) => state.setNodeText);
+  const applyNodeStyles = useSceneStore((state) => state.applyNodeStyles);
+  const setNodeLink = useSceneStore((state) => state.setNodeLink);
   const updateConnector = useSceneStore((state) => state.updateConnector);
   const removeNode = useSceneStore((state) => state.removeNode);
   const removeConnector = useSceneStore((state) => state.removeConnector);
@@ -53,13 +56,13 @@ export const PropertiesPanel: React.FC = () => {
       </div>
       {selectedNode && (
         <section className="properties__section">
-          <h4>{selectedNode.type.replace('-', ' ')}</h4>
+          <h4>{selectedNode.shape.replace('-', ' ')}</h4>
           <label className="properties__field">
-            <span>Label</span>
+            <span>Text</span>
             <input
               type="text"
-              value={selectedNode.label}
-              onChange={(event) => updateNode(selectedNode.id, { label: event.target.value })}
+              value={selectedNode.text}
+              onChange={(event) => setNodeText(selectedNode.id, event.target.value)}
             />
           </label>
           <div className="properties__grid">
@@ -99,16 +102,20 @@ export const PropertiesPanel: React.FC = () => {
               <span>Fill</span>
               <input
                 type="color"
-                value={selectedNode.style.fill}
-                onChange={(event) => updateNode(selectedNode.id, { style: { fill: event.target.value } })}
+                value={selectedNode.fill}
+                onChange={(event) =>
+                  applyNodeStyles([selectedNode.id], { fill: event.target.value })
+                }
               />
             </label>
             <label className="properties__field">
               <span>Stroke</span>
               <input
                 type="color"
-                value={selectedNode.style.stroke}
-                onChange={(event) => updateNode(selectedNode.id, { style: { stroke: event.target.value } })}
+                value={selectedNode.stroke.color}
+                onChange={(event) =>
+                  applyNodeStyles([selectedNode.id], { strokeColor: event.target.value })
+                }
               />
             </label>
           </div>
@@ -118,10 +125,19 @@ export const PropertiesPanel: React.FC = () => {
               type="number"
               min={1}
               max={12}
-              value={selectedNode.style.strokeWidth}
+              value={selectedNode.stroke.width}
               onChange={(event) =>
-                updateNode(selectedNode.id, { style: { strokeWidth: Number(event.target.value) } })
+                applyNodeStyles([selectedNode.id], { strokeWidth: Number(event.target.value) })
               }
+            />
+          </label>
+          <label className="properties__field">
+            <span>Link</span>
+            <input
+              type="url"
+              placeholder="https://example.com"
+              value={selectedNode.link?.url ?? ''}
+              onChange={(event) => setNodeLink(selectedNode.id, event.target.value)}
             />
           </label>
           <button

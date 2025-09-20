@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { NodeModel, Tool } from '../types/scene';
 
 interface DiagramNodeProps {
@@ -6,14 +6,13 @@ interface DiagramNodeProps {
   selected: boolean;
   hovered: boolean;
   tool: Tool;
+  editing: boolean;
   onPointerDown: (event: React.PointerEvent<SVGGElement>) => void;
   onPointerUp: (event: React.PointerEvent<SVGGElement>) => void;
   onPointerEnter: () => void;
   onPointerLeave: () => void;
-  onLabelChange: (value: string) => void;
+  onDoubleClick: (event: React.MouseEvent<SVGGElement>) => void;
 }
-
-const clampLabel = (value: string) => (value.trim().length ? value : 'Untitled');
 
 const renderShape = (
   node: NodeModel,
@@ -25,7 +24,7 @@ const renderShape = (
   }: { fill: string; stroke: string; strokeWidth: number; className?: string }
 ) => {
   const { width, height } = node.size;
-  const cornerRadius = node.style.cornerRadius ?? 24;
+  const cornerRadius = node.cornerRadius ?? 24;
   const common = {
     fill,
     stroke,
@@ -34,7 +33,7 @@ const renderShape = (
     vectorEffect: 'non-scaling-stroke' as const
   };
 
-  switch (node.type) {
+  switch (node.shape) {
     case 'rectangle':
       return <rect width={width} height={height} rx={8} {...common} />;
     case 'rounded-rectangle':
@@ -60,54 +59,17 @@ export const DiagramNode: React.FC<DiagramNodeProps> = ({
   selected,
   hovered,
   tool,
+  editing,
   onPointerDown,
   onPointerUp,
   onPointerEnter,
   onPointerLeave,
-  onLabelChange
+  onDoubleClick
 }) => {
-  const [isEditing, setIsEditing] = useState(false);
-  const [draft, setDraft] = useState(node.label);
-
-  useEffect(() => {
-    if (!isEditing) {
-      setDraft(node.label);
-    }
-  }, [node.label, isEditing]);
-
-  const handleDoubleClick = (event: React.MouseEvent<SVGGElement>) => {
-    event.stopPropagation();
-    setIsEditing(true);
-  };
-
-  const handleLabelBlur = () => {
-    const nextValue = clampLabel(draft);
-    setIsEditing(false);
-    if (nextValue !== node.label) {
-      onLabelChange(nextValue);
-    }
-  };
-
-  const handleLabelInput = (event: React.FormEvent<HTMLDivElement>) => {
-    setDraft(event.currentTarget.textContent ?? '');
-  };
-
-  const handleLabelKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    if (event.key === 'Enter' && !event.shiftKey) {
-      event.preventDefault();
-      (event.currentTarget as HTMLDivElement).blur();
-    }
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      setIsEditing(false);
-      setDraft(node.label);
-    }
-  };
-
   const shapeElement = renderShape(node, {
-    fill: node.style.fill,
-    stroke: node.style.stroke,
-    strokeWidth: node.style.strokeWidth,
+    fill: node.fill,
+    stroke: node.stroke.color,
+    strokeWidth: node.stroke.width,
     className: 'diagram-node__shape'
   });
 
@@ -129,6 +91,8 @@ export const DiagramNode: React.FC<DiagramNodeProps> = ({
     { key: 'left', x: -connectorHandleOffset, y: node.size.height / 2 }
   ];
 
+  const labelClassName = `diagram-node__label ${editing ? 'is-editing' : ''}`;
+
   return (
     <g
       className={`diagram-node ${selected ? 'is-selected' : ''} ${hovered ? 'is-hovered' : ''}`}
@@ -137,7 +101,7 @@ export const DiagramNode: React.FC<DiagramNodeProps> = ({
       onPointerUp={onPointerUp}
       onPointerEnter={onPointerEnter}
       onPointerLeave={onPointerLeave}
-      onDoubleClick={handleDoubleClick}
+      onDoubleClick={onDoubleClick}
       style={{ cursor }}
     >
       <g className="diagram-node__shadow" opacity={selected ? 0.45 : 0.25}>
@@ -165,19 +129,33 @@ export const DiagramNode: React.FC<DiagramNodeProps> = ({
           ))}
         </g>
       )}
-      <foreignObject x={12} y={12} width={Math.max(24, node.size.width - 24)} height={Math.max(24, node.size.height - 24)}>
+      <foreignObject
+        x={12}
+        y={12}
+        width={Math.max(24, node.size.width - 24)}
+        height={Math.max(24, node.size.height - 24)}
+      >
         <div
-          className={`diagram-node__label ${isEditing ? 'is-editing' : ''}`}
-          contentEditable={isEditing}
-          suppressContentEditableWarning
-          spellCheck={false}
-          onInput={handleLabelInput}
-          onBlur={handleLabelBlur}
-          onKeyDown={handleLabelKeyDown}
+          className={labelClassName}
+          style={{
+            textAlign: node.textAlign,
+            fontSize: node.fontSize,
+            fontWeight: node.fontWeight
+          }}
         >
-          {draft}
+          {node.text}
         </div>
       </foreignObject>
+      {selected && node.link?.url && (
+        <foreignObject
+          x={node.size.width - 84}
+          y={Math.max(6, node.size.height - 36)}
+          width={72}
+          height={24}
+        >
+          <div className="diagram-node__link-chip">🔗 Link</div>
+        </foreignObject>
+      )}
     </g>
   );
 };
