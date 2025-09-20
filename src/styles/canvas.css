@@ -199,6 +199,113 @@
   fill: rgba(37, 99, 235, 0.3);
 }
 
+.canvas-overlays {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 4;
+  font-family: inherit;
+}
+
+.canvas-guides {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.canvas-guide-line {
+  stroke: rgba(192, 132, 252, 0.95);
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+
+.canvas-guide-line--center {
+  stroke: rgba(129, 140, 248, 0.95);
+}
+
+.distance-badge {
+  position: absolute;
+  pointer-events: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #f8fafc;
+  background: rgba(79, 70, 229, 0.92);
+  border-radius: 6px;
+  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.35);
+  text-shadow: 0 0 6px rgba(15, 23, 42, 0.65);
+  opacity: 0.94;
+  transition: opacity 0.18s ease;
+}
+
+.distance-badge--x.distance-badge--negative {
+  transform: translate(-100%, -50%);
+}
+
+.distance-badge--x.distance-badge--positive {
+  transform: translate(0%, -50%);
+}
+
+.distance-badge--y.distance-badge--negative {
+  transform: translate(-50%, -100%);
+}
+
+.distance-badge--y.distance-badge--positive {
+  transform: translate(-50%, 0%);
+}
+
+.distance-badge__equal {
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.distance-badge.is-equal {
+  background: rgba(16, 185, 129, 0.9);
+  color: #0f172a;
+}
+
+.spacing-handle {
+  position: absolute;
+  pointer-events: auto;
+  transform: translate(-50%, -50%);
+  background: rgba(236, 72, 153, 0.92);
+  color: #fff;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  box-shadow: 0 10px 24px rgba(236, 72, 153, 0.35);
+  cursor: grab;
+  transition: transform 0.18s ease, background 0.18s ease, opacity 0.18s ease;
+}
+
+.spacing-handle:hover {
+  transform: translate(-50%, -50%) scale(1.05);
+}
+
+.spacing-handle:active {
+  transform: translate(-50%, -50%) scale(0.95);
+  cursor: grabbing;
+}
+
+.spacing-handle__label {
+  pointer-events: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.spacing-handle.is-uniform {
+  background: rgba(52, 211, 153, 0.92);
+  color: #0f172a;
+  box-shadow: 0 10px 24px rgba(45, 212, 191, 0.35);
+}
+
 .diagram-connector__endpoint:active {
   transform: scale(0.9);
 }

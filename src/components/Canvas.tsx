@@ -25,7 +25,8 @@ import {
   getSceneBounds,
   getDefaultNodeSize,
   screenToWorld,
-  worldToScreen
+  worldToScreen,
+  Bounds
 } from '../utils/scene';
 import {
   findClosestPointOnPolyline,
@@ -38,9 +39,22 @@ import {
   selectGridVisible,
   selectNodes,
   selectSelection,
+  selectSnapSettings,
   selectTool,
   useSceneStore
 } from '../state/sceneStore';
+import {
+  ActiveSnapMatches,
+  DistanceBadge as SnapDistanceBadge,
+  SmartSelectionHandle,
+  SmartSelectionResult,
+  SnapMatch,
+  computeDistanceBadges,
+  computeSmartGuides,
+  detectSmartSelection,
+  getNodeRectInfo,
+  translateBounds
+} from '../utils/snap';
 import { DiagramNode } from './DiagramNode';
 import { DiagramConnector } from './DiagramConnector';
 import { SelectionToolbar } from './SelectionToolbar';
@@ -72,7 +86,19 @@ export interface CanvasProps {
 interface DragState {
   pointerId: number;
   nodeIds: string[];
-  lastWorld: Vec2;
+  initialWorld: Vec2;
+  initialBounds: Bounds;
+  translation: Vec2;
+  activeSnap: ActiveSnapMatches;
+  axisLock: 'x' | 'y' | null;
+}
+
+interface SpacingDragState {
+  pointerId: number;
+  axis: 'x' | 'y';
+  handle: SmartSelectionHandle;
+  originWorld: Vec2;
+  translation: number;
 }
 
 type PendingConnection =
@@ -115,6 +141,7 @@ const CanvasComponent = (
   const [isPanning, setIsPanning] = useState(false);
   const panStateRef = useRef<{ pointerId: number; last: { x: number; y: number } } | null>(null);
   const dragStateRef = useRef<DragState | null>(null);
+  const spacingDragStateRef = useRef<SpacingDragState | null>(null);
   const connectionPointerRef = useRef<number | null>(null);
   const initialFitDoneRef = useRef(false);
   const connectorDragStateRef = useRef<ConnectorDragState | null>(null);
@@ -130,6 +157,7 @@ const CanvasComponent = (
   const selection = useSceneStore(selectSelection);
   const tool = useSceneStore(selectTool);
   const gridVisible = useSceneStore(selectGridVisible);
+  const snapSettings = useSceneStore(selectSnapSettings);
   const editingNodeId = useSceneStore(selectEditingNodeId);
   const setSelection = useSceneStore((state) => state.setSelection);
   const clearSelection = useSceneStore((state) => state.clearSelection);
@@ -143,6 +171,7 @@ const CanvasComponent = (
   const updateConnector = useSceneStore((state) => state.updateConnector);
   const setGlobalTransform = useSceneStore((state) => state.setTransform);
   const setEditingNode = useSceneStore((state) => state.setEditingNode);
+  const equalizeSpacing = useSceneStore((state) => state.equalizeSpacing);
   const { applyStyles, setText } = useCommands();
 
   const selectedNodeIds = selection.nodeIds;
@@ -150,6 +179,9 @@ const CanvasComponent = (
 
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
   const [linkFocusSignal, setLinkFocusSignal] = useState(0);
+  const [activeGuides, setActiveGuides] = useState<SnapMatch[]>([]);
+  const [distanceBadges, setDistanceBadges] = useState<SnapDistanceBadge[]>([]);
+  const [smartSelectionState, setSmartSelectionState] = useState<SmartSelectionResult | null>(null);
   const inlineEditorRef = useRef<InlineTextEditorHandle | null>(null);
 
   const hasConnectorBetween = useCallback(
@@ -194,6 +226,40 @@ const CanvasComponent = (
   }, [nodes, editingNodeId]);
 
   const editorNode = editingNode ?? selectedNode;
+
+  useEffect(() => {
+    if (!snapSettings.enabled || !snapSettings.showSpacingHandles || tool !== 'select') {
+      setSmartSelectionState(null);
+      return;
+    }
+    const selectionNodes = nodes.filter((node) => selectedNodeIds.includes(node.id));
+    if (selectionNodes.length < 3) {
+      setSmartSelectionState(null);
+      return;
+    }
+    const rects = selectionNodes.map(getNodeRectInfo);
+    const result = detectSmartSelection(rects);
+    setSmartSelectionState(result);
+  }, [
+    nodes,
+    selectedNodeIds,
+    snapSettings.enabled,
+    snapSettings.showSpacingHandles,
+    tool
+  ]);
+
+  useEffect(() => {
+    if (!snapSettings.enabled) {
+      setActiveGuides([]);
+      setDistanceBadges([]);
+    }
+  }, [snapSettings.enabled]);
+
+  useEffect(() => {
+    if (!snapSettings.showDistanceLabels) {
+      setDistanceBadges([]);
+    }
+  }, [snapSettings.showDistanceLabels]);
 
   const toolbarAnchor = useMemo(() => {
     if (!selectedNode) {
@@ -241,6 +307,37 @@ const CanvasComponent = (
       height: Math.max(24, bottomRight.y - topLeft.y)
     };
   }, [editorNode, transform]);
+
+  const guideLines = useMemo(
+    () =>
+      activeGuides.map((guide) => ({
+        id: `${guide.axis}-${guide.edge}-${guide.target}-${guide.neighborId ?? 'none'}`,
+        type: guide.type,
+        axis: guide.axis,
+        start: worldToScreen(guide.line.start, transform),
+        end: worldToScreen(guide.line.end, transform)
+      })),
+    [activeGuides, transform]
+  );
+
+  const badgeScreens = useMemo(
+    () =>
+      distanceBadges.map((badge) => ({
+        ...badge,
+        screen: worldToScreen(badge.position, transform)
+      })),
+    [distanceBadges, transform]
+  );
+
+  const spacingHandles = useMemo(() => {
+    if (!smartSelectionState) {
+      return [] as Array<{ handle: SmartSelectionHandle; screen: Vec2 }>;
+    }
+    return smartSelectionState.handles.map((handle) => ({
+      handle,
+      screen: worldToScreen(handle.position, transform)
+    }));
+  }, [smartSelectionState, transform]);
 
   const commitEditingIfNeeded = useCallback(() => {
     if (editingNodeId) {
@@ -465,14 +562,102 @@ const CanvasComponent = (
     const dragState = dragStateRef.current;
     if (dragState && dragState.pointerId === event.pointerId) {
       const worldPoint = getWorldPoint(event);
+      let translation = {
+        x: worldPoint.x - dragState.initialWorld.x,
+        y: worldPoint.y - dragState.initialWorld.y
+      };
+
+      if (event.shiftKey) {
+        const axis =
+          dragState.axisLock ??
+          (Math.abs(translation.x) >= Math.abs(translation.y) ? 'x' : 'y');
+        if (axis === 'x') {
+          translation = { ...translation, y: 0 };
+        } else {
+          translation = { ...translation, x: 0 };
+        }
+        dragState.axisLock = axis;
+      } else if (dragState.axisLock) {
+        dragState.axisLock = null;
+      }
+
+      let appliedTranslation = { ...translation };
+      let nextActiveSnap: ActiveSnapMatches = {};
+
+      if (snapSettings.enabled && !event.altKey) {
+        if (snapSettings.snapToGrid && gridVisible) {
+          appliedTranslation = {
+            x: Math.round(appliedTranslation.x / GRID_SIZE) * GRID_SIZE,
+            y: Math.round(appliedTranslation.y / GRID_SIZE) * GRID_SIZE
+          };
+        }
+
+        const movingRect = translateBounds(dragState.initialBounds, appliedTranslation);
+        const otherRects = nodes
+          .filter((node) => !dragState.nodeIds.includes(node.id))
+          .map(getNodeRectInfo);
+        const tolerance = snapSettings.tolerance / transform.scale;
+        const guideResult = computeSmartGuides({
+          movingRect,
+          otherRects,
+          tolerance,
+          activeMatches: dragState.activeSnap,
+          centerOnly: event.metaKey || event.ctrlKey
+        });
+
+        if (guideResult.matches.vertical) {
+          appliedTranslation.x += guideResult.matches.vertical.delta;
+        }
+        if (guideResult.matches.horizontal) {
+          appliedTranslation.y += guideResult.matches.horizontal.delta;
+        }
+
+        const snappedRect = translateBounds(dragState.initialBounds, appliedTranslation);
+
+        nextActiveSnap = {
+          vertical: guideResult.matches.vertical
+            ? {
+                axis: 'x',
+                edge: guideResult.matches.vertical.edge,
+                neighborEdge: guideResult.matches.vertical.neighborEdge,
+                type: guideResult.matches.vertical.type,
+                target: guideResult.matches.vertical.target,
+                neighborId: guideResult.matches.vertical.neighborId
+              }
+            : undefined,
+          horizontal: guideResult.matches.horizontal
+            ? {
+                axis: 'y',
+                edge: guideResult.matches.horizontal.edge,
+                neighborEdge: guideResult.matches.horizontal.neighborEdge,
+                type: guideResult.matches.horizontal.type,
+                target: guideResult.matches.horizontal.target,
+                neighborId: guideResult.matches.horizontal.neighborId
+              }
+            : undefined
+        };
+
+        setActiveGuides(guideResult.guides);
+        setDistanceBadges(
+          snapSettings.showDistanceLabels
+            ? computeDistanceBadges(snappedRect, otherRects)
+            : []
+        );
+      } else {
+        setActiveGuides([]);
+        setDistanceBadges([]);
+      }
+
       const delta = {
-        x: worldPoint.x - dragState.lastWorld.x,
-        y: worldPoint.y - dragState.lastWorld.y
+        x: appliedTranslation.x - dragState.translation.x,
+        y: appliedTranslation.y - dragState.translation.y
       };
       if (Math.abs(delta.x) > 0.0001 || Math.abs(delta.y) > 0.0001) {
         batchMove(dragState.nodeIds, delta);
-        dragStateRef.current = { ...dragState, lastWorld: worldPoint };
       }
+
+      dragState.translation = appliedTranslation;
+      dragState.activeSnap = nextActiveSnap;
       return;
     }
 
@@ -501,8 +686,18 @@ const CanvasComponent = (
     }
 
     if (dragStateRef.current?.pointerId === event.pointerId) {
+      setActiveGuides([]);
+      setDistanceBadges([]);
       dragStateRef.current = null;
       endTransaction();
+      releasePointerCapture(event.pointerId);
+    }
+
+    if (spacingDragStateRef.current?.pointerId === event.pointerId) {
+      spacingDragStateRef.current = null;
+      endTransaction();
+      setActiveGuides([]);
+      setDistanceBadges([]);
       releasePointerCapture(event.pointerId);
     }
 
@@ -560,11 +755,35 @@ const CanvasComponent = (
 
     const worldPoint = getWorldPoint(event);
     const nodeIdsToDrag = nextSelection.length ? nextSelection : [node.id];
+    const nodesToDrag = nodes.filter((current) => nodeIdsToDrag.includes(current.id));
+    if (!nodesToDrag.length) {
+      return;
+    }
+    const initialBounds = nodesToDrag.reduce<Bounds>(
+      (acc, current) => ({
+        minX: Math.min(acc.minX, current.position.x),
+        minY: Math.min(acc.minY, current.position.y),
+        maxX: Math.max(acc.maxX, current.position.x + current.size.width),
+        maxY: Math.max(acc.maxY, current.position.y + current.size.height)
+      }),
+      {
+        minX: nodesToDrag[0].position.x,
+        minY: nodesToDrag[0].position.y,
+        maxX: nodesToDrag[0].position.x + nodesToDrag[0].size.width,
+        maxY: nodesToDrag[0].position.y + nodesToDrag[0].size.height
+      }
+    );
     beginTransaction();
+    setActiveGuides([]);
+    setDistanceBadges([]);
     dragStateRef.current = {
       pointerId: event.pointerId,
       nodeIds: nodeIdsToDrag,
-      lastWorld: worldPoint
+      initialWorld: worldPoint,
+      initialBounds,
+      translation: { x: 0, y: 0 },
+      activeSnap: {},
+      axisLock: null
     };
     containerRef.current?.setPointerCapture(event.pointerId);
   };
@@ -628,6 +847,82 @@ const CanvasComponent = (
 
     setPendingConnection(null);
     connectionPointerRef.current = null;
+  };
+
+  const handleSpacingHandlePointerDown = (
+    event: React.PointerEvent<HTMLDivElement>,
+    handle: SmartSelectionHandle
+  ) => {
+    if (event.button !== 0 || dragStateRef.current || spacingDragStateRef.current) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    beginTransaction();
+    setActiveGuides([]);
+    setDistanceBadges([]);
+    const worldPoint = getWorldPoint(event);
+    spacingDragStateRef.current = {
+      pointerId: event.pointerId,
+      axis: handle.axis,
+      handle,
+      originWorld: worldPoint,
+      translation: 0
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const handleSpacingHandlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = spacingDragStateRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    const worldPoint = getWorldPoint(event);
+    const rawTranslation =
+      drag.axis === 'x'
+        ? worldPoint.x - drag.originWorld.x
+        : worldPoint.y - drag.originWorld.y;
+    let translationValue = rawTranslation;
+    if (snapSettings.enabled && snapSettings.snapToGrid && gridVisible && !event.altKey) {
+      translationValue = Math.round(translationValue / GRID_SIZE) * GRID_SIZE;
+    }
+    const deltaValue = translationValue - drag.translation;
+    if (Math.abs(deltaValue) < 0.0001) {
+      return;
+    }
+    const deltaVec = drag.axis === 'x' ? { x: deltaValue, y: 0 } : { x: 0, y: deltaValue };
+    batchMove(drag.handle.affectedIds, deltaVec);
+    spacingDragStateRef.current = { ...drag, translation: translationValue };
+  };
+
+  const handleSpacingHandlePointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = spacingDragStateRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    spacingDragStateRef.current = null;
+    endTransaction();
+    event.currentTarget.releasePointerCapture(event.pointerId);
+    setActiveGuides([]);
+    setDistanceBadges([]);
+  };
+
+  const handleSpacingHandleDoubleClick = (
+    event: React.MouseEvent<HTMLDivElement>,
+    handle: SmartSelectionHandle
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!selectedNodeIds.length) {
+      return;
+    }
+    equalizeSpacing(selectedNodeIds, handle.axis);
+    setActiveGuides([]);
+    setDistanceBadges([]);
   };
 
   const handleConnectorPointerDown = (
@@ -1018,6 +1313,53 @@ const CanvasComponent = (
         />
       )}
       </svg>
+      <div className="canvas-overlays" aria-hidden>
+        <svg className="canvas-guides" aria-hidden>
+          {guideLines.map((guide) => (
+            <line
+              key={guide.id}
+              className={`canvas-guide-line canvas-guide-line--${guide.axis} canvas-guide-line--${guide.type}`}
+              x1={guide.start.x}
+              y1={guide.start.y}
+              x2={guide.end.x}
+              y2={guide.end.y}
+            />
+          ))}
+        </svg>
+        {badgeScreens.map((badge) => (
+          <div
+            key={badge.id}
+            className={`distance-badge distance-badge--${badge.axis} distance-badge--${badge.direction}${
+              badge.equal ? ' is-equal' : ''
+            }`}
+            style={{ left: badge.screen.x, top: badge.screen.y }}
+          >
+            {badge.equal && <span className="distance-badge__equal">=</span>}
+            {Math.round(badge.value)}
+          </div>
+        ))}
+        {snapSettings.enabled &&
+          snapSettings.showSpacingHandles &&
+          smartSelectionState &&
+          spacingHandles.map(({ handle, screen }) => (
+            <div
+              key={handle.id}
+              className={`spacing-handle spacing-handle--${handle.axis}${
+                smartSelectionState.isUniform ? ' is-uniform' : ''
+              }`}
+              style={{ left: screen.x, top: screen.y }}
+              onPointerDown={(event) => handleSpacingHandlePointerDown(event, handle)}
+              onPointerMove={handleSpacingHandlePointerMove}
+              onPointerUp={handleSpacingHandlePointerUp}
+              onDoubleClick={(event) => handleSpacingHandleDoubleClick(event, handle)}
+            >
+              <span className="spacing-handle__label">
+                {smartSelectionState.isUniform && <span className="distance-badge__equal">=</span>}
+                {Math.round(handle.gap)}
+              </span>
+            </div>
+          ))}
+      </div>
       {selectedNode && (
         <SelectionToolbar
           node={selectedNode}
