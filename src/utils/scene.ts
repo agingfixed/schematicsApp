@@ -57,6 +57,7 @@ export const createNodeModel = (shape: NodeKind, position: Vec2, text?: string):
     fontSize: 18,
     fontWeight: 600,
     fill: appearance.fill,
+    fillOpacity: 1,
     stroke: { color: appearance.stroke, width: appearance.strokeWidth },
     cornerRadius: appearance.cornerRadius
   };

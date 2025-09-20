@@ -128,6 +128,34 @@ interface ConnectorDragState {
   originalPoints: Vec2[];
 }
 
+type ResizeHandle = 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w' | 'nw';
+
+interface ResizeState {
+  pointerId: number;
+  handle: ResizeHandle;
+  initialBounds: Bounds;
+  anchor: Vec2;
+  center: Vec2;
+  nodes: Array<{
+    id: string;
+    position: Vec2;
+    size: { width: number; height: number };
+  }>;
+  initialWidth: number;
+  initialHeight: number;
+}
+
+const RESIZE_HANDLES: Array<{ key: ResizeHandle; x: number; y: number; cursor: string }> = [
+  { key: 'nw', x: 0, y: 0, cursor: 'nwse-resize' },
+  { key: 'n', x: 0.5, y: 0, cursor: 'ns-resize' },
+  { key: 'ne', x: 1, y: 0, cursor: 'nesw-resize' },
+  { key: 'e', x: 1, y: 0.5, cursor: 'ew-resize' },
+  { key: 'se', x: 1, y: 1, cursor: 'nwse-resize' },
+  { key: 's', x: 0.5, y: 1, cursor: 'ns-resize' },
+  { key: 'sw', x: 0, y: 1, cursor: 'nesw-resize' },
+  { key: 'w', x: 0, y: 0.5, cursor: 'ew-resize' }
+];
+
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
 const CanvasComponent = (
@@ -142,6 +170,7 @@ const CanvasComponent = (
   const panStateRef = useRef<{ pointerId: number; last: { x: number; y: number } } | null>(null);
   const dragStateRef = useRef<DragState | null>(null);
   const spacingDragStateRef = useRef<SpacingDragState | null>(null);
+  const resizeStateRef = useRef<ResizeState | null>(null);
   const connectionPointerRef = useRef<number | null>(null);
   const initialFitDoneRef = useRef(false);
   const connectorDragStateRef = useRef<ConnectorDragState | null>(null);
@@ -166,6 +195,7 @@ const CanvasComponent = (
   const beginTransaction = useSceneStore((state) => state.beginTransaction);
   const endTransaction = useSceneStore((state) => state.endTransaction);
   const batchMove = useSceneStore((state) => state.batchMove);
+  const resizeNodes = useSceneStore((state) => state.resizeNodes);
   const addConnector = useSceneStore((state) => state.addConnector);
   const removeConnector = useSceneStore((state) => state.removeConnector);
   const updateConnector = useSceneStore((state) => state.updateConnector);
@@ -217,6 +247,58 @@ const CanvasComponent = (
     }
     return nodes.find((node) => node.id === selectedNodeIds[0]) ?? null;
   }, [nodes, selectedNodeIds]);
+
+  const selectedNodes = useMemo(
+    () => nodes.filter((node) => selectedNodeIds.includes(node.id)),
+    [nodes, selectedNodeIds]
+  );
+
+  const selectionBounds = useMemo(() => {
+    if (!selectedNodes.length) {
+      return null;
+    }
+    return selectedNodes.reduce<Bounds>(
+      (acc, current) => ({
+        minX: Math.min(acc.minX, current.position.x),
+        minY: Math.min(acc.minY, current.position.y),
+        maxX: Math.max(acc.maxX, current.position.x + current.size.width),
+        maxY: Math.max(acc.maxY, current.position.y + current.size.height)
+      }),
+      {
+        minX: selectedNodes[0].position.x,
+        minY: selectedNodes[0].position.y,
+        maxX: selectedNodes[0].position.x + selectedNodes[0].size.width,
+        maxY: selectedNodes[0].position.y + selectedNodes[0].size.height
+      }
+    );
+  }, [selectedNodes]);
+
+  const selectionFrame = useMemo(() => {
+    if (!selectionBounds) {
+      return null;
+    }
+    const topLeft = worldToScreen(
+      { x: selectionBounds.minX, y: selectionBounds.minY },
+      transform
+    );
+    const bottomRight = worldToScreen(
+      { x: selectionBounds.maxX, y: selectionBounds.maxY },
+      transform
+    );
+    return {
+      left: topLeft.x,
+      top: topLeft.y,
+      width: bottomRight.x - topLeft.x,
+      height: bottomRight.y - topLeft.y,
+      centerX: topLeft.x + (bottomRight.x - topLeft.x) / 2,
+      centerY: topLeft.y + (bottomRight.y - topLeft.y) / 2
+    };
+  }, [selectionBounds, transform]);
+
+  const showResizeFrame = useMemo(
+    () => tool === 'select' && !isPanning && selectedNodes.length > 0 && !editingNodeId,
+    [tool, isPanning, selectedNodes.length, editingNodeId]
+  );
 
   const editingNode = useMemo(() => {
     if (!editingNodeId) {
@@ -548,6 +630,14 @@ const CanvasComponent = (
   };
 
   const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const resizeState = resizeStateRef.current;
+    if (resizeState && resizeState.pointerId === event.pointerId) {
+      event.preventDefault();
+      event.stopPropagation();
+      updateResizeDrag(event, resizeState);
+      return;
+    }
+
     if (panStateRef.current && panStateRef.current.pointerId === event.pointerId) {
       const { last } = panStateRef.current;
       const dx = event.clientX - last.x;
@@ -679,6 +769,13 @@ const CanvasComponent = (
   };
 
   const handlePointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (resizeStateRef.current?.pointerId === event.pointerId) {
+      resizeStateRef.current = null;
+      endTransaction();
+      releasePointerCapture(event.pointerId);
+      return;
+    }
+
     if (panStateRef.current?.pointerId === event.pointerId) {
       panStateRef.current = null;
       setIsPanning(false);
@@ -1055,6 +1152,223 @@ const CanvasComponent = (
     }
   };
 
+  const handleResizeHandlePointerDown = (
+    event: React.PointerEvent<HTMLDivElement>,
+    handle: ResizeHandle
+  ) => {
+    if (event.button !== 0 || dragStateRef.current || spacingDragStateRef.current) {
+      return;
+    }
+    if (tool !== 'select') {
+      return;
+    }
+    if (!selectedNodes.length || !selectionBounds) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const bounds = selectionBounds;
+    const center = {
+      x: bounds.minX + (bounds.maxX - bounds.minX) / 2,
+      y: bounds.minY + (bounds.maxY - bounds.minY) / 2
+    };
+
+    const anchor: Vec2 = {
+      x:
+        handle.includes('w') && !handle.includes('e')
+          ? bounds.maxX
+          : handle.includes('e') && !handle.includes('w')
+          ? bounds.minX
+          : center.x,
+      y:
+        handle.includes('n') && !handle.includes('s')
+          ? bounds.maxY
+          : handle.includes('s') && !handle.includes('n')
+          ? bounds.minY
+          : center.y
+    };
+
+    beginTransaction();
+    setActiveGuides([]);
+    setDistanceBadges([]);
+
+    resizeStateRef.current = {
+      pointerId: event.pointerId,
+      handle,
+      initialBounds: bounds,
+      anchor,
+      center,
+      nodes: selectedNodes.map((node) => ({
+        id: node.id,
+        position: { ...node.position },
+        size: { ...node.size }
+      })),
+      initialWidth: bounds.maxX - bounds.minX,
+      initialHeight: bounds.maxY - bounds.minY
+    };
+
+    containerRef.current?.setPointerCapture(event.pointerId);
+  };
+
+  const updateResizeDrag = (event: React.PointerEvent<HTMLDivElement>, state: ResizeState) => {
+    const worldPoint = getWorldPoint(event);
+    const minScreenSize = 8;
+    const minSize = Math.max(minScreenSize / transform.scale, 2);
+    const { initialBounds, handle, anchor, center, nodes, initialWidth, initialHeight } = state;
+
+    const horizontalActive = handle.includes('e') || handle.includes('w');
+    const verticalActive = handle.includes('n') || handle.includes('s');
+    const useCenter = event.altKey;
+
+    let nextMinX = initialBounds.minX;
+    let nextMaxX = initialBounds.maxX;
+    let nextMinY = initialBounds.minY;
+    let nextMaxY = initialBounds.maxY;
+
+    if (useCenter && horizontalActive) {
+      const halfWidth = Math.max(minSize / 2, Math.abs(worldPoint.x - center.x));
+      nextMinX = center.x - halfWidth;
+      nextMaxX = center.x + halfWidth;
+    } else if (horizontalActive) {
+      if (handle.includes('e')) {
+        const limit = initialBounds.minX + minSize;
+        nextMaxX = Math.max(worldPoint.x, limit);
+      }
+      if (handle.includes('w')) {
+        const limit = initialBounds.maxX - minSize;
+        nextMinX = Math.min(worldPoint.x, limit);
+      }
+    }
+
+    if (useCenter && verticalActive) {
+      const halfHeight = Math.max(minSize / 2, Math.abs(worldPoint.y - center.y));
+      nextMinY = center.y - halfHeight;
+      nextMaxY = center.y + halfHeight;
+    } else if (verticalActive) {
+      if (handle.includes('s')) {
+        const limit = initialBounds.minY + minSize;
+        nextMaxY = Math.max(worldPoint.y, limit);
+      }
+      if (handle.includes('n')) {
+        const limit = initialBounds.maxY - minSize;
+        nextMinY = Math.min(worldPoint.y, limit);
+      }
+    }
+
+    let nextWidth = nextMaxX - nextMinX;
+    if (horizontalActive && nextWidth < minSize) {
+      if (useCenter) {
+        const half = minSize / 2;
+        nextMinX = center.x - half;
+        nextMaxX = center.x + half;
+      } else if (handle.includes('w') && !handle.includes('e')) {
+        nextMinX = nextMaxX - minSize;
+      } else {
+        nextMaxX = nextMinX + minSize;
+      }
+      nextWidth = nextMaxX - nextMinX;
+    }
+
+    let nextHeight = nextMaxY - nextMinY;
+    if (verticalActive && nextHeight < minSize) {
+      if (useCenter) {
+        const half = minSize / 2;
+        nextMinY = center.y - half;
+        nextMaxY = center.y + half;
+      } else if (handle.includes('n') && !handle.includes('s')) {
+        nextMinY = nextMaxY - minSize;
+      } else {
+        nextMaxY = nextMinY + minSize;
+      }
+      nextHeight = nextMaxY - nextMinY;
+    }
+
+    if (
+      event.shiftKey &&
+      horizontalActive &&
+      verticalActive &&
+      initialWidth > 0.0001 &&
+      initialHeight > 0.0001
+    ) {
+      const aspect = initialWidth / initialHeight;
+      const widthFromHeight = nextHeight * aspect;
+      const heightFromWidth = nextWidth / aspect;
+      if (Math.abs(widthFromHeight - nextWidth) < Math.abs(heightFromWidth - nextHeight)) {
+        nextWidth = Math.max(minSize, widthFromHeight);
+        nextHeight = Math.max(minSize, nextWidth / aspect);
+      } else {
+        nextHeight = Math.max(minSize, heightFromWidth);
+        nextWidth = Math.max(minSize, nextHeight * aspect);
+      }
+
+      if (useCenter) {
+        nextMinX = center.x - nextWidth / 2;
+        nextMaxX = center.x + nextWidth / 2;
+        nextMinY = center.y - nextHeight / 2;
+        nextMaxY = center.y + nextHeight / 2;
+      } else {
+        const anchorX = handle.includes('w') && !handle.includes('e') ? initialBounds.maxX : initialBounds.minX;
+        const anchorY = handle.includes('n') && !handle.includes('s') ? initialBounds.maxY : initialBounds.minY;
+        if (handle.includes('w') && !handle.includes('e')) {
+          nextMinX = anchorX - nextWidth;
+          nextMaxX = anchorX;
+        } else {
+          nextMinX = anchorX;
+          nextMaxX = anchorX + nextWidth;
+        }
+        if (handle.includes('n') && !handle.includes('s')) {
+          nextMinY = anchorY - nextHeight;
+          nextMaxY = anchorY;
+        } else {
+          nextMinY = anchorY;
+          nextMaxY = anchorY + nextHeight;
+        }
+      }
+    }
+
+    const width = nextMaxX - nextMinX;
+    const height = nextMaxY - nextMinY;
+
+    const scaleX = horizontalActive && initialWidth !== 0 ? width / initialWidth : 1;
+    const scaleY = verticalActive && initialHeight !== 0 ? height / initialHeight : 1;
+    const anchorX = useCenter ? center.x : anchor.x;
+    const anchorY = useCenter ? center.y : anchor.y;
+
+    const updates = nodes.map((snapshot) => {
+      let left = snapshot.position.x;
+      let right = snapshot.position.x + snapshot.size.width;
+      let top = snapshot.position.y;
+      let bottom = snapshot.position.y + snapshot.size.height;
+
+      if (horizontalActive) {
+        const leftOffset = left - anchorX;
+        const rightOffset = right - anchorX;
+        left = anchorX + leftOffset * scaleX;
+        right = anchorX + rightOffset * scaleX;
+      }
+
+      if (verticalActive) {
+        const topOffset = top - anchorY;
+        const bottomOffset = bottom - anchorY;
+        top = anchorY + topOffset * scaleY;
+        bottom = anchorY + bottomOffset * scaleY;
+      }
+
+      const nextWidthValue = Math.max(minSize, right - left);
+      const nextHeightValue = Math.max(minSize, bottom - top);
+
+      return {
+        id: snapshot.id,
+        position: { x: left, y: top },
+        size: { width: nextWidthValue, height: nextHeightValue }
+      };
+    });
+
+    resizeNodes(updates);
+  };
+
   const handleDeleteSelection = useCallback(() => {
     commitEditingIfNeeded();
     selectedNodeIds.forEach((id) => removeNode(id));
@@ -1139,6 +1453,19 @@ const CanvasComponent = (
       if (event.key === 'Escape') {
         clearSelection();
         setPendingConnection(null);
+        if (resizeStateRef.current) {
+          const resizeState = resizeStateRef.current;
+          resizeStateRef.current = null;
+          resizeNodes(
+            resizeState.nodes.map((snapshot) => ({
+              id: snapshot.id,
+              position: { ...snapshot.position },
+              size: { ...snapshot.size }
+            }))
+          );
+          endTransaction();
+          releasePointerCapture(resizeState.pointerId);
+        }
         if (connectorDragStateRef.current) {
           const drag = connectorDragStateRef.current;
           connectorDragStateRef.current = null;
@@ -1359,6 +1686,30 @@ const CanvasComponent = (
               </span>
             </div>
           ))}
+        {showResizeFrame && selectionFrame && (
+          <div
+            className="selection-frame"
+            style={{
+              left: selectionFrame.left,
+              top: selectionFrame.top,
+              width: selectionFrame.width,
+              height: selectionFrame.height
+            }}
+          >
+            {RESIZE_HANDLES.map((handle) => (
+              <div
+                key={handle.key}
+                className={`selection-frame__handle selection-frame__handle--${handle.key}`}
+                style={{
+                  left: `${handle.x * 100}%`,
+                  top: `${handle.y * 100}%`,
+                  cursor: handle.cursor
+                }}
+                onPointerDown={(event) => handleResizeHandlePointerDown(event, handle.key)}
+              />
+            ))}
+          </div>
+        )}
       </div>
       {selectedNode && (
         <SelectionToolbar
