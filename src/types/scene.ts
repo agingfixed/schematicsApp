@@ -1,26 +1,39 @@
-export type NodeKind = 'rectangle' | 'rounded-rectangle' | 'ellipse' | 'diamond';
+export type NodeShape = 'rectangle' | 'rounded-rectangle' | 'ellipse' | 'diamond';
+export type NodeKind = NodeShape;
 
 export interface Vec2 {
   x: number;
   y: number;
 }
 
-export interface NodeStyle {
-  fill: string;
-  stroke: string;
-  strokeWidth: number;
-  cornerRadius?: number;
-  shadow?: boolean;
+export type TextAlign = 'left' | 'center' | 'right';
+
+export type NodeFontWeight = 400 | 600 | 700;
+
+export interface NodeStroke {
+  color: string;
+  width: number;
+}
+
+export interface NodeLink {
+  url: string;
 }
 
 export interface NodeModel {
   id: string;
-  type: NodeKind;
+  shape: NodeShape;
   position: Vec2;
   size: { width: number; height: number };
   rotation?: number;
-  label: string;
-  style: NodeStyle;
+  text: string;
+  textAlign: TextAlign;
+  fontSize: number;
+  fontWeight: NodeFontWeight;
+  fill: string;
+  stroke: NodeStroke;
+  cornerRadius?: number;
+  link?: NodeLink;
+  shadow?: boolean;
 }
 
 export type ConnectorKind = 'straight' | 'orthogonal';

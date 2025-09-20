@@ -1,9 +1,18 @@
 import { nanoid } from 'nanoid';
-import { CanvasTransform, NodeKind, NodeModel, SceneContent, Vec2 } from '../types/scene';
+import {
+  CanvasTransform,
+  NodeKind,
+  NodeModel,
+  SceneContent,
+  Vec2
+} from '../types/scene';
 
 export const GRID_SIZE = 32;
 
-const defaultNodeStyles: Record<NodeKind, NodeModel['style']> = {
+const defaultNodeAppearance: Record<
+  NodeKind,
+  { fill: string; stroke: string; strokeWidth: number; cornerRadius?: number }
+> = {
   rectangle: {
     fill: '#1f2937',
     stroke: '#3b82f6',
@@ -34,23 +43,26 @@ const defaultNodeSizes: Record<NodeKind, { width: number; height: number }> = {
   diamond: { width: 220, height: 160 }
 };
 
-export const createNodeModel = (type: NodeKind, position: Vec2, label?: string): NodeModel => {
-  const size = defaultNodeSizes[type];
-  const style = defaultNodeStyles[type];
+export const createNodeModel = (shape: NodeKind, position: Vec2, text?: string): NodeModel => {
+  const size = defaultNodeSizes[shape];
+  const appearance = defaultNodeAppearance[shape];
 
   return {
     id: nanoid(),
-    type,
+    shape,
     position: { ...position },
     size: { ...size },
-    label: label ?? defaultLabel(type),
-    style: { ...style }
+    text: text ?? defaultLabel(shape),
+    textAlign: 'center',
+    fontSize: 18,
+    fontWeight: 600,
+    fill: appearance.fill,
+    stroke: { color: appearance.stroke, width: appearance.strokeWidth },
+    cornerRadius: appearance.cornerRadius
   };
 };
 
-export const getDefaultNodeSize = (type: NodeKind) => ({ ...defaultNodeSizes[type] });
-
-export const getDefaultNodeStyle = (type: NodeKind) => ({ ...defaultNodeStyles[type] });
+export const getDefaultNodeSize = (shape: NodeKind) => ({ ...defaultNodeSizes[shape] });
 
 const defaultLabel = (type: NodeKind) => {
   switch (type) {
@@ -72,7 +84,8 @@ export const cloneScene = (scene: SceneContent): SceneContent => ({
     ...node,
     position: { ...node.position },
     size: { ...node.size },
-    style: { ...node.style }
+    stroke: { ...node.stroke },
+    link: node.link ? { ...node.link } : undefined
   })),
   connectors: scene.connectors.map((connector) => ({
     ...connector,
