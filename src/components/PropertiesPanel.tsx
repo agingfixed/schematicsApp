@@ -120,6 +120,25 @@ export const PropertiesPanel: React.FC = () => {
             </label>
           </div>
           <label className="properties__field">
+            <span>Fill Opacity</span>
+            <div className="properties__slider-control">
+              <input
+                type="range"
+                min={0}
+                max={100}
+                value={Math.round((selectedNode.fillOpacity ?? 1) * 100)}
+                onChange={(event) =>
+                  applyNodeStyles([selectedNode.id], {
+                    fillOpacity: Number(event.target.value) / 100
+                  })
+                }
+              />
+              <span className="properties__slider-value">
+                {Math.round((selectedNode.fillOpacity ?? 1) * 100)}%
+              </span>
+            </div>
+          </label>
+          <label className="properties__field">
             <span>Stroke Width</span>
             <input
               type="number"

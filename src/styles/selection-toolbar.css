@@ -116,6 +116,47 @@
   color: rgba(226, 232, 240, 0.8);
 }
 
+.selection-toolbar__color-button {
+  appearance: none;
+  border: none;
+  padding: 0;
+  width: 36px;
+  height: 28px;
+  border-radius: 8px;
+  cursor: pointer;
+  background: transparent;
+  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.35);
+  transition: box-shadow 0.2s ease, transform 0.15s ease;
+}
+
+.selection-toolbar__color-button:hover {
+  box-shadow: inset 0 0 0 2px rgba(59, 130, 246, 0.45);
+}
+
+.selection-toolbar__color-button:active {
+  transform: translateY(1px);
+}
+
+.selection-toolbar__color-button.is-active {
+  box-shadow: inset 0 0 0 2px rgba(59, 130, 246, 0.6);
+}
+
+.selection-toolbar__color-preview {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background-image:
+    linear-gradient(45deg, rgba(226, 232, 240, 0.3) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(226, 232, 240, 0.3) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgba(226, 232, 240, 0.3) 75%),
+    linear-gradient(-45deg, transparent 75%, rgba(226, 232, 240, 0.3) 75%);
+  background-size: 12px 12px;
+  background-position: 0 0, 0 6px, 6px -6px, -6px 0;
+  box-shadow: inset 0 0 0 1000px var(--selection-fill-preview, rgba(15, 23, 42, 0.9));
+  transition: box-shadow 0.2s ease;
+}
+
 .selection-toolbar__swatch-indicator {
   font-weight: 600;
   letter-spacing: 0.02em;
@@ -224,4 +265,137 @@
   font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   background: rgba(15, 23, 42, 0.9);
   color: #f8fafc;
+}
+
+.selection-toolbar__color-popover {
+  position: absolute;
+  top: calc(100% + 12px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(15, 23, 42, 0.97);
+  border-radius: 14px;
+  padding: 14px 16px;
+  box-shadow: 0 18px 36px rgba(2, 6, 23, 0.55), 0 0 0 1px rgba(148, 163, 184, 0.22);
+  z-index: 48;
+  min-width: 240px;
+}
+
+.color-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  color: #f8fafc;
+}
+
+.color-picker__preview {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.color-picker__preview-swatch {
+  width: 54px;
+  height: 44px;
+  border-radius: 12px;
+  background-image:
+    linear-gradient(45deg, rgba(226, 232, 240, 0.25) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(226, 232, 240, 0.25) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgba(226, 232, 240, 0.25) 75%),
+    linear-gradient(-45deg, transparent 75%, rgba(226, 232, 240, 0.25) 75%);
+  background-size: 12px 12px;
+  background-position: 0 0, 0 6px, 6px -6px, -6px 0;
+  box-shadow: inset 0 0 0 1000px var(--color-picker-preview, rgba(15, 23, 42, 0.9));
+  border: 1px solid rgba(148, 163, 184, 0.35);
+}
+
+.color-picker__preview-meta span {
+  font-size: 12px;
+  color: rgba(226, 232, 240, 0.75);
+}
+
+.color-picker__hex {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: rgba(226, 232, 240, 0.75);
+}
+
+.color-picker__hex input {
+  background: rgba(15, 23, 42, 0.88);
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 8px;
+  padding: 6px 8px;
+  color: inherit;
+  font-size: 13px;
+  outline: none;
+}
+
+.color-picker__sliders {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.color-picker__channel {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: rgba(226, 232, 240, 0.75);
+}
+
+.color-picker__channel-label {
+  width: 42px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.color-picker__channel input[type='range'] {
+  flex: 1;
+  accent-color: #38bdf8;
+  cursor: pointer;
+}
+
+.color-picker__value {
+  min-width: 42px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.color-picker__presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.color-picker__preset {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  border: none;
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.35);
+  background: var(--color-picker-swatch, rgba(15, 23, 42, 0.9));
+  transition: transform 0.15s ease, box-shadow 0.2s ease;
+}
+
+.color-picker__preset:hover {
+  transform: translateY(-1px);
+  box-shadow: inset 0 0 0 2px rgba(59, 130, 246, 0.45);
+}
+
+.color-picker__preset--transparent {
+  width: auto;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  background: rgba(15, 23, 42, 0.85);
+  color: rgba(226, 232, 240, 0.85);
+  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.35);
+}
+
+.color-picker__preset--transparent:hover {
+  box-shadow: inset 0 0 0 2px rgba(248, 250, 252, 0.35);
 }

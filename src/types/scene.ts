@@ -30,6 +30,7 @@ export interface NodeModel {
   fontSize: number;
   fontWeight: NodeFontWeight;
   fill: string;
+  fillOpacity: number;
   stroke: NodeStroke;
   cornerRadius?: number;
   link?: NodeLink;

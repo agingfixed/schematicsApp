@@ -18,15 +18,23 @@ const renderShape = (
   node: NodeModel,
   {
     fill,
+    fillOpacity,
     stroke,
     strokeWidth,
     className
-  }: { fill: string; stroke: string; strokeWidth: number; className?: string }
+  }: {
+    fill: string;
+    fillOpacity?: number;
+    stroke: string;
+    strokeWidth: number;
+    className?: string;
+  }
 ) => {
   const { width, height } = node.size;
   const cornerRadius = node.cornerRadius ?? 24;
   const common = {
     fill,
+    fillOpacity,
     stroke,
     strokeWidth,
     className,
@@ -68,6 +76,7 @@ export const DiagramNode: React.FC<DiagramNodeProps> = ({
 }) => {
   const shapeElement = renderShape(node, {
     fill: node.fill,
+    fillOpacity: node.fillOpacity,
     stroke: node.stroke.color,
     strokeWidth: node.stroke.width,
     className: 'diagram-node__shape'

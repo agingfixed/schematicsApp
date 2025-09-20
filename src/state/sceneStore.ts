@@ -29,6 +29,7 @@ interface SceneHistory {
 
 export interface NodeStylePatch {
   fill?: string;
+  fillOpacity?: number;
   strokeColor?: string;
   strokeWidth?: number;
   fontSize?: number;
@@ -63,6 +64,9 @@ interface SceneStoreActions {
   updateNode: (id: string, patch: Partial<NodeModel>) => void;
   moveNode: (id: string, position: Vec2) => void;
   batchMove: (ids: string[], delta: Vec2) => void;
+  resizeNodes: (
+    updates: Array<{ id: string; position: Vec2; size: { width: number; height: number } }>
+  ) => void;
   removeNode: (id: string) => void;
   addConnector: (sourceId: string, targetId: string) => ConnectorModel | null;
   updateConnector: (id: string, patch: Partial<ConnectorModel>) => void;
@@ -260,6 +264,49 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
           };
           changed = true;
         }
+      });
+
+      if (!changed) {
+        return {};
+      }
+
+      if (current.isTransaction) {
+        return { scene };
+      }
+
+      return withSceneChange(current, scene);
+    }),
+  resizeNodes: (updates) =>
+    set((current) => {
+      if (!updates.length) {
+        return {};
+      }
+
+      const scene = cloneScene(current.scene);
+      let changed = false;
+
+      updates.forEach((update) => {
+        const node = scene.nodes.find((item) => item.id === update.id);
+        if (!node) {
+          return;
+        }
+
+        const nextPosition = update.position;
+        const nextSize = update.size;
+
+        const differs =
+          Math.abs(node.position.x - nextPosition.x) > 0.0001 ||
+          Math.abs(node.position.y - nextPosition.y) > 0.0001 ||
+          Math.abs(node.size.width - nextSize.width) > 0.0001 ||
+          Math.abs(node.size.height - nextSize.height) > 0.0001;
+
+        if (!differs) {
+          return;
+        }
+
+        node.position = { ...nextPosition };
+        node.size = { ...nextSize };
+        changed = true;
       });
 
       if (!changed) {
@@ -494,6 +541,10 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
 
         if (patch.fill !== undefined && node.fill !== patch.fill) {
           node.fill = patch.fill;
+          changed = true;
+        }
+        if (patch.fillOpacity !== undefined && node.fillOpacity !== patch.fillOpacity) {
+          node.fillOpacity = Math.min(1, Math.max(0, patch.fillOpacity));
           changed = true;
         }
         if (patch.strokeColor !== undefined && node.stroke.color !== patch.strokeColor) {
