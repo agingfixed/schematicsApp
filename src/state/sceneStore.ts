@@ -36,13 +36,21 @@ export interface NodeStylePatch {
   textAlign?: TextAlign;
 }
 
+export interface SnapSettings {
+  enabled: boolean;
+  tolerance: number;
+  showDistanceLabels: boolean;
+  showSpacingHandles: boolean;
+  snapToGrid: boolean;
+}
+
 interface SceneStoreState {
   scene: SceneContent;
   history: SceneHistory;
   selection: SelectionState;
   tool: Tool;
   gridVisible: boolean;
-  snapToGrid: boolean;
+  snap: SnapSettings;
   showMiniMap: boolean;
   isTransaction: boolean;
   transform: CanvasTransform;
@@ -63,6 +71,8 @@ interface SceneStoreActions {
   clearSelection: () => void;
   toggleGrid: () => void;
   toggleSnap: () => void;
+  setSnapSettings: (patch: Partial<SnapSettings>) => void;
+  equalizeSpacing: (nodeIds: string[], axis: 'x' | 'y') => void;
   setShowMiniMap: (value: boolean) => void;
   undo: () => void;
   redo: () => void;
@@ -131,7 +141,13 @@ const initialState: SceneStoreState = {
   selection: { nodeIds: [], connectorIds: [] },
   tool: 'select',
   gridVisible: true,
-  snapToGrid: true,
+  snap: {
+    enabled: true,
+    tolerance: 6,
+    showDistanceLabels: true,
+    showSpacingHandles: true,
+    snapToGrid: true
+  },
   showMiniMap: true,
   isTransaction: false,
   transform: { x: 0, y: 0, scale: 1 },
@@ -166,7 +182,8 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
     })),
   addNode: (type, position) => {
     const state = get();
-    const snappedPosition = state.snapToGrid
+    const shouldSnapToGrid = state.snap.enabled && state.snap.snapToGrid && state.gridVisible;
+    const snappedPosition = shouldSnapToGrid
       ? {
           x: Math.round(position.x / GRID_SIZE) * GRID_SIZE,
           y: Math.round(position.y / GRID_SIZE) * GRID_SIZE
@@ -224,10 +241,6 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
       }
 
       node.position = { ...position };
-      if (current.snapToGrid) {
-        node.position.x = Math.round(node.position.x / GRID_SIZE) * GRID_SIZE;
-        node.position.y = Math.round(node.position.y / GRID_SIZE) * GRID_SIZE;
-      }
 
       if (current.isTransaction) {
         return { scene };
@@ -245,10 +258,6 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
             x: node.position.x + delta.x,
             y: node.position.y + delta.y
           };
-          if (current.snapToGrid) {
-            node.position.x = Math.round(node.position.x / GRID_SIZE) * GRID_SIZE;
-            node.position.y = Math.round(node.position.y / GRID_SIZE) * GRID_SIZE;
-          }
           changed = true;
         }
       });
@@ -364,7 +373,58 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
   clearSelection: () =>
     set({ selection: { nodeIds: [], connectorIds: [] }, editingNodeId: null }),
   toggleGrid: () => set((state) => ({ gridVisible: !state.gridVisible })),
-  toggleSnap: () => set((state) => ({ snapToGrid: !state.snapToGrid })),
+  toggleSnap: () =>
+    set((state) => ({ snap: { ...state.snap, enabled: !state.snap.enabled } })),
+  setSnapSettings: (patch) =>
+    set((state) => ({ snap: { ...state.snap, ...patch } })),
+  equalizeSpacing: (nodeIds, axis) =>
+    set((current) => {
+      if (nodeIds.length < 2) {
+        return {};
+      }
+
+      const scene = cloneScene(current.scene);
+      const nodes = nodeIds
+        .map((id) => scene.nodes.find((node) => node.id === id))
+        .filter((node): node is NodeModel => Boolean(node));
+      if (nodes.length < 2) {
+        return {};
+      }
+
+      const sorted = [...nodes].sort((a, b) =>
+        axis === 'x' ? a.position.x - b.position.x : a.position.y - b.position.y
+      );
+      const first = sorted[0];
+      const last = sorted[sorted.length - 1];
+      const start = axis === 'x' ? first.position.x : first.position.y;
+      const end =
+        axis === 'x'
+          ? last.position.x + last.size.width
+          : last.position.y + last.size.height;
+      const totalSpan = end - start;
+      const occupied = sorted.reduce(
+        (sum, node) => sum + (axis === 'x' ? node.size.width : node.size.height),
+        0
+      );
+      const gapCount = sorted.length - 1;
+      if (gapCount <= 0) {
+        return {};
+      }
+      const spacing = Math.max(0, (totalSpan - occupied) / gapCount);
+
+      let cursor = start;
+      sorted.forEach((node) => {
+        if (axis === 'x') {
+          node.position.x = cursor;
+          cursor += node.size.width + spacing;
+        } else {
+          node.position.y = cursor;
+          cursor += node.size.height + spacing;
+        }
+      });
+
+      return withSceneChange(current, scene);
+    }),
   setShowMiniMap: (value) => set({ showMiniMap: value }),
   undo: () =>
     set((state) => {
@@ -538,7 +598,7 @@ export const selectConnectors = (state: SceneStore) => state.scene.connectors;
 export const selectSelection = (state: SceneStore) => state.selection;
 export const selectTool = (state: SceneStore) => state.tool;
 export const selectGridVisible = (state: SceneStore) => state.gridVisible;
-export const selectSnapToGrid = (state: SceneStore) => state.snapToGrid;
+export const selectSnapSettings = (state: SceneStore) => state.snap;
 export const selectShowMiniMap = (state: SceneStore) => state.showMiniMap;
 export const selectTransform = (state: SceneStore) => state.transform;
 export const selectEditingNodeId = (state: SceneStore) => state.editingNodeId;
