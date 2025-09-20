@@ -12,6 +12,10 @@ interface DiagramConnectorProps {
   selected: boolean;
   onPointerDown: (event: React.PointerEvent<SVGPathElement>) => void;
   onHandlePointerDown: (event: React.PointerEvent<SVGCircleElement>, index: number) => void;
+  onEndpointPointerDown: (
+    event: React.PointerEvent<SVGCircleElement>,
+    endpoint: 'start' | 'end'
+  ) => void;
   onUpdateLabel: (value: string) => void;
 }
 
@@ -24,6 +28,7 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
   selected,
   onPointerDown,
   onHandlePointerDown,
+  onEndpointPointerDown,
   onUpdateLabel
 }) => {
   const [isEditing, setIsEditing] = useState(false);
@@ -123,6 +128,28 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
         markerStart={markerStart}
         onPointerDown={onPointerDown}
       />
+      {selected && (
+        <>
+          <circle
+            className="diagram-connector__endpoint diagram-connector__endpoint--start"
+            cx={geometry.start.x}
+            cy={geometry.start.y}
+            r={7}
+            onPointerDown={(event) => {
+              onEndpointPointerDown(event, 'start');
+            }}
+          />
+          <circle
+            className="diagram-connector__endpoint diagram-connector__endpoint--end"
+            cx={geometry.end.x}
+            cy={geometry.end.y}
+            r={7}
+            onPointerDown={(event) => {
+              onEndpointPointerDown(event, 'end');
+            }}
+          />
+        </>
+      )}
       {selected &&
         geometry.waypoints.map((point, index) => (
           <circle
