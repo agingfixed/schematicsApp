@@ -39,9 +39,11 @@ export interface NodeModel {
 
 export type ConnectorMode = 'orthogonal' | 'straight';
 
-export type ConnectorPort = 'top' | 'right' | 'bottom' | 'left' | 'center';
+export type CardinalConnectorPort = 'top' | 'right' | 'bottom' | 'left';
 
-export type ArrowShape = 'none' | 'triangle' | 'diamond' | 'circle';
+export type ConnectorPort = CardinalConnectorPort | 'center';
+
+export type ArrowShape = 'none' | 'triangle' | 'diamond' | 'circle' | 'arrow' | 'line-arrow';
 export type ArrowFill = 'filled' | 'outlined';
 
 export interface ConnectorArrowStyle {

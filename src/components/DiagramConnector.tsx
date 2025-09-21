@@ -30,7 +30,12 @@ const clampLabel = (value: string) => value.trim();
 const arrowPathForShape = (shape: ArrowShape, orientation: 'start' | 'end'): string | null => {
   switch (shape) {
     case 'triangle':
-      return orientation === 'end' ? 'M0 0 L12 6 L0 12 Z' : 'M12 0 L0 6 L12 12 Z';
+      return orientation === 'end' ? 'M12 0 L0 6 L12 12 Z' : 'M0 0 L12 6 L0 12 Z';
+    case 'arrow':
+    case 'line-arrow':
+      return orientation === 'end'
+        ? 'M0 6 L6 0 L12 6 L6 12 L6 8 L0 8 Z'
+        : 'M12 6 L6 0 L0 6 L6 12 L6 8 L12 8 Z';
     case 'diamond':
       return orientation === 'end'
         ? 'M0 6 L6 0 L12 6 L6 12 Z'
@@ -40,6 +45,34 @@ const arrowPathForShape = (shape: ArrowShape, orientation: 'start' | 'end'): str
     default:
       return null;
   }
+};
+
+const markerRefXForShape = (shape: ArrowShape, orientation: 'start' | 'end'): number => {
+  if (orientation === 'start') {
+    return 0;
+  }
+
+  if (shape === 'triangle') {
+    return 0;
+  }
+
+  return 12;
+};
+
+const markerVisualsForShape = (
+  shape: ArrowShape,
+  fill: 'filled' | 'outlined',
+  strokeColor: string
+): { fill: string; stroke: string; strokeWidth: number } => {
+  if (shape === 'line-arrow') {
+    return { fill: 'transparent', stroke: strokeColor, strokeWidth: 1.3 };
+  }
+
+  if (fill === 'filled') {
+    return { fill: strokeColor, stroke: 'none', strokeWidth: 0 };
+  }
+
+  return { fill: 'transparent', stroke: strokeColor, strokeWidth: 1.3 };
 };
 
 const buildRoundedPath = (points: Vec2[], radius: number) => {
@@ -250,6 +283,14 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
 
   const startArrowShape = connector.style.startArrow?.shape ?? 'none';
   const endArrowShape = connector.style.endArrow?.shape ?? 'none';
+  const startArrowFill =
+    startArrowShape === 'line-arrow' ? 'outlined' : connector.style.startArrow?.fill ?? 'filled';
+  const endArrowFill =
+    endArrowShape === 'line-arrow' ? 'outlined' : connector.style.endArrow?.fill ?? 'filled';
+  const startRefX = markerRefXForShape(startArrowShape, 'start');
+  const endRefX = markerRefXForShape(endArrowShape, 'end');
+  const startVisual = markerVisualsForShape(startArrowShape, startArrowFill, arrowStroke);
+  const endVisual = markerVisualsForShape(endArrowShape, endArrowFill, arrowStroke);
 
   const startMarker = startArrowShape !== 'none' && (
     <marker
@@ -257,26 +298,26 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
       viewBox="0 0 12 12"
       markerWidth={12 * arrowSize}
       markerHeight={12 * arrowSize}
-      refX={0}
+      refX={startRefX}
       refY={6}
       orient="auto"
       markerUnits="strokeWidth"
     >
-      {connector.style.startArrow?.shape === 'circle' ? (
+      {startArrowShape === 'circle' ? (
         <circle
           cx={6}
           cy={6}
           r={4}
-          fill={connector.style.startArrow?.fill === 'filled' ? arrowStroke : 'transparent'}
-          stroke={connector.style.startArrow?.fill === 'outlined' ? arrowStroke : 'none'}
-          strokeWidth={connector.style.startArrow?.fill === 'outlined' ? 1.3 : 0}
+          fill={startVisual.fill}
+          stroke={startVisual.stroke}
+          strokeWidth={startVisual.strokeWidth}
         />
       ) : (
         <path
           d={arrowPathForShape(startArrowShape, 'start') ?? ''}
-          fill={connector.style.startArrow?.fill === 'filled' ? arrowStroke : 'transparent'}
-          stroke={connector.style.startArrow?.fill === 'outlined' ? arrowStroke : 'none'}
-          strokeWidth={connector.style.startArrow?.fill === 'outlined' ? 1.3 : 0}
+          fill={startVisual.fill}
+          stroke={startVisual.stroke}
+          strokeWidth={startVisual.strokeWidth}
           strokeLinejoin="round"
         />
       )}
@@ -289,26 +330,26 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
       viewBox="0 0 12 12"
       markerWidth={12 * arrowSize}
       markerHeight={12 * arrowSize}
-      refX={12}
+      refX={endRefX}
       refY={6}
       orient="auto"
       markerUnits="strokeWidth"
     >
-      {connector.style.endArrow?.shape === 'circle' ? (
+      {endArrowShape === 'circle' ? (
         <circle
           cx={6}
           cy={6}
           r={4}
-          fill={connector.style.endArrow?.fill === 'filled' ? arrowStroke : 'transparent'}
-          stroke={connector.style.endArrow?.fill === 'outlined' ? arrowStroke : 'none'}
-          strokeWidth={connector.style.endArrow?.fill === 'outlined' ? 1.3 : 0}
+          fill={endVisual.fill}
+          stroke={endVisual.stroke}
+          strokeWidth={endVisual.strokeWidth}
         />
       ) : (
         <path
           d={arrowPathForShape(endArrowShape, 'end') ?? ''}
-          fill={connector.style.endArrow?.fill === 'filled' ? arrowStroke : 'transparent'}
-          stroke={connector.style.endArrow?.fill === 'outlined' ? arrowStroke : 'none'}
-          strokeWidth={connector.style.endArrow?.fill === 'outlined' ? 1.3 : 0}
+          fill={endVisual.fill}
+          stroke={endVisual.stroke}
+          strokeWidth={endVisual.strokeWidth}
           strokeLinejoin="round"
         />
       )}
