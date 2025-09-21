@@ -1,5 +1,7 @@
 import React, { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ConnectorModel } from '../types/scene';
+import { FloatingMenuChrome } from './FloatingMenuChrome';
+import { useFloatingMenuDrag } from '../hooks/useFloatingMenuDrag';
 import '../styles/connector-toolbar.css';
 
 interface ConnectorTextToolbarProps {
@@ -31,8 +33,24 @@ export const ConnectorTextToolbar: React.FC<ConnectorTextToolbarProps> = ({
 
   const labelStyle = { ...DEFAULT_STYLE, ...connector.labelStyle };
 
+  const {
+    menuState,
+    isDragging,
+    handlePointerDown: handleDragPointerDown,
+    handlePointerMove: handleDragPointerMove,
+    handlePointerUp: handleDragPointerUp,
+    handlePointerCancel: handleDragPointerCancel,
+    moveBy: moveMenuBy,
+    resetToAnchor
+  } = useFloatingMenuDrag({
+    menuType: 'connector-label-toolbar',
+    menuRef: toolbarRef,
+    viewportSize,
+    isVisible: isVisible && Boolean(anchor)
+  });
+
   useLayoutEffect(() => {
-    if (!anchor || !isVisible || !toolbarRef.current) {
+    if (!anchor || !isVisible || !toolbarRef.current || menuState.isFree) {
       return;
     }
     const element = toolbarRef.current;
@@ -44,11 +62,18 @@ export const ConnectorTextToolbar: React.FC<ConnectorTextToolbarProps> = ({
     } else if (placement === 'bottom' && bottomSpace < 8 && topSpace > bottomSpace) {
       setPlacement('top');
     }
-  }, [anchor, isVisible, viewportSize.height, placement]);
+  }, [anchor, isVisible, viewportSize.height, placement, menuState.isFree]);
 
   const style = useMemo(() => {
     if (!anchor) {
       return { opacity: 0 } as React.CSSProperties;
+    }
+    if (menuState.isFree && menuState.position) {
+      return {
+        left: menuState.position.x,
+        top: menuState.position.y,
+        transform: 'translate(0, 0)'
+      } as React.CSSProperties;
     }
     if (placement === 'top') {
       return {
@@ -62,7 +87,7 @@ export const ConnectorTextToolbar: React.FC<ConnectorTextToolbarProps> = ({
       top: anchor.y + TOOLBAR_OFFSET,
       transform: 'translate(-50%, 0)'
     } as React.CSSProperties;
-  }, [anchor, placement]);
+  }, [anchor, placement, menuState.isFree, menuState.position]);
 
   if (!isVisible || !anchor) {
     return null;
@@ -91,7 +116,24 @@ export const ConnectorTextToolbar: React.FC<ConnectorTextToolbarProps> = ({
   };
 
   return (
-    <div ref={toolbarRef} className={`connector-toolbar connector-toolbar--${placement}`} style={style}>
+    <div
+      ref={toolbarRef}
+      className={`connector-toolbar floating-menu connector-toolbar--${placement}`}
+      style={style}
+      data-free={menuState.isFree || undefined}
+      data-dragging={isDragging || undefined}
+    >
+      <FloatingMenuChrome
+        title="Connector label"
+        isFree={menuState.isFree}
+        isDragging={isDragging}
+        onPointerDown={handleDragPointerDown}
+        onPointerMove={handleDragPointerMove}
+        onPointerUp={handleDragPointerUp}
+        onPointerCancel={handleDragPointerCancel}
+        onReset={resetToAnchor}
+        onKeyboardMove={moveMenuBy}
+      />
       <div className="connector-toolbar__section">
         <label className="connector-toolbar__field">
           <span>Size</span>

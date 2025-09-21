@@ -2,8 +2,9 @@
   position: absolute;
   z-index: 40;
   display: flex;
-  align-items: center;
-  gap: 16px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
   padding: 10px 14px;
   background: rgba(15, 23, 42, 0.92);
   border-radius: 14px;
@@ -13,6 +14,13 @@
   backdrop-filter: blur(12px);
   color: #f8fafc;
   min-width: 320px;
+}
+
+.selection-toolbar__content {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
 }
 
 .selection-toolbar__group {
