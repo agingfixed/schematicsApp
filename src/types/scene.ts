@@ -37,24 +37,44 @@ export interface NodeModel {
   shadow?: boolean;
 }
 
-export type ConnectorKind = 'straight' | 'orthogonal';
+export type ConnectorMode = 'orthogonal' | 'straight' | 'curved';
+
+export type ArrowShape = 'none' | 'triangle' | 'diamond' | 'circle';
+export type ArrowFill = 'filled' | 'outlined';
+
+export interface ConnectorArrowStyle {
+  shape: ArrowShape;
+  fill: ArrowFill;
+}
+
+export interface ConnectorLabelStyle {
+  fontSize: number;
+  fontWeight: NodeFontWeight;
+  color: string;
+  background: string;
+}
 
 export interface ConnectorStyle {
   stroke: string;
   strokeWidth: number;
   dashed?: boolean;
-  arrowStart?: 'none' | 'arrow' | 'dot';
-  arrowEnd?: 'none' | 'arrow' | 'dot';
+  startArrow?: ConnectorArrowStyle;
+  endArrow?: ConnectorArrowStyle;
+  arrowSize?: number;
+  cornerRadius?: number;
 }
 
 export interface ConnectorModel {
   id: string;
-  type: ConnectorKind;
+  mode: ConnectorMode;
   sourceId: string;
   targetId: string;
   points?: Vec2[];
   label?: string;
+  labelPosition?: number;
+  labelOffset?: number;
   style: ConnectorStyle;
+  labelStyle?: ConnectorLabelStyle;
 }
 
 export interface SceneContent {
