@@ -34,7 +34,7 @@ const fillOptions = [
 ] as const;
 
 const modeOptions = [
-  { value: 'orthogonal', label: 'Elbow' },
+  { value: 'elbow', label: 'Elbow' },
   { value: 'straight', label: 'Straight' }
 ] as const;
 
@@ -304,7 +304,7 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
             ))}
           </select>
         </label>
-        {connector.mode === 'orthogonal' && (
+        {connector.mode === 'elbow' && (
           <label className="connector-toolbar__field">
             <span>Corner</span>
             <input

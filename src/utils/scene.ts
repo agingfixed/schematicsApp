@@ -6,6 +6,7 @@ import {
   SceneContent,
   Vec2
 } from '../types/scene';
+import { cloneConnectorEndpoint } from './connector';
 
 export const GRID_SIZE = 32;
 
@@ -90,6 +91,8 @@ export const cloneScene = (scene: SceneContent): SceneContent => ({
   })),
   connectors: scene.connectors.map((connector) => ({
     ...connector,
+    source: cloneConnectorEndpoint(connector.source),
+    target: cloneConnectorEndpoint(connector.target),
     points: connector.points?.map((point) => ({ ...point }))
   }))
 });

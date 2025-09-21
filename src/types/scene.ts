@@ -37,11 +37,28 @@ export interface NodeModel {
   shadow?: boolean;
 }
 
-export type ConnectorMode = 'orthogonal' | 'straight';
+export type ConnectorMode = 'elbow' | 'straight';
 
 export type CardinalConnectorPort = 'top' | 'right' | 'bottom' | 'left';
 
-export type ConnectorPort = CardinalConnectorPort | 'center';
+export interface AttachedConnectorEndpoint {
+  nodeId: string;
+  port: CardinalConnectorPort;
+}
+
+export interface FloatingConnectorEndpoint {
+  position: Vec2;
+}
+
+export type ConnectorEndpoint = AttachedConnectorEndpoint | FloatingConnectorEndpoint;
+
+export const isAttachedConnectorEndpoint = (
+  endpoint: ConnectorEndpoint
+): endpoint is AttachedConnectorEndpoint => 'nodeId' in endpoint;
+
+export const isFloatingConnectorEndpoint = (
+  endpoint: ConnectorEndpoint
+): endpoint is FloatingConnectorEndpoint => 'position' in endpoint;
 
 export type ArrowShape = 'none' | 'triangle' | 'diamond' | 'circle' | 'arrow' | 'line-arrow';
 export type ArrowFill = 'filled' | 'outlined';
@@ -71,10 +88,8 @@ export interface ConnectorStyle {
 export interface ConnectorModel {
   id: string;
   mode: ConnectorMode;
-  sourceId: string;
-  targetId: string;
-  sourcePort?: ConnectorPort;
-  targetPort?: ConnectorPort;
+  source: ConnectorEndpoint;
+  target: ConnectorEndpoint;
   points?: Vec2[];
   label?: string;
   labelPosition?: number;

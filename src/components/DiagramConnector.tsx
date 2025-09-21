@@ -214,33 +214,15 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
     }
   }, [labelEditing, draft]);
 
-  const geometry = useMemo(() => {
-    if (!source || !target) {
-      return null;
-    }
-    return getConnectorPath(connector, source, target);
-  }, [connector, source, target]);
+  const geometry = useMemo(() => getConnectorPath(connector, source, target), [connector, source, target]);
 
-  const cornerRadius = connector.mode === 'orthogonal' ? connector.style.cornerRadius ?? 12 : 0;
+  const cornerRadius = connector.mode === 'elbow' ? connector.style.cornerRadius ?? 12 : 0;
 
-  const pathData = useMemo(() => {
-    if (!geometry) {
-      return '';
-    }
-    return buildRoundedPath(geometry.points, cornerRadius);
-  }, [geometry, cornerRadius]);
+  const pathData = useMemo(() => buildRoundedPath(geometry.points, cornerRadius), [geometry, cornerRadius]);
 
-  const hitPathData = useMemo(() => {
-    if (!geometry) {
-      return '';
-    }
-    return buildRoundedPath(geometry.points, 0);
-  }, [geometry]);
+  const hitPathData = useMemo(() => buildRoundedPath(geometry.points, 0), [geometry]);
 
   const segments = useMemo(() => {
-    if (!geometry) {
-      return [] as Array<{ start: Vec2; end: Vec2; axis: 'horizontal' | 'vertical'; index: number }>;
-    }
     const list: Array<{ start: Vec2; end: Vec2; axis: 'horizontal' | 'vertical'; index: number }> = [];
     for (let index = 0; index < geometry.points.length - 1; index += 1) {
       const start = geometry.points[index];
@@ -257,25 +239,12 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
     }
   }, [selected]);
 
-  const midpoint = useMemo(() => {
-    if (!geometry) {
-      return { x: 0, y: 0 };
-    }
-    return getPolylineMidpoint(geometry.points);
-  }, [geometry]);
+  const midpoint = useMemo(() => getPolylineMidpoint(geometry.points), [geometry]);
 
   const labelPosition = connector.labelPosition ?? DEFAULT_LABEL_POSITION;
   const labelOffset = connector.labelOffset ?? DEFAULT_LABEL_OFFSET;
 
   const labelPlacement = useMemo(() => {
-    if (!geometry) {
-      return {
-        anchor: midpoint,
-        center: midpoint,
-        normal: { x: 0, y: -1 },
-        segmentIndex: 0
-      };
-    }
     const { point, segmentIndex } = getPointAtRatio(geometry.points, labelPosition);
     const normal = getNormalAtRatio(geometry.points, segmentIndex);
     const center = {
@@ -368,10 +337,6 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
       )}
     </marker>
   );
-
-  if (!geometry) {
-    return null;
-  }
 
   const handleLabelInput = (event: React.FormEvent<HTMLDivElement>) => {
     setDraft(event.currentTarget.textContent ?? '');
@@ -556,7 +521,7 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
           />
         </>
       )}
-      {selected && connector.mode === 'orthogonal' &&
+      {selected && connector.mode === 'elbow' &&
         geometry.points.slice(1, geometry.points.length - 1).map((point, index) => {
           const previous = geometry.points[index];
           const next = geometry.points[index + 2];

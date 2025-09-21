@@ -1,7 +1,15 @@
 import React, { useMemo } from 'react';
 import { CanvasHandle } from './Canvas';
-import { SceneContent, Vec2, CanvasTransform } from '../types/scene';
+import {
+  CanvasTransform,
+  ConnectorEndpoint,
+  SceneContent,
+  Vec2,
+  isAttachedConnectorEndpoint,
+  isFloatingConnectorEndpoint
+} from '../types/scene';
 import { boundsToSize, expandBounds, getSceneBounds } from '../utils/scene';
+import { getConnectorPortAnchor } from '../utils/connector';
 
 interface MiniMapProps {
   scene: SceneContent;
@@ -44,6 +52,20 @@ export const MiniMap: React.FC<MiniMapProps> = ({ scene, transform, viewport, ca
   });
 
   const projectSize = (value: number) => value * scale;
+
+  const resolveEndpointPosition = (endpoint: ConnectorEndpoint): Vec2 | null => {
+    if (isAttachedConnectorEndpoint(endpoint)) {
+      const node = scene.nodes.find((item) => item.id === endpoint.nodeId);
+      if (!node) {
+        return null;
+      }
+      return getConnectorPortAnchor(node, endpoint.port);
+    }
+    if (isFloatingConnectorEndpoint(endpoint)) {
+      return endpoint.position;
+    }
+    return null;
+  };
 
   const viewportRect = useMemo(() => {
     if (!viewport.width || !viewport.height) {
@@ -88,19 +110,13 @@ export const MiniMap: React.FC<MiniMapProps> = ({ scene, transform, viewport, ca
           stroke="rgba(148, 163, 184, 0.2)"
         />
         {scene.connectors.map((connector) => {
-          const source = scene.nodes.find((node) => node.id === connector.sourceId);
-          const target = scene.nodes.find((node) => node.id === connector.targetId);
-          if (!source || !target) {
+          const startWorld = resolveEndpointPosition(connector.source);
+          const endWorld = resolveEndpointPosition(connector.target);
+          if (!startWorld || !endWorld) {
             return null;
           }
-          const start = projectPoint({
-            x: source.position.x + source.size.width / 2,
-            y: source.position.y + source.size.height / 2
-          });
-          const end = projectPoint({
-            x: target.position.x + target.size.width / 2,
-            y: target.position.y + target.size.height / 2
-          });
+          const start = projectPoint(startWorld);
+          const end = projectPoint(endWorld);
           return (
             <line
               key={connector.id}
