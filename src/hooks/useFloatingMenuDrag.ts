@@ -14,6 +14,7 @@ const clamp = (value: number, min: number, max: number) => Math.min(max, Math.ma
 
 type DragState = {
   pointerId: number;
+  pointerTarget: HTMLDivElement | null;
   offsetX: number;
   offsetY: number;
   width: number;
@@ -69,9 +70,15 @@ export const useFloatingMenuDrag = ({
     if (!state) {
       return;
     }
-    const element = menuRef.current;
-    if (element && element.hasPointerCapture(state.pointerId)) {
-      element.releasePointerCapture(state.pointerId);
+    const element = state.pointerTarget ?? menuRef.current;
+    if (element && typeof element.hasPointerCapture === 'function') {
+      try {
+        if (element.hasPointerCapture(state.pointerId)) {
+          element.releasePointerCapture(state.pointerId);
+        }
+      } catch (error) {
+        // Ignore failures when the element has been detached from the DOM.
+      }
     }
     dragStateRef.current = null;
   }, [menuRef]);
@@ -171,9 +178,11 @@ export const useFloatingMenuDrag = ({
       const container = (element.offsetParent as HTMLElement | null) ?? element.parentElement;
       const rect = element.getBoundingClientRect();
       const containerRect = container?.getBoundingClientRect() ?? rect;
+      const pointerTarget = event.currentTarget;
 
       dragStateRef.current = {
         pointerId: event.pointerId,
+        pointerTarget,
         offsetX: event.clientX - rect.left,
         offsetY: event.clientY - rect.top,
         width: rect.width,
@@ -188,7 +197,11 @@ export const useFloatingMenuDrag = ({
       };
 
       setMenuSize({ width: rect.width, height: rect.height });
-      element.setPointerCapture(event.pointerId);
+      try {
+        pointerTarget.setPointerCapture(event.pointerId);
+      } catch (error) {
+        // Ignore failures when the pointer cannot be captured (e.g. already released).
+      }
       setIsDragging(true);
       event.preventDefault();
       event.stopPropagation();
