@@ -1,6 +1,7 @@
 node_modules
 .dist
 build
+build-tests
 .DS_Store
 .env.local
 .env*

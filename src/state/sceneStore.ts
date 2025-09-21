@@ -1,10 +1,11 @@
 import { nanoid } from 'nanoid';
 import { create } from 'zustand';
 import {
+  AttachedConnectorEndpoint,
   CanvasTransform,
+  ConnectorEndpoint,
   ConnectorModel,
   ConnectorLabelStyle,
-  ConnectorPort,
   NodeFontWeight,
   NodeKind,
   NodeModel,
@@ -12,7 +13,8 @@ import {
   SelectionState,
   TextAlign,
   Tool,
-  Vec2
+  Vec2,
+  isAttachedConnectorEndpoint
 } from '../types/scene';
 import {
   GRID_SIZE,
@@ -21,6 +23,7 @@ import {
   getNodeById,
   getSceneBounds
 } from '../utils/scene';
+import { cloneConnectorEndpoint } from '../utils/connector';
 
 const HISTORY_LIMIT = 64;
 
@@ -70,11 +73,7 @@ interface SceneStoreActions {
     updates: Array<{ id: string; position: Vec2; size: { width: number; height: number } }>
   ) => void;
   removeNode: (id: string) => void;
-  addConnector: (
-    sourceId: string,
-    targetId: string,
-    options?: { sourcePort?: ConnectorPort; targetPort?: ConnectorPort }
-  ) => ConnectorModel | null;
+  addConnector: (source: ConnectorEndpoint, target: ConnectorEndpoint) => ConnectorModel | null;
   updateConnector: (id: string, patch: Partial<ConnectorModel>) => void;
   removeConnector: (id: string) => void;
   setSelection: (selection: SelectionState) => void;
@@ -124,9 +123,9 @@ const createInitialScene = (): SceneContent => {
   const connectors: ConnectorModel[] = [
     {
       id: nanoid(),
-      mode: 'orthogonal',
-      sourceId: start.id,
-      targetId: collect.id,
+      mode: 'elbow',
+      source: { nodeId: start.id, port: 'right' },
+      target: { nodeId: collect.id, port: 'left' },
       style: { ...defaultConnectorStyle },
       label: 'Begin',
       labelPosition: 0.5,
@@ -135,9 +134,9 @@ const createInitialScene = (): SceneContent => {
     },
     {
       id: nanoid(),
-      mode: 'orthogonal',
-      sourceId: collect.id,
-      targetId: decision.id,
+      mode: 'elbow',
+      source: { nodeId: collect.id, port: 'right' },
+      target: { nodeId: decision.id, port: 'left' },
       style: { ...defaultConnectorStyle },
       labelPosition: 0.5,
       labelOffset: 18,
@@ -145,9 +144,9 @@ const createInitialScene = (): SceneContent => {
     },
     {
       id: nanoid(),
-      mode: 'orthogonal',
-      sourceId: decision.id,
-      targetId: done.id,
+      mode: 'elbow',
+      source: { nodeId: decision.id, port: 'right' },
+      target: { nodeId: done.id, port: 'left' },
       style: { ...defaultConnectorStyle },
       label: 'Yes',
       labelPosition: 0.5,
@@ -349,9 +348,13 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
       const scene = cloneScene(current.scene);
       const before = scene.nodes.length;
       scene.nodes = scene.nodes.filter((node) => node.id !== id);
-      scene.connectors = scene.connectors.filter(
-        (connector) => connector.sourceId !== id && connector.targetId !== id
-      );
+      scene.connectors = scene.connectors.filter((connector) => {
+        const sourceAttached = isAttachedConnectorEndpoint(connector.source);
+        const targetAttached = isAttachedConnectorEndpoint(connector.target);
+        const sourceMatches = sourceAttached && connector.source.nodeId === id;
+        const targetMatches = targetAttached && connector.target.nodeId === id;
+        return !sourceMatches && !targetMatches;
+      });
 
       if (scene.nodes.length === before) {
         return {};
@@ -365,27 +368,46 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
         editingNodeId: current.editingNodeId === id ? null : current.editingNodeId
       };
     }),
-  addConnector: (sourceId, targetId, options) => {
-    if (sourceId === targetId) {
+  addConnector: (sourceEndpoint, targetEndpoint) => {
+    const source = cloneConnectorEndpoint(sourceEndpoint);
+    const target = cloneConnectorEndpoint(targetEndpoint);
+
+    if (
+      isAttachedConnectorEndpoint(source) &&
+      isAttachedConnectorEndpoint(target) &&
+      source.nodeId === target.nodeId &&
+      source.port === target.port
+    ) {
       return null;
     }
 
     const state = get();
-    const existing = state.scene.connectors.find(
-      (connector) =>
-        connector.sourceId === sourceId && connector.targetId === targetId
-    );
+    const existing = state.scene.connectors.find((connector) => {
+      if (
+        isAttachedConnectorEndpoint(source) &&
+        isAttachedConnectorEndpoint(target) &&
+        isAttachedConnectorEndpoint(connector.source) &&
+        isAttachedConnectorEndpoint(connector.target)
+      ) {
+        return (
+          connector.source.nodeId === source.nodeId &&
+          connector.source.port === source.port &&
+          connector.target.nodeId === target.nodeId &&
+          connector.target.port === target.port
+        );
+      }
+      return false;
+    });
+
     if (existing) {
       return existing;
     }
 
     const connector: ConnectorModel = {
       id: nanoid(),
-      mode: 'orthogonal',
-      sourceId,
-      targetId,
-      sourcePort: options?.sourcePort,
-      targetPort: options?.targetPort,
+      mode: 'elbow',
+      source,
+      target,
       style: { ...defaultConnectorStyle },
       labelPosition: 0.5,
       labelOffset: 18,
@@ -394,7 +416,11 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
 
     set((current) => {
       const scene = cloneScene(current.scene);
-      scene.connectors.push(connector);
+      scene.connectors.push({
+        ...connector,
+        source: cloneConnectorEndpoint(connector.source),
+        target: cloneConnectorEndpoint(connector.target)
+      });
       return {
         ...withSceneChange(current, scene),
         selection: { nodeIds: [], connectorIds: [connector.id] },
@@ -413,7 +439,7 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
         return {};
       }
 
-      const { style, points, labelStyle, ...rest } = patch;
+      const { style, points, labelStyle, source, target, ...rest } = patch;
 
       if (points) {
         connector.points = points.map((point) => ({ ...point }));
@@ -423,6 +449,12 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
       }
       if (labelStyle !== undefined) {
         connector.labelStyle = labelStyle ? { ...labelStyle } : undefined;
+      }
+      if (source) {
+        connector.source = cloneConnectorEndpoint(source);
+      }
+      if (target) {
+        connector.target = cloneConnectorEndpoint(target);
       }
 
       Object.assign(connector, rest);

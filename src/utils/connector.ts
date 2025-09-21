@@ -1,16 +1,51 @@
 import {
   CardinalConnectorPort,
+  ConnectorEndpoint,
   ConnectorModel,
-  ConnectorPort,
   NodeModel,
-  Vec2
+  Vec2,
+  isAttachedConnectorEndpoint,
+  isFloatingConnectorEndpoint
 } from '../types/scene';
 
 const EPSILON = 1e-6;
+const resolveIsDev = () => {
+  if (typeof import.meta !== 'undefined' && import.meta?.env?.DEV !== undefined) {
+    return Boolean(import.meta.env?.DEV);
+  }
+  const maybeProcess =
+    typeof globalThis !== 'undefined'
+      ? (globalThis as { process?: { env?: Record<string, unknown> } }).process
+      : undefined;
+  const nodeEnv = maybeProcess?.env?.NODE_ENV;
+  if (typeof nodeEnv === 'string') {
+    return nodeEnv !== 'production';
+  }
+  return true;
+};
+
+const IS_DEV = resolveIsDev();
+
+const assertInvariant = (condition: unknown, message: string) => {
+  if (IS_DEV && !condition) {
+    throw new Error(message);
+  }
+};
 const AUTO_COLLAPSE_DISTANCE = 2.5;
 const AUTO_COLLAPSE_ANGLE = (3 * Math.PI) / 180;
 const MIN_SEGMENT_LENGTH = 6;
 export const CARDINAL_PORTS: CardinalConnectorPort[] = ['top', 'right', 'bottom', 'left'];
+const CARDINAL_PORT_LOOKUP = new Set<string>(CARDINAL_PORTS);
+
+export const isCardinalConnectorPortValue = (value: unknown): value is CardinalConnectorPort =>
+  typeof value === 'string' && CARDINAL_PORT_LOOKUP.has(value);
+
+const assertCardinalPort = (value: unknown, context: string) => {
+  assertInvariant(
+    isCardinalConnectorPortValue(value),
+    `${context} must use a cardinal port. Received "${String(value)}".`
+  );
+};
 
 type SegmentAxis = 'horizontal' | 'vertical';
 
@@ -98,20 +133,20 @@ export const getConnectorAnchor = (node: NodeModel, toward: Vec2): Vec2 => {
 
 export const getConnectorPortPositions = (
   node: NodeModel
-): Record<ConnectorPort, Vec2> => {
+): Record<CardinalConnectorPort, Vec2> => {
   const center = getNodeCenter(node);
   return {
     top: { x: center.x, y: node.position.y },
     right: { x: node.position.x + node.size.width, y: center.y },
     bottom: { x: center.x, y: node.position.y + node.size.height },
-    left: { x: node.position.x, y: center.y },
-    center
+    left: { x: node.position.x, y: center.y }
   };
 };
 
-export const getConnectorPortAnchor = (node: NodeModel, port: ConnectorPort): Vec2 => {
+export const getConnectorPortAnchor = (node: NodeModel, port: CardinalConnectorPort): Vec2 => {
+  assertCardinalPort(port, 'Connector endpoint');
   const positions = getConnectorPortPositions(node);
-  return positions[port] ?? positions.center;
+  return positions[port];
 };
 
 export const getNearestConnectorPort = (node: NodeModel, point: Vec2): CardinalConnectorPort => {
@@ -130,9 +165,6 @@ export const getNearestConnectorPort = (node: NodeModel, point: Vec2): CardinalC
 
   return best;
 };
-
-const isCardinalPort = (port?: ConnectorPort | null): port is CardinalConnectorPort =>
-  Boolean(port) && CARDINAL_PORTS.includes(port as CardinalConnectorPort);
 
 const PORT_AXIS: Record<CardinalConnectorPort, SegmentAxis> = {
   top: 'vertical',
@@ -168,6 +200,15 @@ export interface ConnectorPath {
 
 const clonePoint = (point: Vec2): Vec2 => ({ x: point.x, y: point.y });
 
+export const cloneConnectorEndpoint = (endpoint: ConnectorEndpoint): ConnectorEndpoint => {
+  if (isAttachedConnectorEndpoint(endpoint)) {
+    assertCardinalPort(endpoint.port, 'Connector endpoint');
+    return { nodeId: endpoint.nodeId, port: endpoint.port };
+  }
+
+  return { position: { ...endpoint.position } };
+};
+
 const nearlyEqual = (a: number, b: number, tolerance = EPSILON) => Math.abs(a - b) <= tolerance;
 
 const createDefaultOrthogonalWaypoints = (start: Vec2, end: Vec2): Vec2[] => {
@@ -193,6 +234,35 @@ const createDefaultOrthogonalWaypoints = (start: Vec2, end: Vec2): Vec2[] => {
   ];
 };
 
+const ensureOrthogonalSegments = (points: Vec2[]): Vec2[] => {
+  if (points.length < 2) {
+    return points.map((point) => clonePoint(point));
+  }
+
+  const corrected: Vec2[] = [clonePoint(points[0])];
+
+  for (let index = 1; index < points.length; index += 1) {
+    const prev = points[index - 1];
+    const current = points[index];
+    const dx = Math.abs(current.x - prev.x);
+    const dy = Math.abs(current.y - prev.y);
+
+    if (dx > EPSILON && dy > EPSILON) {
+      const bridge = createDefaultOrthogonalWaypoints(prev, current);
+      for (const intermediate of bridge) {
+        const last = corrected[corrected.length - 1];
+        if (!nearlyEqual(last.x, intermediate.x) || !nearlyEqual(last.y, intermediate.y)) {
+          corrected.push(clonePoint(intermediate));
+        }
+      }
+    }
+
+    corrected.push(clonePoint(current));
+  }
+
+  return corrected;
+};
+
 const computeSegmentAxes = (points: Vec2[]): SegmentAxis[] => {
   const axes: SegmentAxis[] = [];
 
@@ -213,6 +283,10 @@ const computeSegmentAxes = (points: Vec2[]): SegmentAxis[] => {
 };
 
 const shouldCollapsePoint = (prev: Vec2, current: Vec2, next: Vec2): boolean => {
+  if (!nearlyEqual(prev.x, next.x) && !nearlyEqual(prev.y, next.y)) {
+    return false;
+  }
+
   const ab = { x: current.x - prev.x, y: current.y - prev.y };
   const bc = { x: next.x - current.x, y: next.y - current.y };
   const abLength = Math.hypot(ab.x, ab.y);
@@ -308,7 +382,8 @@ export const tidyOrthogonalWaypoints = (start: Vec2, waypoints: Vec2[], end: Vec
     }
   }
 
-  const simplified = simplifyPolyline(points);
+  const enforced = ensureOrthogonalSegments(points);
+  const simplified = simplifyPolyline(enforced);
   if (simplified.length <= 2) {
     return [];
   }
@@ -325,37 +400,45 @@ const sanitizePoints = (points: Vec2[]): Vec2[] =>
     return !nearlyEqual(prev.x, point.x) || !nearlyEqual(prev.y, point.y);
   });
 
+const cloneEndpointPosition = (
+  endpoint: ConnectorModel['source'],
+  node: NodeModel | undefined
+): Vec2 => {
+  if (isFloatingConnectorEndpoint(endpoint)) {
+    return { ...endpoint.position };
+  }
+
+  if (isAttachedConnectorEndpoint(endpoint) && node) {
+    return getConnectorPortAnchor(node, endpoint.port);
+  }
+
+  return { x: 0, y: 0 };
+};
+
 export const getConnectorPath = (
   connector: ConnectorModel,
-  source: NodeModel,
-  target: NodeModel
+  sourceNode?: NodeModel,
+  targetNode?: NodeModel
 ): ConnectorPath => {
   const baseWaypoints = connector.points?.map((point) => clonePoint(point)) ?? [];
-  const targetReference = baseWaypoints.length ? baseWaypoints[0] : getNodeCenter(target);
-  const sourceReference = baseWaypoints.length
-    ? baseWaypoints[baseWaypoints.length - 1]
-    : getNodeCenter(source);
-
-  const start = connector.sourcePort
-    ? getConnectorPortAnchor(source, connector.sourcePort)
-    : getConnectorAnchor(source, targetReference);
-  const end = connector.targetPort
-    ? getConnectorPortAnchor(target, connector.targetPort)
-    : getConnectorAnchor(target, sourceReference);
+  const start = cloneEndpointPosition(connector.source, sourceNode);
+  const end = cloneEndpointPosition(connector.target, targetNode);
 
   const strokeWidth = connector.style.strokeWidth ?? 2;
   const clearance = Math.max(strokeWidth + 4, 12);
-  const startStub = isCardinalPort(connector.sourcePort)
-    ? createPortStubPoint(start, connector.sourcePort, clearance)
-    : null;
-  const endStub = isCardinalPort(connector.targetPort)
-    ? createPortStubPoint(end, connector.targetPort, clearance)
-    : null;
+  const startStub =
+    isAttachedConnectorEndpoint(connector.source) && sourceNode
+      ? createPortStubPoint(start, connector.source.port, clearance)
+      : null;
+  const endStub =
+    isAttachedConnectorEndpoint(connector.target) && targetNode
+      ? createPortStubPoint(end, connector.target.port, clearance)
+      : null;
 
   let waypoints: Vec2[] = [];
   let points: Vec2[] = [];
 
-  if (connector.mode === 'orthogonal') {
+  if (connector.mode === 'elbow') {
     const routeStart = startStub ?? start;
     const routeEnd = endStub ?? end;
     const base = baseWaypoints.length
@@ -386,10 +469,90 @@ export const getConnectorPath = (
       }
     }
 
-    points = sanitizePoints([start, ...waypoints, end]);
+    const rawPoints = [start, ...waypoints, end];
+    const orthogonal = ensureOrthogonalSegments(rawPoints);
+    points = sanitizePoints(orthogonal);
+    waypoints = points.slice(1, points.length - 1).map((point) => ({ ...point }));
   } else if (connector.mode === 'straight') {
     waypoints = [];
     points = sanitizePoints([start, end]);
+  }
+
+  if (connector.mode === 'elbow') {
+    for (let index = 0; index < points.length - 1; index += 1) {
+      const current = points[index];
+      const nextPoint = points[index + 1];
+      const dx = nextPoint.x - current.x;
+      const dy = nextPoint.y - current.y;
+      assertInvariant(
+        Math.abs(dx) < EPSILON || Math.abs(dy) < EPSILON,
+        'Orthogonal connector segments must be horizontal or vertical.'
+      );
+    }
+
+    if (isAttachedConnectorEndpoint(connector.source) && sourceNode && points.length > 1) {
+      const first = points[0];
+      const second = points[1];
+      const axis = PORT_AXIS[connector.source.port];
+      if (axis === 'vertical') {
+        assertInvariant(
+          Math.abs(second.x - first.x) < EPSILON,
+          'Connector must leave vertical ports vertically.'
+        );
+        const delta = second.y - first.y;
+        assertInvariant(Math.abs(delta) > EPSILON, 'Connector segment must extend away from the port.');
+        const direction = Math.sign(delta);
+        assertInvariant(
+          direction === PORT_DIRECTION[connector.source.port],
+          'Connector segment direction must respect source port orientation.'
+        );
+      } else {
+        assertInvariant(
+          Math.abs(second.y - first.y) < EPSILON,
+          'Connector must leave horizontal ports horizontally.'
+        );
+        const delta = second.x - first.x;
+        assertInvariant(Math.abs(delta) > EPSILON, 'Connector segment must extend away from the port.');
+        const direction = Math.sign(delta);
+        assertInvariant(
+          direction === PORT_DIRECTION[connector.source.port],
+          'Connector segment direction must respect source port orientation.'
+        );
+      }
+    }
+
+    if (isAttachedConnectorEndpoint(connector.target) && targetNode && points.length > 1) {
+      const last = points[points.length - 1];
+      const prev = points[points.length - 2];
+      const axis = PORT_AXIS[connector.target.port];
+      if (axis === 'vertical') {
+        assertInvariant(
+          Math.abs(last.x - prev.x) < EPSILON,
+          'Connector must enter vertical ports vertically.'
+        );
+        const delta = last.y - prev.y;
+        assertInvariant(Math.abs(delta) > EPSILON, 'Connector segment must approach the port.');
+        const direction = Math.sign(delta);
+        assertInvariant(
+          direction === -PORT_DIRECTION[connector.target.port],
+          'Connector segment direction must respect target port orientation.'
+        );
+      } else {
+        assertInvariant(
+          Math.abs(last.y - prev.y) < EPSILON,
+          'Connector must enter horizontal ports horizontally.'
+        );
+        const delta = last.x - prev.x;
+        assertInvariant(Math.abs(delta) > EPSILON, 'Connector segment must approach the port.');
+        const direction = Math.sign(delta);
+        assertInvariant(
+          direction === -PORT_DIRECTION[connector.target.port],
+          'Connector segment direction must respect target port orientation.'
+        );
+      }
+    }
+  } else {
+    assertInvariant(points.length <= 2, 'Straight connectors must not include extra waypoints.');
   }
 
   return {
