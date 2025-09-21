@@ -10,6 +10,8 @@ import { NodeModel, NodeKind, TextAlign } from '../types/scene';
 import { useCommands } from '../state/commands';
 import { useSceneStore } from '../state/sceneStore';
 import { ColorPicker } from './ColorPicker';
+import { FloatingMenuChrome } from './FloatingMenuChrome';
+import { useFloatingMenuDrag } from '../hooks/useFloatingMenuDrag';
 import { clamp01, parseHexColor, rgbaToCss, rgbToHex, RGBColor } from '../utils/color';
 import '../styles/selection-toolbar.css';
 
@@ -93,6 +95,22 @@ export const SelectionToolbar: React.FC<SelectionToolbarProps> = ({
   const [linkOpen, setLinkOpen] = useState(false);
   const [linkDraft, setLinkDraft] = useState(node.link?.url ?? '');
   const [linkError, setLinkError] = useState<string | null>(null);
+
+  const {
+    menuState,
+    isDragging,
+    handlePointerDown: handleDragPointerDown,
+    handlePointerMove: handleDragPointerMove,
+    handlePointerUp: handleDragPointerUp,
+    handlePointerCancel: handleDragPointerCancel,
+    moveBy: moveMenuBy,
+    resetToAnchor
+  } = useFloatingMenuDrag({
+    menuType: 'selection-toolbar',
+    menuRef: toolbarRef,
+    viewportSize,
+    isVisible: isVisible && Boolean(anchor)
+  });
 
   const hasText = node.text.trim().length > 0;
   const isBold = node.fontWeight >= 700;
@@ -235,11 +253,14 @@ export const SelectionToolbar: React.FC<SelectionToolbarProps> = ({
   }, [fillOpen]);
 
   useEffect(() => {
+    if (menuState.isFree) {
+      return;
+    }
     setPlacement('top');
-  }, [anchor?.x, anchor?.y, anchor?.width, anchor?.height]);
+  }, [anchor?.x, anchor?.y, anchor?.width, anchor?.height, menuState.isFree]);
 
   useLayoutEffect(() => {
-    if (!anchor || !isVisible || !toolbarRef.current) {
+    if (!anchor || !isVisible || !toolbarRef.current || menuState.isFree) {
       return;
     }
     const element = toolbarRef.current;
@@ -259,6 +280,13 @@ export const SelectionToolbar: React.FC<SelectionToolbarProps> = ({
     if (!anchor) {
       return {} as React.CSSProperties;
     }
+    if (menuState.isFree && menuState.position) {
+      return {
+        left: menuState.position.x,
+        top: menuState.position.y,
+        transform: 'translate(0, 0)'
+      } as React.CSSProperties;
+    }
     const left = anchor.x + anchor.width / 2;
     if (placement === 'top') {
       return {
@@ -272,7 +300,7 @@ export const SelectionToolbar: React.FC<SelectionToolbarProps> = ({
       top: anchor.y + anchor.height + TOOLBAR_GAP,
       transform: 'translate(-50%, 0)'
     } as React.CSSProperties;
-  }, [anchor, placement]);
+  }, [anchor, placement, menuState.isFree, menuState.position]);
 
   if (!isVisible || !anchor) {
     return null;
@@ -405,16 +433,30 @@ export const SelectionToolbar: React.FC<SelectionToolbarProps> = ({
   return (
     <div
       ref={toolbarRef}
-      className="selection-toolbar"
+      className="selection-toolbar floating-menu"
       style={style}
       data-placement={placement}
+      data-free={menuState.isFree || undefined}
+      data-dragging={isDragging || undefined}
     >
-      <div className="selection-toolbar__group">
-        <button
-          type="button"
-          className={`selection-toolbar__button ${isBold ? 'is-active' : ''}`}
-          onClick={handleToggleBold}
-          disabled={textDisabled}
+      <FloatingMenuChrome
+        title="Selection"
+        isFree={menuState.isFree}
+        isDragging={isDragging}
+        onPointerDown={handleDragPointerDown}
+        onPointerMove={handleDragPointerMove}
+        onPointerUp={handleDragPointerUp}
+        onPointerCancel={handleDragPointerCancel}
+        onReset={resetToAnchor}
+        onKeyboardMove={moveMenuBy}
+      />
+      <div className="selection-toolbar__content">
+        <div className="selection-toolbar__group">
+          <button
+            type="button"
+            className={`selection-toolbar__button ${isBold ? 'is-active' : ''}`}
+            onClick={handleToggleBold}
+            disabled={textDisabled}
           title="Bold (Cmd/Ctrl+B)"
         >
           <span className="selection-toolbar__icon">B</span>
@@ -469,11 +511,11 @@ export const SelectionToolbar: React.FC<SelectionToolbarProps> = ({
             +
           </button>
         </div>
-      </div>
-      <div className="selection-toolbar__group">
-        <div className="selection-toolbar__swatch" title={fillTitle}>
-          <span className="selection-toolbar__swatch-indicator">Fill</span>
-          <button
+        </div>
+        <div className="selection-toolbar__group">
+          <div className="selection-toolbar__swatch" title={fillTitle}>
+            <span className="selection-toolbar__swatch-indicator">Fill</span>
+            <button
             type="button"
             ref={fillButtonRef}
             className={`selection-toolbar__color-button ${fillOpen ? 'is-active' : ''}`}
@@ -532,39 +574,40 @@ export const SelectionToolbar: React.FC<SelectionToolbarProps> = ({
             +
           </button>
         </div>
-      </div>
-      <div className="selection-toolbar__group">
-        <label className="selection-toolbar__shape" title="Change shape">
-          <span>Shape</span>
-          <select value={node.shape} onChange={handleShapeChange}>
-            {shapeOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
-      <div className="selection-toolbar__group selection-toolbar__group--link">
-        <button
-          type="button"
-          ref={linkButtonRef}
-          className={`selection-toolbar__button ${linkOpen ? 'is-active' : ''}`}
-          onClick={() => setLinkOpen((prev) => !prev)}
-          title="Link (Cmd/Ctrl+K)"
-        >
-          🔗
-        </button>
-        {node.link?.url && (
+        </div>
+        <div className="selection-toolbar__group">
+          <label className="selection-toolbar__shape" title="Change shape">
+            <span>Shape</span>
+            <select value={node.shape} onChange={handleShapeChange}>
+              {shapeOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <div className="selection-toolbar__group selection-toolbar__group--link">
           <button
             type="button"
-            className="selection-toolbar__button"
-            onClick={handleOpenLink}
-            title="Open link"
+            ref={linkButtonRef}
+            className={`selection-toolbar__button ${linkOpen ? 'is-active' : ''}`}
+            onClick={() => setLinkOpen((prev) => !prev)}
+            title="Link (Cmd/Ctrl+K)"
           >
-            Open
+            🔗
           </button>
-        )}
+          {node.link?.url && (
+            <button
+              type="button"
+              className="selection-toolbar__button"
+              onClick={handleOpenLink}
+              title="Open link"
+            >
+              Open
+            </button>
+          )}
+        </div>
       </div>
       {linkOpen && (
         <div className="selection-toolbar__link-popover" ref={linkPopoverRef}>
