@@ -11,6 +11,7 @@ import React, {
 } from 'react';
 import {
   CanvasTransform,
+  CardinalConnectorPort,
   ConnectorModel,
   ConnectorPort,
   NodeModel,
@@ -31,6 +32,7 @@ import {
 } from '../utils/scene';
 import {
   findClosestPointOnPolyline,
+  CARDINAL_PORTS,
   getConnectorAnchor,
   getConnectorPath,
   getConnectorPortAnchor,
@@ -88,6 +90,13 @@ const DEFAULT_CONNECTOR_LABEL_STYLE = {
 const PORT_VISIBILITY_DISTANCE = 72;
 const PORT_SNAP_DISTANCE = 8;
 const POINT_TOLERANCE = 0.5;
+const PORT_TIE_DISTANCE = 0.25;
+const PORT_PRIORITY: Record<CardinalConnectorPort, number> = {
+  top: 0,
+  right: 1,
+  bottom: 2,
+  left: 3
+};
 
 const pointsRoughlyEqual = (a: Vec2, b: Vec2) =>
   Math.abs(a.x - b.x) <= POINT_TOLERANCE && Math.abs(a.y - b.y) <= POINT_TOLERANCE;
@@ -128,7 +137,7 @@ interface SpacingDragState {
 
 interface ConnectionSnap {
   nodeId: string;
-  port: ConnectorPort;
+  port: CardinalConnectorPort;
   position: Vec2;
 }
 
@@ -193,7 +202,7 @@ type ResizeHandle = 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w' | 'nw';
 
 interface PortHint {
   nodeId: string;
-  port: ConnectorPort;
+  port: CardinalConnectorPort;
   position: Vec2;
   screen: Vec2;
   active: boolean;
@@ -1207,7 +1216,7 @@ const CanvasComponent = (
       const worldPoint = getWorldPoint(event);
       const screenPoint = getRelativePoint(event);
       const hints: PortHint[] = [];
-      let best: { hint: PortHint; distance: number } | null = null;
+      let best: { hint: PortHint; distance: number; hovered: boolean } | null = null;
 
       if (pending) {
         for (const node of nodes) {
@@ -1215,7 +1224,8 @@ const CanvasComponent = (
             continue;
           }
           const positions = getConnectorPortPositions(node);
-          for (const portKey of Object.keys(positions) as ConnectorPort[]) {
+          const nodeHovered = hoveredNodeId === node.id;
+          for (const portKey of CARDINAL_PORTS) {
             const position = positions[portKey];
             const screen = worldToScreen(position, transform);
             const dx = screen.x - screenPoint.x;
@@ -1230,8 +1240,20 @@ const CanvasComponent = (
                 active: false
               };
               hints.push(hint);
-              if (!best || distance < best.distance) {
-                best = { hint, distance };
+              if (!best || distance < best.distance - PORT_TIE_DISTANCE) {
+                best = { hint, distance, hovered: nodeHovered };
+              } else if (best && Math.abs(distance - best.distance) <= PORT_TIE_DISTANCE) {
+                const currentHovered = nodeHovered;
+                const bestHovered = best.hovered;
+                if (currentHovered && !bestHovered) {
+                  best = { hint, distance, hovered: currentHovered };
+                } else if (currentHovered === bestHovered) {
+                  const currentPriority = PORT_PRIORITY[portKey];
+                  const bestPriority = PORT_PRIORITY[best.hint.port];
+                  if (currentPriority < bestPriority) {
+                    best = { hint, distance, hovered: currentHovered };
+                  }
+                }
               }
             }
           }
@@ -1513,12 +1535,14 @@ const CanvasComponent = (
     }
 
     const snap = pending.snapPort && pending.snapPort.nodeId === node.id ? pending.snapPort : null;
+    const dropPoint = getWorldPoint(event);
+    const dropPort = snap?.port ?? getNearestConnectorPort(node, dropPoint);
 
     if (pending.type === 'create') {
       if (pending.sourceId !== node.id) {
         addConnector(pending.sourceId, node.id, {
           sourcePort: pending.originPort ?? undefined,
-          targetPort: snap?.port
+          targetPort: dropPort
         });
       }
     } else if (pending.type === 'reconnect-target') {
@@ -1526,23 +1550,26 @@ const CanvasComponent = (
       if (connector) {
         const isSelfLoop = node.id === pending.sourceId;
         if (!isSelfLoop) {
-          const existingPort = connector.targetPort ?? null;
-          const nextPort =
-            snap?.port ??
-            (node.id === pending.initialTargetId ? pending.originPort ?? existingPort ?? undefined : undefined);
-
+          const existingPort = connector.targetPort ?? undefined;
           const targetChanged = node.id !== connector.targetId;
-          const portChanged =
-            node.id === connector.targetId ? nextPort !== (existingPort ?? undefined) : true;
+          const portChanged = dropPort !== (existingPort ?? undefined);
 
           if (targetChanged) {
             const exists = hasConnectorBetween(pending.sourceId, node.id, pending.connectorId);
             if (!exists) {
-              updateConnector(pending.connectorId, { targetId: node.id, targetPort: nextPort, points: [] });
+              updateConnector(pending.connectorId, {
+                targetId: node.id,
+                targetPort: dropPort,
+                points: []
+              });
               setSelection({ nodeIds: [], connectorIds: [pending.connectorId] });
             }
-          } else if (portChanged && nextPort !== (existingPort ?? undefined)) {
-            updateConnector(pending.connectorId, { targetId: node.id, targetPort: nextPort, points: [] });
+          } else if (portChanged) {
+            updateConnector(pending.connectorId, {
+              targetId: node.id,
+              targetPort: dropPort,
+              points: []
+            });
           }
         }
       }
@@ -1551,23 +1578,26 @@ const CanvasComponent = (
       if (connector) {
         const isSelfLoop = node.id === pending.targetId;
         if (!isSelfLoop) {
-          const existingPort = connector.sourcePort ?? null;
-          const nextPort =
-            snap?.port ??
-            (node.id === pending.initialSourceId ? pending.originPort ?? existingPort ?? undefined : undefined);
-
+          const existingPort = connector.sourcePort ?? undefined;
           const sourceChanged = node.id !== connector.sourceId;
-          const portChanged =
-            node.id === connector.sourceId ? nextPort !== (existingPort ?? undefined) : true;
+          const portChanged = dropPort !== (existingPort ?? undefined);
 
           if (sourceChanged) {
             const exists = hasConnectorBetween(node.id, pending.targetId, pending.connectorId);
             if (!exists) {
-              updateConnector(pending.connectorId, { sourceId: node.id, sourcePort: nextPort, points: [] });
+              updateConnector(pending.connectorId, {
+                sourceId: node.id,
+                sourcePort: dropPort,
+                points: []
+              });
               setSelection({ nodeIds: [], connectorIds: [pending.connectorId] });
             }
-          } else if (portChanged && nextPort !== (existingPort ?? undefined)) {
-            updateConnector(pending.connectorId, { sourceId: node.id, sourcePort: nextPort, points: [] });
+          } else if (portChanged) {
+            updateConnector(pending.connectorId, {
+              sourceId: node.id,
+              sourcePort: dropPort,
+              points: []
+            });
           }
         }
       }
