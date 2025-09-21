@@ -66,6 +66,7 @@ const MIN_SCALE = 0.2;
 const MAX_SCALE = 4;
 const ZOOM_FACTOR = 1.1;
 const FIT_PADDING = 160;
+const DOUBLE_CLICK_DELAY = 320;
 
 export interface CanvasHandle {
   zoomIn: () => void;
@@ -91,6 +92,7 @@ interface DragState {
   translation: Vec2;
   activeSnap: ActiveSnapMatches;
   axisLock: 'x' | 'y' | null;
+  moved: boolean;
 }
 
 interface SpacingDragState {
@@ -213,6 +215,14 @@ const CanvasComponent = (
   const [distanceBadges, setDistanceBadges] = useState<SnapDistanceBadge[]>([]);
   const [smartSelectionState, setSmartSelectionState] = useState<SmartSelectionResult | null>(null);
   const inlineEditorRef = useRef<InlineTextEditorHandle | null>(null);
+  const editingEntryPointRef = useRef<{ x: number; y: number } | null>(null);
+  const pendingTextEditRef = useRef<{
+    nodeId: string;
+    pointerId: number;
+    clientX: number;
+    clientY: number;
+  } | null>(null);
+  const lastClickRef = useRef<{ nodeId: string; time: number } | null>(null);
 
   const hasConnectorBetween = useCallback(
     (sourceId: string, targetId: string, ignoreId?: string) =>
@@ -421,23 +431,36 @@ const CanvasComponent = (
     }));
   }, [smartSelectionState, transform]);
 
+  const editingEntryPoint = editingNodeId ? editingEntryPointRef.current : null;
+
   const commitEditingIfNeeded = useCallback(() => {
     if (editingNodeId) {
       inlineEditorRef.current?.commit();
     }
   }, [editingNodeId]);
 
+  const beginTextEditing = useCallback(
+    (nodeId: string, point?: { x: number; y: number }) => {
+      editingEntryPointRef.current = point ?? null;
+      pendingTextEditRef.current = null;
+      setEditingNode(nodeId);
+    },
+    [setEditingNode]
+  );
+
   const handleTextCommit = useCallback(
     (value: string) => {
       if (editingNode) {
         setText(editingNode.id, value);
       }
+      editingEntryPointRef.current = null;
       setEditingNode(null);
     },
     [editingNode, setText, setEditingNode]
   );
 
   const handleTextCancel = useCallback(() => {
+    editingEntryPointRef.current = null;
     setEditingNode(null);
   }, [setEditingNode]);
 
@@ -598,6 +621,9 @@ const CanvasComponent = (
       return;
     }
 
+    pendingTextEditRef.current = null;
+    lastClickRef.current = null;
+
     if (tool === 'pan' || event.button === 1 || event.button === 2) {
       beginPan(event);
       return;
@@ -651,6 +677,7 @@ const CanvasComponent = (
 
     const dragState = dragStateRef.current;
     if (dragState && dragState.pointerId === event.pointerId) {
+      pendingTextEditRef.current = null;
       const worldPoint = getWorldPoint(event);
       let translation = {
         x: worldPoint.x - dragState.initialWorld.x,
@@ -744,6 +771,7 @@ const CanvasComponent = (
       };
       if (Math.abs(delta.x) > 0.0001 || Math.abs(delta.y) > 0.0001) {
         batchMove(dragState.nodeIds, delta);
+        dragState.moved = true;
       }
 
       dragState.translation = appliedTranslation;
@@ -769,6 +797,21 @@ const CanvasComponent = (
   };
 
   const handlePointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
+    let textEditRequest: { nodeId: string; clientX: number; clientY: number } | null = null;
+    const pending = pendingTextEditRef.current;
+    if (pending && pending.pointerId === event.pointerId) {
+      const drag = dragStateRef.current;
+      const moved = drag && drag.pointerId === event.pointerId ? drag.moved : false;
+      if (!moved && tool === 'select') {
+        textEditRequest = {
+          nodeId: pending.nodeId,
+          clientX: pending.clientX,
+          clientY: pending.clientY
+        };
+      }
+      pendingTextEditRef.current = null;
+    }
+
     if (resizeStateRef.current?.pointerId === event.pointerId) {
       resizeStateRef.current = null;
       endTransaction();
@@ -813,10 +856,22 @@ const CanvasComponent = (
       connectionPointerRef.current = null;
       releasePointerCapture(event.pointerId);
     }
+
+    if (textEditRequest) {
+      const node = nodes.find((item) => item.id === textEditRequest.nodeId);
+      if (node) {
+        setSelection({ nodeIds: [node.id], connectorIds: [] });
+        beginTextEditing(node.id, {
+          x: textEditRequest.clientX,
+          y: textEditRequest.clientY
+        });
+      }
+    }
   };
 
   const handleNodePointerDown = (event: React.PointerEvent, node: NodeModel) => {
     if (tool === 'connector') {
+      pendingTextEditRef.current = null;
       const worldPoint = getWorldPoint(event);
       setPendingConnection({ type: 'create', sourceId: node.id, worldPoint });
       connectionPointerRef.current = event.pointerId;
@@ -824,26 +879,60 @@ const CanvasComponent = (
     }
 
     if (tool !== 'select') {
+      pendingTextEditRef.current = null;
+      lastClickRef.current = null;
       return;
     }
 
     if ((event.metaKey || event.ctrlKey) && node.link?.url) {
       event.preventDefault();
+      pendingTextEditRef.current = null;
+      lastClickRef.current = null;
       window.open(node.link.url, '_blank', 'noopener');
       return;
     }
 
+    const now = performance.now();
+    const lastClick = lastClickRef.current;
+    const selectionState = useSceneStore.getState().selection;
+    const currentSelectedNodeIds = selectionState.nodeIds;
+    const wasSelected = currentSelectedNodeIds.includes(node.id);
+    const wasSingleSelected =
+      currentSelectedNodeIds.length === 1 && currentSelectedNodeIds[0] === node.id;
+    const isQuickRepeat =
+      !!lastClick && lastClick.nodeId === node.id && now - lastClick.time < DOUBLE_CLICK_DELAY;
+
+    const shouldPrepareTextEdit =
+      !event.shiftKey &&
+      !event.altKey &&
+      !event.metaKey &&
+      !event.ctrlKey &&
+      (wasSingleSelected || isQuickRepeat);
+
+    if (shouldPrepareTextEdit) {
+      pendingTextEditRef.current = {
+        nodeId: node.id,
+        pointerId: event.pointerId,
+        clientX: event.clientX,
+        clientY: event.clientY
+      };
+    } else {
+      pendingTextEditRef.current = null;
+    }
+
+    lastClickRef.current = { nodeId: node.id, time: now };
+
     commitEditingIfNeeded();
 
-    const isSelected = selectedNodeIds.includes(node.id);
-    let nextSelection = selectedNodeIds;
+    let nextSelection = currentSelectedNodeIds;
     if (event.shiftKey) {
-      nextSelection = isSelected
-        ? selectedNodeIds.filter((id) => id !== node.id)
-        : [...selectedNodeIds, node.id];
-    } else if (!isSelected) {
+      nextSelection = wasSelected
+        ? currentSelectedNodeIds.filter((id) => id !== node.id)
+        : [...currentSelectedNodeIds, node.id];
+    } else if (!wasSelected) {
       nextSelection = [node.id];
     }
+
     setSelection({ nodeIds: nextSelection, connectorIds: [] });
 
     if (event.detail > 1) {
@@ -880,7 +969,8 @@ const CanvasComponent = (
       initialBounds,
       translation: { x: 0, y: 0 },
       activeSnap: {},
-      axisLock: null
+      axisLock: null,
+      moved: false
     };
     containerRef.current?.setPointerCapture(event.pointerId);
   };
@@ -890,13 +980,15 @@ const CanvasComponent = (
       return;
     }
     event.stopPropagation();
+    event.preventDefault();
+    pendingTextEditRef.current = null;
     if (editingNodeId && editingNodeId !== node.id) {
       commitEditingIfNeeded();
     }
     if (!selectedNodeIds.includes(node.id)) {
       setSelection({ nodeIds: [node.id], connectorIds: [] });
     }
-    setEditingNode(node.id);
+    beginTextEditing(node.id, { x: event.clientX, y: event.clientY });
   };
 
   const handleNodePointerUp = (event: React.PointerEvent, node: NodeModel) => {
@@ -955,6 +1047,7 @@ const CanvasComponent = (
     }
     event.preventDefault();
     event.stopPropagation();
+    pendingTextEditRef.current = null;
     beginTransaction();
     setActiveGuides([]);
     setDistanceBadges([]);
@@ -1032,6 +1125,7 @@ const CanvasComponent = (
     if (event.button !== 0) {
       return;
     }
+    pendingTextEditRef.current = null;
     commitEditingIfNeeded();
     const alreadySelected = selectedConnectorIds.includes(connector.id);
     let nextSelection = selectedConnectorIds;
@@ -1088,6 +1182,7 @@ const CanvasComponent = (
       return;
     }
 
+    pendingTextEditRef.current = null;
     commitEditingIfNeeded();
     event.stopPropagation();
 
@@ -1123,6 +1218,7 @@ const CanvasComponent = (
       return;
     }
 
+    pendingTextEditRef.current = null;
     commitEditingIfNeeded();
     event.stopPropagation();
 
@@ -1392,7 +1488,7 @@ const CanvasComponent = (
       if (event.key === 'Enter' && !event.shiftKey) {
         if (singleNodeSelected && tool === 'select' && !editingNodeId) {
           event.preventDefault();
-          setEditingNode(singleNodeSelected.id);
+          beginTextEditing(singleNodeSelected.id);
           return;
         }
       }
@@ -1494,7 +1590,7 @@ const CanvasComponent = (
     tool,
     applyStyles,
     editingNodeId,
-    setEditingNode,
+    beginTextEditing,
     setLinkFocusSignal,
     commitEditingIfNeeded
   ]);
@@ -1728,6 +1824,7 @@ const CanvasComponent = (
           bounds={editorBounds}
           isEditing={Boolean(editingNode)}
           scale={transform.scale}
+          entryPoint={editingEntryPoint}
           onCommit={handleTextCommit}
           onCancel={handleTextCancel}
         />

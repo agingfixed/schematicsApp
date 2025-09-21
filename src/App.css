@@ -71,9 +71,7 @@
 }
 
 .workspace {
-  display: grid;
-  grid-template-columns: 1fr 320px;
-  gap: 16px;
+  display: flex;
   flex: 1;
   min-height: 0;
 }
@@ -82,7 +80,9 @@
   position: relative;
   display: flex;
   flex-direction: column;
+  flex: 1;
   min-height: 0;
+  min-width: 0;
 }
 
 .workspace__status {
@@ -96,110 +96,6 @@
   color: rgba(226, 232, 240, 0.8);
   border: 1px solid rgba(148, 163, 184, 0.2);
   backdrop-filter: blur(10px);
-}
-
-.properties {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  padding: 18px;
-  border-radius: 16px;
-  background: rgba(15, 23, 42, 0.75);
-  border: 1px solid rgba(148, 163, 184, 0.14);
-  color: #e2e8f0;
-  min-height: 0;
-}
-
-.properties__header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.properties__clear {
-  border: none;
-  background: rgba(148, 163, 184, 0.15);
-  color: #f8fafc;
-  padding: 6px 12px;
-  border-radius: 10px;
-  cursor: pointer;
-}
-
-.properties__section {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 12px;
-  border-radius: 14px;
-  background: rgba(30, 41, 59, 0.6);
-  border: 1px solid rgba(148, 163, 184, 0.12);
-}
-
-.properties__field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  font-size: 14px;
-}
-
-.properties__field > span {
-  color: rgba(226, 232, 240, 0.65);
-}
-
-.properties__field input,
-.properties__field select {
-  background: rgba(15, 23, 42, 0.9);
-  border: 1px solid rgba(148, 163, 184, 0.25);
-  border-radius: 10px;
-  padding: 8px 10px;
-  color: #f8fafc;
-  font-size: 14px;
-}
-
-.properties__field input[type='color'] {
-  padding: 0;
-  height: 36px;
-}
-
-.properties__grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.properties__slider-control {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.properties__slider-control input[type='range'] {
-  flex: 1;
-  accent-color: #38bdf8;
-}
-
-.properties__slider-value {
-  min-width: 40px;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-  color: rgba(226, 232, 240, 0.72);
-}
-
-.properties__danger {
-  margin-top: 8px;
-  padding: 8px 12px;
-  border-radius: 10px;
-  border: none;
-  background: rgba(248, 113, 113, 0.2);
-  color: #fecaca;
-  cursor: pointer;
-}
-
-.properties__empty {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  color: rgba(226, 232, 240, 0.7);
 }
 
 .minimap {
@@ -223,12 +119,3 @@
   stroke-dasharray: 6 6;
 }
 
-@media (max-width: 1200px) {
-  .workspace {
-    grid-template-columns: 1fr;
-  }
-
-  .properties {
-    order: -1;
-  }
-}
