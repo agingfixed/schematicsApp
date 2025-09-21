@@ -31,7 +31,11 @@ import {
 import {
   findClosestPointOnPolyline,
   getConnectorAnchor,
-  getConnectorPath
+  getConnectorPath,
+  getNormalAtRatio,
+  getPointAtRatio,
+  measurePolyline,
+  tidyOrthogonalWaypoints
 } from '../utils/connector';
 import {
   selectConnectors,
@@ -58,6 +62,8 @@ import {
 import { DiagramNode } from './DiagramNode';
 import { DiagramConnector } from './DiagramConnector';
 import { SelectionToolbar } from './SelectionToolbar';
+import { ConnectorToolbar } from './ConnectorToolbar';
+import { ConnectorTextToolbar } from './ConnectorTextToolbar';
 import { InlineTextEditor, InlineTextEditorHandle } from './InlineTextEditor';
 import { useCommands } from '../state/commands';
 import '../styles/canvas.css';
@@ -67,6 +73,78 @@ const MAX_SCALE = 4;
 const ZOOM_FACTOR = 1.1;
 const FIT_PADDING = 160;
 const DOUBLE_CLICK_DELAY = 320;
+const DEFAULT_CONNECTOR_LABEL_POSITION = 0.5;
+const DEFAULT_CONNECTOR_LABEL_OFFSET = 18;
+const DEFAULT_CONNECTOR_LABEL_STYLE = {
+  fontSize: 14,
+  fontWeight: 600 as const,
+  color: '#f8fafc',
+  background: 'rgba(15,23,42,0.85)'
+};
+const MIN_CURVE_OFFSET = 18;
+const MAX_CURVE_OFFSET = 140;
+
+const computeDefaultCurvedWaypoints = (
+  start: Vec2,
+  end: Vec2,
+  reference?: Vec2[]
+): Vec2[] => {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const distance = Math.hypot(dx, dy);
+
+  if (distance < 1) {
+    return [];
+  }
+
+  let normal = { x: -dy / distance, y: dx / distance };
+  let projectedMagnitude = Math.min(MAX_CURVE_OFFSET, Math.max(MIN_CURVE_OFFSET, distance / 2.4));
+
+  if (reference && reference.length) {
+    const first = reference[0];
+    const toFirst = { x: first.x - start.x, y: first.y - start.y };
+    const projectionFirst = toFirst.x * normal.x + toFirst.y * normal.y;
+    if (projectionFirst < 0) {
+      normal = { x: -normal.x, y: -normal.y };
+    }
+
+    const projections: number[] = [];
+    const firstMagnitude = Math.abs(toFirst.x * normal.x + toFirst.y * normal.y);
+    if (firstMagnitude > 0.5) {
+      projections.push(firstMagnitude);
+    }
+
+    if (reference.length > 1) {
+      const last = reference[reference.length - 1];
+      const toLastFromStart = { x: last.x - start.x, y: last.y - start.y };
+      const toLastFromEnd = { x: last.x - end.x, y: last.y - end.y };
+      const lastMagnitudeA = Math.abs(toLastFromStart.x * normal.x + toLastFromStart.y * normal.y);
+      const lastMagnitudeB = Math.abs(toLastFromEnd.x * normal.x + toLastFromEnd.y * normal.y);
+      if (lastMagnitudeA > 0.5) {
+        projections.push(lastMagnitudeA);
+      }
+      if (lastMagnitudeB > 0.5) {
+        projections.push(lastMagnitudeB);
+      }
+    }
+
+    if (projections.length) {
+      const average = projections.reduce((sum, value) => sum + value, 0) / projections.length;
+      projectedMagnitude = Math.min(MAX_CURVE_OFFSET, Math.max(MIN_CURVE_OFFSET, average));
+    }
+  }
+
+  const anchorOne = {
+    x: start.x + dx / 3 + normal.x * projectedMagnitude,
+    y: start.y + dy / 3 + normal.y * projectedMagnitude
+  };
+  const anchorTwo = {
+    x: start.x + (2 * dx) / 3 + normal.x * projectedMagnitude,
+    y: start.y + (2 * dy) / 3 + normal.y * projectedMagnitude
+  };
+
+  return [anchorOne, anchorTwo];
+};
 
 export interface CanvasHandle {
   zoomIn: () => void;
@@ -123,11 +201,27 @@ type PendingConnection =
 interface ConnectorDragState {
   pointerId: number;
   connectorId: string;
-  pointIndex: number;
-  isNewPoint: boolean;
+  kind: 'waypoint' | 'segment';
+  waypointIndex?: number;
+  segmentIndex?: number;
+  axis?: 'horizontal' | 'vertical';
+  mode: ConnectorModel['mode'];
+  basePoints: Vec2[];
+  workingPoints: Vec2[];
+  originalWaypoints: Vec2[];
+  currentWaypoints: Vec2[];
+  initialPointer: Vec2;
   moved: boolean;
-  points: Vec2[];
-  originalPoints: Vec2[];
+}
+
+interface ConnectorLabelDragState {
+  pointerId: number;
+  connectorId: string;
+  originalPosition: number;
+  originalOffset: number;
+  lastPosition: number;
+  lastOffset: number;
+  moved: boolean;
 }
 
 type ResizeHandle = 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w' | 'nw';
@@ -214,6 +308,9 @@ const CanvasComponent = (
   const [activeGuides, setActiveGuides] = useState<SnapMatch[]>([]);
   const [distanceBadges, setDistanceBadges] = useState<SnapDistanceBadge[]>([]);
   const [smartSelectionState, setSmartSelectionState] = useState<SmartSelectionResult | null>(null);
+  const [editingConnectorId, setEditingConnectorId] = useState<string | null>(null);
+  const [connectorCommitSignal, setConnectorCommitSignal] = useState(0);
+  const [connectorCancelSignal, setConnectorCancelSignal] = useState(0);
   const inlineEditorRef = useRef<InlineTextEditorHandle | null>(null);
   const editingEntryPointRef = useRef<{ x: number; y: number } | null>(null);
   const pendingTextEditRef = useRef<{
@@ -223,6 +320,9 @@ const CanvasComponent = (
     clientY: number;
   } | null>(null);
   const lastClickRef = useRef<{ nodeId: string; time: number } | null>(null);
+  const lastConnectorClickRef = useRef<{ connectorId: string; time: number } | null>(null);
+  const pendingConnectorEditRef = useRef<{ connectorId: string; pointerId: number } | null>(null);
+  const connectorLabelDragRef = useRef<ConnectorLabelDragState | null>(null);
 
   const hasConnectorBetween = useCallback(
     (sourceId: string, targetId: string, ignoreId?: string) =>
@@ -257,6 +357,13 @@ const CanvasComponent = (
     }
     return nodes.find((node) => node.id === selectedNodeIds[0]) ?? null;
   }, [nodes, selectedNodeIds]);
+
+  const selectedConnector = useMemo(() => {
+    if (selectedConnectorIds.length !== 1) {
+      return null;
+    }
+    return connectors.find((item) => item.id === selectedConnectorIds[0]) ?? null;
+  }, [connectors, selectedConnectorIds]);
 
   const selectedNodes = useMemo(
     () => nodes.filter((node) => selectedNodeIds.includes(node.id)),
@@ -304,6 +411,49 @@ const CanvasComponent = (
       centerY: topLeft.y + (bottomRight.y - topLeft.y) / 2
     };
   }, [selectionBounds, transform]);
+
+  const connectorToolbarAnchor = useMemo(() => {
+    if (!selectedConnector) {
+      return null;
+    }
+    const sourceNode = getNodeById({ nodes, connectors }, selectedConnector.sourceId);
+    const targetNode = getNodeById({ nodes, connectors }, selectedConnector.targetId);
+    if (!sourceNode || !targetNode) {
+      return null;
+    }
+    const geometry = getConnectorPath(selectedConnector, sourceNode, targetNode);
+    if (!geometry.points.length) {
+      return null;
+    }
+    const { point } = getPointAtRatio(geometry.points, 0.5);
+    const screenPoint = worldToScreen(point, transform);
+    return { x: screenPoint.x, y: screenPoint.y };
+  }, [selectedConnector, nodes, connectors, transform]);
+
+  const connectorLabelToolbarAnchor = useMemo(() => {
+    if (!selectedConnector) {
+      return null;
+    }
+    const sourceNode = getNodeById({ nodes, connectors }, selectedConnector.sourceId);
+    const targetNode = getNodeById({ nodes, connectors }, selectedConnector.targetId);
+    if (!sourceNode || !targetNode) {
+      return null;
+    }
+    const geometry = getConnectorPath(selectedConnector, sourceNode, targetNode);
+    if (!geometry.points.length) {
+      return null;
+    }
+    const position = selectedConnector.labelPosition ?? DEFAULT_CONNECTOR_LABEL_POSITION;
+    const offset = selectedConnector.labelOffset ?? DEFAULT_CONNECTOR_LABEL_OFFSET;
+    const { point, segmentIndex } = getPointAtRatio(geometry.points, position);
+    const normal = getNormalAtRatio(geometry.points, segmentIndex);
+    const labelCenter = {
+      x: point.x + normal.x * offset,
+      y: point.y + normal.y * offset
+    };
+    const screenPoint = worldToScreen(labelCenter, transform);
+    return { x: screenPoint.x, y: screenPoint.y };
+  }, [selectedConnector, nodes, connectors, transform]);
 
   const showResizeFrame = useMemo(
     () => tool === 'select' && !isPanning && selectedNodes.length > 0 && !editingNodeId,
@@ -434,10 +584,13 @@ const CanvasComponent = (
   const editingEntryPoint = editingNodeId ? editingEntryPointRef.current : null;
 
   const commitEditingIfNeeded = useCallback(() => {
+    if (editingConnectorId) {
+      setConnectorCommitSignal((value) => value + 1);
+    }
     if (editingNodeId) {
       inlineEditorRef.current?.commit();
     }
-  }, [editingNodeId]);
+  }, [editingConnectorId, editingNodeId]);
 
   const beginTextEditing = useCallback(
     (nodeId: string, point?: { x: number; y: number }) => {
@@ -464,10 +617,124 @@ const CanvasComponent = (
     setEditingNode(null);
   }, [setEditingNode]);
 
+  const handleConnectorLabelCommit = useCallback(
+    (connectorId: string, value: string) => {
+      updateConnector(connectorId, { label: value.trim().length ? value : undefined });
+      setEditingConnectorId((current) => (current === connectorId ? null : current));
+    },
+    [updateConnector]
+  );
+
+  const handleConnectorLabelCancel = useCallback(() => {
+    setEditingConnectorId(null);
+  }, []);
+
+  const handleConnectorRequestLabelEdit = useCallback(
+    (connectorId: string) => {
+      if (editingConnectorId === connectorId) {
+        return;
+      }
+      commitEditingIfNeeded();
+      setSelection({ nodeIds: [], connectorIds: [connectorId] });
+      setEditingConnectorId(connectorId);
+    },
+    [commitEditingIfNeeded, editingConnectorId, setSelection]
+  );
+
+  const handleConnectorStyleChange = useCallback(
+    (connector: ConnectorModel, patch: Partial<ConnectorModel['style']>) => {
+      updateConnector(connector.id, { style: patch });
+    },
+    [updateConnector]
+  );
+
+  const handleConnectorModeChange = useCallback(
+    (connector: ConnectorModel, mode: ConnectorModel['mode']) => {
+      if (mode === connector.mode) {
+        return;
+      }
+      if (mode === 'orthogonal' || mode === 'straight') {
+        updateConnector(connector.id, { mode, points: [] });
+        return;
+      }
+
+      const sourceNode = getNodeById({ nodes, connectors }, connector.sourceId);
+      const targetNode = getNodeById({ nodes, connectors }, connector.targetId);
+      if (!sourceNode || !targetNode) {
+        updateConnector(connector.id, { mode, points: [] });
+        return;
+      }
+
+      const geometry = getConnectorPath(connector, sourceNode, targetNode);
+      const fallback = connector.points?.map((point) => ({ ...point })) ?? [];
+      const reference = geometry.waypoints.length
+        ? geometry.waypoints.map((point) => ({ ...point }))
+        : fallback;
+      const nextPoints = computeDefaultCurvedWaypoints(geometry.start, geometry.end, reference);
+
+      updateConnector(connector.id, { mode, points: nextPoints });
+    },
+    [nodes, connectors, updateConnector]
+  );
+
+  const handleConnectorLabelStyleChange = useCallback(
+    (connector: ConnectorModel, style: ConnectorModel['labelStyle']) => {
+      const merged = { ...DEFAULT_CONNECTOR_LABEL_STYLE, ...(style ?? {}) };
+      updateConnector(connector.id, { labelStyle: merged });
+    },
+    [updateConnector]
+  );
+
+  const handleConnectorTidy = useCallback(
+    (connector: ConnectorModel) => {
+      const sourceNode = getNodeById({ nodes, connectors }, connector.sourceId);
+      const targetNode = getNodeById({ nodes, connectors }, connector.targetId);
+      if (!sourceNode || !targetNode) {
+        return;
+      }
+      const geometry = getConnectorPath(connector, sourceNode, targetNode);
+      if (connector.mode === 'orthogonal') {
+        const waypoints = tidyOrthogonalWaypoints(geometry.start, geometry.waypoints, geometry.end);
+        updateConnector(connector.id, { points: waypoints });
+      } else {
+        updateConnector(connector.id, { points: [] });
+      }
+    },
+    [nodes, connectors, updateConnector]
+  );
+
+  const handleConnectorFlip = useCallback(
+    (connector: ConnectorModel) => {
+      const reversedPoints = connector.points
+        ? [...connector.points].reverse().map((point) => ({ ...point }))
+        : [];
+      updateConnector(connector.id, {
+        sourceId: connector.targetId,
+        targetId: connector.sourceId,
+        points: reversedPoints,
+        labelPosition:
+          connector.labelPosition !== undefined ? 1 - connector.labelPosition : connector.labelPosition
+      });
+    },
+    [updateConnector]
+  );
+
   useEffect(() => {
     setGlobalTransform(transform);
     onTransformChange?.(transform);
   }, [transform, onTransformChange, setGlobalTransform]);
+
+  useEffect(() => {
+    if (editingConnectorId && !selectedConnectorIds.includes(editingConnectorId)) {
+      setConnectorCommitSignal((value) => value + 1);
+    }
+  }, [editingConnectorId, selectedConnectorIds]);
+
+  useEffect(() => {
+    if (editingConnectorId && tool !== 'select') {
+      setConnectorCommitSignal((value) => value + 1);
+    }
+  }, [editingConnectorId, tool]);
 
   useLayoutEffect(() => {
     if (!containerRef.current) {
@@ -779,13 +1046,107 @@ const CanvasComponent = (
       return;
     }
 
+    if (pendingConnectorEditRef.current?.pointerId === event.pointerId) {
+      pendingConnectorEditRef.current = null;
+    }
+
+    const labelDrag = connectorLabelDragRef.current;
+    if (labelDrag && labelDrag.pointerId === event.pointerId) {
+      const connector = connectors.find((item) => item.id === labelDrag.connectorId);
+      if (!connector) {
+        return;
+      }
+      const sourceNode = getNodeById({ nodes, connectors }, connector.sourceId);
+      const targetNode = getNodeById({ nodes, connectors }, connector.targetId);
+      if (!sourceNode || !targetNode) {
+        return;
+      }
+      const geometry = getConnectorPath(connector, sourceNode, targetNode);
+      if (geometry.points.length < 2) {
+        return;
+      }
+      const worldPoint = getWorldPoint(event);
+      const closest = findClosestPointOnPolyline(worldPoint, geometry.points);
+      const measure = measurePolyline(geometry.points);
+      if (measure.totalLength <= 0) {
+        return;
+      }
+      const start = geometry.points[closest.index];
+      const end = geometry.points[closest.index + 1] ?? start;
+      const segmentLength = Math.hypot(end.x - start.x, end.y - start.y) || 1;
+      const localLength = Math.hypot(closest.point.x - start.x, closest.point.y - start.y);
+      const segmentOffset = measure.segments[closest.index] ?? 0;
+      let position = (segmentOffset + Math.min(localLength, segmentLength)) / measure.totalLength;
+      position = Math.max(0, Math.min(1, position));
+      const normal = getNormalAtRatio(geometry.points, closest.index);
+      const offsetRaw =
+        (worldPoint.x - closest.point.x) * normal.x + (worldPoint.y - closest.point.y) * normal.y;
+      const offset = Math.max(-280, Math.min(280, offsetRaw));
+      labelDrag.lastPosition = position;
+      labelDrag.lastOffset = offset;
+      labelDrag.moved = true;
+      updateConnector(connector.id, { labelPosition: position, labelOffset: offset });
+      return;
+    }
+
     const connectorDragState = connectorDragStateRef.current;
     if (connectorDragState && connectorDragState.pointerId === event.pointerId) {
       const worldPoint = getWorldPoint(event);
-      connectorDragState.points[connectorDragState.pointIndex] = worldPoint;
       connectorDragState.moved = true;
+
+      const nextPoints = connectorDragState.basePoints.map((point) => ({ ...point }));
+
+      if (connectorDragState.kind === 'waypoint' && connectorDragState.waypointIndex !== undefined) {
+        const index = connectorDragState.waypointIndex + 1;
+        if (nextPoints[index]) {
+          nextPoints[index] = { x: worldPoint.x, y: worldPoint.y };
+        }
+      } else if (
+        connectorDragState.kind === 'segment' &&
+        connectorDragState.segmentIndex !== undefined &&
+        connectorDragState.axis
+      ) {
+        const offset =
+          connectorDragState.axis === 'horizontal'
+            ? worldPoint.y - connectorDragState.initialPointer.y
+            : worldPoint.x - connectorDragState.initialPointer.x;
+        const startIndex = connectorDragState.segmentIndex;
+        const endIndex = Math.min(connectorDragState.segmentIndex + 1, nextPoints.length - 1);
+        const applyOffset = (point: Vec2) =>
+          connectorDragState.axis === 'horizontal'
+            ? { ...point, y: point.y + offset }
+            : { ...point, x: point.x + offset };
+
+        if (startIndex === 0) {
+          if (endIndex < nextPoints.length) {
+            nextPoints[endIndex] = applyOffset(nextPoints[endIndex]);
+          }
+        } else if (endIndex === nextPoints.length - 1) {
+          nextPoints[startIndex] = applyOffset(nextPoints[startIndex]);
+        } else {
+          nextPoints[startIndex] = applyOffset(nextPoints[startIndex]);
+          nextPoints[endIndex] = applyOffset(nextPoints[endIndex]);
+        }
+      }
+
+      const startPoint = nextPoints[0];
+      const endPoint = nextPoints[nextPoints.length - 1];
+      let interior = nextPoints.slice(1, nextPoints.length - 1);
+      if (connectorDragState.mode === 'orthogonal') {
+        interior = tidyOrthogonalWaypoints(startPoint, interior, endPoint);
+      }
+
+      connectorDragState.basePoints = [
+        startPoint,
+        ...interior.map((point) => ({ ...point })),
+        endPoint
+      ];
+      connectorDragState.workingPoints = connectorDragState.basePoints.map((point) => ({ ...point }));
+      connectorDragState.currentWaypoints = interior.map((point) => ({ ...point }));
+      connectorDragState.initialPointer = worldPoint;
+
       updateConnector(connectorDragState.connectorId, {
-        points: connectorDragState.points
+        points: connectorDragState.currentWaypoints
       });
       return;
     }
@@ -812,20 +1173,33 @@ const CanvasComponent = (
       pendingTextEditRef.current = null;
     }
 
-    if (resizeStateRef.current?.pointerId === event.pointerId) {
+    let connectorEditRequest: string | null = null;
+    const pendingConnector = pendingConnectorEditRef.current;
+    if (pendingConnector && pendingConnector.pointerId === event.pointerId) {
+      const drag = connectorDragStateRef.current;
+      const moved = drag && drag.pointerId === event.pointerId ? drag.moved : false;
+      if (!moved && tool === 'select') {
+        connectorEditRequest = pendingConnector.connectorId;
+      }
+      pendingConnectorEditRef.current = null;
+    }
+
+    let handled = false;
+
+    if (!handled && resizeStateRef.current?.pointerId === event.pointerId) {
       resizeStateRef.current = null;
       endTransaction();
       releasePointerCapture(event.pointerId);
-      return;
+      handled = true;
     }
 
-    if (panStateRef.current?.pointerId === event.pointerId) {
+    if (!handled && panStateRef.current?.pointerId === event.pointerId) {
       panStateRef.current = null;
       setIsPanning(false);
       releasePointerCapture(event.pointerId);
     }
 
-    if (dragStateRef.current?.pointerId === event.pointerId) {
+    if (!handled && dragStateRef.current?.pointerId === event.pointerId) {
       setActiveGuides([]);
       setDistanceBadges([]);
       dragStateRef.current = null;
@@ -833,7 +1207,7 @@ const CanvasComponent = (
       releasePointerCapture(event.pointerId);
     }
 
-    if (spacingDragStateRef.current?.pointerId === event.pointerId) {
+    if (!handled && spacingDragStateRef.current?.pointerId === event.pointerId) {
       spacingDragStateRef.current = null;
       endTransaction();
       setActiveGuides([]);
@@ -841,23 +1215,42 @@ const CanvasComponent = (
       releasePointerCapture(event.pointerId);
     }
 
-    if (connectorDragStateRef.current?.pointerId === event.pointerId) {
+    if (!handled && connectorDragStateRef.current?.pointerId === event.pointerId) {
       const drag = connectorDragStateRef.current;
       connectorDragStateRef.current = null;
-      const nextPoints = drag.moved ? drag.points : drag.originalPoints;
+      const nextPoints = drag.moved ? drag.currentWaypoints : drag.originalWaypoints;
       updateConnector(drag.connectorId, { points: nextPoints });
       endTransaction();
       releasePointerCapture(event.pointerId);
-      return;
+      handled = drag.moved;
     }
 
-    if (connectionPointerRef.current === event.pointerId) {
+    if (!handled && connectorLabelDragRef.current?.pointerId === event.pointerId) {
+      const drag = connectorLabelDragRef.current;
+      connectorLabelDragRef.current = null;
+      updateConnector(drag.connectorId, {
+        labelPosition: drag.moved ? drag.lastPosition : drag.originalPosition,
+        labelOffset: drag.moved ? drag.lastOffset : drag.originalOffset
+      });
+      endTransaction();
+      releasePointerCapture(event.pointerId);
+      handled = true;
+    }
+
+    if (!handled && connectionPointerRef.current === event.pointerId) {
       setPendingConnection(null);
       connectionPointerRef.current = null;
       releasePointerCapture(event.pointerId);
+      handled = true;
     }
 
-    if (textEditRequest) {
+    if (!handled && connectorEditRequest) {
+      setSelection({ nodeIds: [], connectorIds: [connectorEditRequest] });
+      setEditingConnectorId(connectorEditRequest);
+      handled = true;
+    }
+
+    if (!handled && textEditRequest) {
       const node = nodes.find((item) => item.id === textEditRequest.nodeId);
       if (node) {
         setSelection({ nodeIds: [node.id], connectorIds: [] });
@@ -1136,9 +1529,42 @@ const CanvasComponent = (
     } else if (!alreadySelected) {
       nextSelection = [connector.id];
     }
+
+    const willBeSingleSelected =
+      nextSelection.length === 1 && nextSelection[0] === connector.id;
+
     setSelection({ nodeIds: [], connectorIds: nextSelection });
 
-    if (!alreadySelected || event.shiftKey) {
+    const now = performance.now();
+    const lastClick = lastConnectorClickRef.current;
+    const allowEdit =
+      willBeSingleSelected &&
+      !event.shiftKey &&
+      !event.altKey &&
+      !event.metaKey &&
+      !event.ctrlKey;
+
+    if (
+      allowEdit &&
+      lastClick &&
+      lastClick.connectorId === connector.id &&
+      now - lastClick.time < DOUBLE_CLICK_DELAY
+    ) {
+      pendingConnectorEditRef.current = { connectorId: connector.id, pointerId: event.pointerId };
+      lastConnectorClickRef.current = null;
+      return;
+    }
+
+    if (allowEdit) {
+      lastConnectorClickRef.current = { connectorId: connector.id, time: now };
+    } else {
+      lastConnectorClickRef.current = null;
+    }
+
+    if (!willBeSingleSelected) {
+      return;
+    }
+    if (connector.mode !== 'orthogonal') {
       return;
     }
 
@@ -1149,29 +1575,37 @@ const CanvasComponent = (
     }
 
     const geometry = getConnectorPath(connector, sourceNode, targetNode);
-    const worldPoint = getWorldPoint(event);
-    const { index, point } = findClosestPointOnPolyline(worldPoint, geometry.points);
+    if (geometry.points.length < 2) {
+      return;
+    }
 
-    const basePoints = connector.points?.map((item) => ({ ...item })) ?? [];
-    const updatedPoints = [...basePoints];
-    updatedPoints.splice(index, 0, point);
+    const worldPoint = getWorldPoint(event);
+    const { index } = findClosestPointOnPolyline(worldPoint, geometry.points);
+    const start = geometry.points[index];
+    const end = geometry.points[index + 1] ?? start;
+    const axis = Math.abs(end.x - start.x) >= Math.abs(end.y - start.y) ? 'horizontal' : 'vertical';
 
     beginTransaction();
+    const basePoints = geometry.points.map((point) => ({ ...point }));
     connectorDragStateRef.current = {
       pointerId: event.pointerId,
       connectorId: connector.id,
-      pointIndex: index,
-      isNewPoint: true,
-      moved: false,
-      points: updatedPoints,
-      originalPoints: basePoints
+      kind: 'segment',
+      segmentIndex: index,
+      axis,
+      mode: connector.mode,
+      basePoints,
+      workingPoints: basePoints.map((point) => ({ ...point })),
+      originalWaypoints: connector.points?.map((point) => ({ ...point })) ?? [],
+      currentWaypoints: connector.points?.map((point) => ({ ...point })) ?? [],
+      initialPointer: worldPoint,
+      moved: false
     };
-    updateConnector(connector.id, { points: updatedPoints });
     containerRef.current?.setPointerCapture(event.pointerId);
   };
 
   const handleConnectorHandlePointerDown = (
-    event: React.PointerEvent<SVGCircleElement>,
+    event: React.PointerEvent<SVGPathElement>,
     connector: ConnectorModel,
     pointIndex: number
   ) => {
@@ -1191,20 +1625,34 @@ const CanvasComponent = (
       setSelection({ nodeIds: [], connectorIds: [connector.id] });
     }
 
-    const points = connector.points?.map((item) => ({ ...item })) ?? [];
-    if (!points[pointIndex]) {
+    const sourceNode = getNodeById({ nodes, connectors }, connector.sourceId);
+    const targetNode = getNodeById({ nodes, connectors }, connector.targetId);
+    if (!sourceNode || !targetNode) {
+      return;
+    }
+    if (connector.mode !== 'orthogonal') {
+      return;
+    }
+
+    const geometry = getConnectorPath(connector, sourceNode, targetNode);
+    if (!geometry.points[pointIndex + 1]) {
       return;
     }
 
     beginTransaction();
+    const basePoints = geometry.points.map((point) => ({ ...point }));
     connectorDragStateRef.current = {
       pointerId: event.pointerId,
       connectorId: connector.id,
-      pointIndex,
-      isNewPoint: false,
-      moved: false,
-      points,
-      originalPoints: points.map((item) => ({ ...item }))
+      kind: 'waypoint',
+      waypointIndex: pointIndex,
+      mode: connector.mode,
+      basePoints,
+      workingPoints: basePoints.map((point) => ({ ...point })),
+      originalWaypoints: connector.points?.map((point) => ({ ...point })) ?? [],
+      currentWaypoints: connector.points?.map((point) => ({ ...point })) ?? [],
+      initialPointer: getWorldPoint(event),
+      moved: false
     };
     containerRef.current?.setPointerCapture(event.pointerId);
   };
@@ -1246,6 +1694,41 @@ const CanvasComponent = (
         worldPoint
       });
     }
+  };
+
+  const handleConnectorLabelPointerDown = (
+    event: React.PointerEvent<SVGCircleElement>,
+    connector: ConnectorModel
+  ) => {
+    if (event.button !== 0) {
+      return;
+    }
+
+    pendingTextEditRef.current = null;
+    commitEditingIfNeeded();
+    event.stopPropagation();
+
+    if (!selectedConnectorIds.includes(connector.id)) {
+      setSelection({ nodeIds: [], connectorIds: [connector.id] });
+    }
+
+    const sourceNode = getNodeById({ nodes, connectors }, connector.sourceId);
+    const targetNode = getNodeById({ nodes, connectors }, connector.targetId);
+    if (!sourceNode || !targetNode) {
+      return;
+    }
+
+    beginTransaction();
+    connectorLabelDragRef.current = {
+      pointerId: event.pointerId,
+      connectorId: connector.id,
+      originalPosition: connector.labelPosition ?? DEFAULT_CONNECTOR_LABEL_POSITION,
+      originalOffset: connector.labelOffset ?? DEFAULT_CONNECTOR_LABEL_OFFSET,
+      lastPosition: connector.labelPosition ?? DEFAULT_CONNECTOR_LABEL_POSITION,
+      lastOffset: connector.labelOffset ?? DEFAULT_CONNECTOR_LABEL_OFFSET,
+      moved: false
+    };
+    containerRef.current?.setPointerCapture(event.pointerId);
   };
 
   const handleResizeHandlePointerDown = (
@@ -1484,11 +1967,21 @@ const CanvasComponent = (
       }
 
       const singleNodeSelected = selectedNodeIds.length === 1 ? selectedNode : null;
+      const singleConnectorSelected =
+        selectedConnectorIds.length === 1
+          ? connectors.find((item) => item.id === selectedConnectorIds[0])
+          : null;
 
       if (event.key === 'Enter' && !event.shiftKey) {
         if (singleNodeSelected && tool === 'select' && !editingNodeId) {
           event.preventDefault();
           beginTextEditing(singleNodeSelected.id);
+          return;
+        }
+        if (singleConnectorSelected && tool === 'select' && !editingConnectorId) {
+          event.preventDefault();
+          setSelection({ nodeIds: [], connectorIds: [singleConnectorSelected.id] });
+          setEditingConnectorId(singleConnectorSelected.id);
           return;
         }
       }
@@ -1549,6 +2042,10 @@ const CanvasComponent = (
       if (event.key === 'Escape') {
         clearSelection();
         setPendingConnection(null);
+        if (editingConnectorId) {
+          setConnectorCancelSignal((value) => value + 1);
+          setEditingConnectorId(null);
+        }
         if (resizeStateRef.current) {
           const resizeState = resizeStateRef.current;
           resizeStateRef.current = null;
@@ -1696,6 +2193,9 @@ const CanvasComponent = (
               source={getNodeById({ nodes, connectors }, connector.sourceId)}
               target={getNodeById({ nodes, connectors }, connector.targetId)}
               selected={selectedConnectorIds.includes(connector.id)}
+              labelEditing={editingConnectorId === connector.id}
+              commitSignal={connectorCommitSignal}
+              cancelSignal={connectorCancelSignal}
               onPointerDown={(event) => handleConnectorPointerDown(event, connector)}
               onHandlePointerDown={(event, index) =>
                 handleConnectorHandlePointerDown(event, connector, index)
@@ -1703,11 +2203,10 @@ const CanvasComponent = (
               onEndpointPointerDown={(event, endpoint) =>
                 handleConnectorEndpointPointerDown(event, connector, endpoint)
               }
-              onUpdateLabel={(value) =>
-                updateConnector(connector.id, {
-                  label: value
-                })
-              }
+              onCommitLabel={(value) => handleConnectorLabelCommit(connector.id, value)}
+              onCancelLabelEdit={handleConnectorLabelCancel}
+              onRequestLabelEdit={() => handleConnectorRequestLabelEdit(connector.id)}
+              onLabelPointerDown={(event) => handleConnectorLabelPointerDown(event, connector)}
             />
           ))}
           {nodes.map((node) => (
@@ -1807,6 +2306,27 @@ const CanvasComponent = (
           </div>
         )}
       </div>
+      {selectedConnector && (
+        <ConnectorToolbar
+          connector={selectedConnector}
+          anchor={connectorToolbarAnchor}
+          viewportSize={viewport}
+          isVisible={tool === 'select' && !isPanning && !editingConnectorId}
+          onStyleChange={(patch) => handleConnectorStyleChange(selectedConnector, patch)}
+          onModeChange={(mode) => handleConnectorModeChange(selectedConnector, mode)}
+          onFlipDirection={() => handleConnectorFlip(selectedConnector)}
+          onTidyPath={() => handleConnectorTidy(selectedConnector)}
+        />
+      )}
+      {selectedConnector && editingConnectorId === selectedConnector.id && (
+        <ConnectorTextToolbar
+          connector={selectedConnector}
+          anchor={connectorLabelToolbarAnchor}
+          viewportSize={viewport}
+          isVisible={tool === 'select' && !isPanning && editingConnectorId === selectedConnector.id}
+          onChange={(style) => handleConnectorLabelStyleChange(selectedConnector, style)}
+        />
+      )}
       {selectedNode && (
         <SelectionToolbar
           node={selectedNode}

@@ -134,6 +134,7 @@
   fill: none;
   pointer-events: stroke;
   stroke-linecap: round;
+  stroke-linejoin: round;
   transition: stroke 0.2s ease, stroke-width 0.2s ease;
 }
 
@@ -167,21 +168,25 @@
 
 .diagram-connector__handle {
   pointer-events: all;
-  fill: rgba(15, 23, 42, 0.9);
-  stroke: #60a5fa;
-  stroke-width: 2;
+  fill: none;
+  stroke: rgba(96, 165, 250, 0.85);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
   cursor: grab;
-  transition: transform 0.15s ease, fill 0.2s ease, stroke 0.2s ease;
+  filter: drop-shadow(0 0 4px rgba(37, 99, 235, 0.45));
+  transition: stroke 0.2s ease, stroke-width 0.2s ease, filter 0.2s ease;
 }
 
 .diagram-connector__handle:hover {
-  transform: scale(1.08);
-  fill: rgba(30, 41, 59, 0.95);
+  stroke: rgba(147, 197, 253, 0.95);
+  stroke-width: 2.8;
+  filter: drop-shadow(0 0 6px rgba(147, 197, 253, 0.45));
 }
 
 .diagram-connector__handle:active {
   cursor: grabbing;
-  transform: scale(0.95);
+  stroke-width: 3;
 }
 
 .diagram-connector__endpoint {
@@ -196,6 +201,33 @@
 .diagram-connector__endpoint:hover {
   transform: scale(1.12);
   fill: rgba(37, 99, 235, 0.3);
+}
+
+.diagram-connector__label-leader {
+  stroke: rgba(148, 163, 184, 0.55);
+  stroke-width: 1.5;
+  pointer-events: none;
+}
+
+.diagram-connector__label-handle {
+  pointer-events: all;
+  fill: rgba(15, 23, 42, 0.95);
+  stroke: rgba(148, 163, 184, 0.9);
+  stroke-width: 2;
+  cursor: grab;
+  transition: transform 0.18s ease, fill 0.2s ease, stroke 0.2s ease;
+  filter: drop-shadow(0 6px 14px rgba(15, 23, 42, 0.45));
+}
+
+.diagram-connector__label-handle:hover {
+  transform: scale(1.08);
+  fill: rgba(59, 130, 246, 0.25);
+  stroke: rgba(147, 197, 253, 0.95);
+}
+
+.diagram-connector__label-handle:active {
+  cursor: grabbing;
+  transform: scale(0.94);
 }
 
 .canvas-overlays {

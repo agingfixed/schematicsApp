@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import {
   CanvasTransform,
   ConnectorModel,
+  ConnectorLabelStyle,
   NodeFontWeight,
   NodeKind,
   NodeModel,
@@ -95,8 +96,18 @@ export type SceneStore = SceneStoreState & SceneStoreActions;
 const defaultConnectorStyle: ConnectorModel['style'] = {
   stroke: '#e5e7eb',
   strokeWidth: 2,
-  arrowEnd: 'arrow',
-  arrowStart: 'none'
+  dashed: false,
+  startArrow: { shape: 'none', fill: 'filled' },
+  endArrow: { shape: 'triangle', fill: 'filled' },
+  arrowSize: 1,
+  cornerRadius: 12
+};
+
+const defaultConnectorLabelStyle: ConnectorLabelStyle = {
+  fontSize: 14,
+  fontWeight: 600,
+  color: '#f8fafc',
+  background: 'rgba(15,23,42,0.85)'
 };
 
 const createInitialScene = (): SceneContent => {
@@ -108,26 +119,35 @@ const createInitialScene = (): SceneContent => {
   const connectors: ConnectorModel[] = [
     {
       id: nanoid(),
-      type: 'straight',
+      mode: 'orthogonal',
       sourceId: start.id,
       targetId: collect.id,
       style: { ...defaultConnectorStyle },
-      label: 'Begin'
+      label: 'Begin',
+      labelPosition: 0.5,
+      labelOffset: 18,
+      labelStyle: { ...defaultConnectorLabelStyle }
     },
     {
       id: nanoid(),
-      type: 'straight',
+      mode: 'orthogonal',
       sourceId: collect.id,
       targetId: decision.id,
-      style: { ...defaultConnectorStyle }
+      style: { ...defaultConnectorStyle },
+      labelPosition: 0.5,
+      labelOffset: 18,
+      labelStyle: { ...defaultConnectorLabelStyle }
     },
     {
       id: nanoid(),
-      type: 'straight',
+      mode: 'orthogonal',
       sourceId: decision.id,
       targetId: done.id,
       style: { ...defaultConnectorStyle },
-      label: 'Yes'
+      label: 'Yes',
+      labelPosition: 0.5,
+      labelOffset: 18,
+      labelStyle: { ...defaultConnectorLabelStyle }
     }
   ];
 
@@ -356,10 +376,13 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
 
     const connector: ConnectorModel = {
       id: nanoid(),
-      type: 'straight',
+      mode: 'orthogonal',
       sourceId,
       targetId,
-      style: { ...defaultConnectorStyle }
+      style: { ...defaultConnectorStyle },
+      labelPosition: 0.5,
+      labelOffset: 18,
+      labelStyle: { ...defaultConnectorLabelStyle }
     };
 
     set((current) => {
@@ -383,13 +406,16 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
         return {};
       }
 
-      const { style, points, ...rest } = patch;
+      const { style, points, labelStyle, ...rest } = patch;
 
       if (points) {
         connector.points = points.map((point) => ({ ...point }));
       }
       if (style) {
         connector.style = { ...connector.style, ...style };
+      }
+      if (labelStyle !== undefined) {
+        connector.labelStyle = labelStyle ? { ...labelStyle } : undefined;
       }
 
       Object.assign(connector, rest);
