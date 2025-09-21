@@ -91,7 +91,7 @@ const DEFAULT_CONNECTOR_LABEL_STYLE = {
   background: 'rgba(15,23,42,0.85)'
 };
 const PORT_VISIBILITY_DISTANCE = 72;
-const PORT_SNAP_DISTANCE = 8;
+const PORT_SNAP_DISTANCE = 12;
 const POINT_TOLERANCE = 0.5;
 const PORT_TIE_DISTANCE = 0.25;
 const PORT_PRIORITY: Record<CardinalConnectorPort, number> = {
@@ -1559,9 +1559,15 @@ const CanvasComponent = (
 
     const dropPoint = getWorldPoint(event);
     const snap = pending.snapPort && pending.snapPort.nodeId === node.id ? pending.snapPort : null;
-    const dropEndpoint: ConnectorEndpoint = snap
-      ? { nodeId: node.id, port: snap.port }
-      : { position: dropPoint };
+    let dropEndpoint: ConnectorEndpoint;
+    if (snap) {
+      dropEndpoint = { nodeId: node.id, port: snap.port };
+    } else if (!pending.bypassSnap) {
+      const nearest = getNearestConnectorPort(node, dropPoint);
+      dropEndpoint = { nodeId: node.id, port: nearest };
+    } else {
+      dropEndpoint = { position: dropPoint };
+    }
 
     if (pending.type === 'create') {
       const source = pending.source;

@@ -31,9 +31,11 @@ const assertInvariant = (condition: unknown, message: string) => {
     throw new Error(message);
   }
 };
-const AUTO_COLLAPSE_DISTANCE = 2.5;
-const AUTO_COLLAPSE_ANGLE = (3 * Math.PI) / 180;
+const AUTO_COLLAPSE_DISTANCE = 6;
+const AUTO_COLLAPSE_ANGLE = (5 * Math.PI) / 180;
 const MIN_SEGMENT_LENGTH = 6;
+const ALIGNMENT_SNAP_DISTANCE = 6;
+const ROUNDING_STEP = 0.5;
 export const CARDINAL_PORTS: CardinalConnectorPort[] = ['top', 'right', 'bottom', 'left'];
 const CARDINAL_PORT_LOOKUP = new Set<string>(CARDINAL_PORTS);
 
@@ -200,6 +202,33 @@ export interface ConnectorPath {
 
 const clonePoint = (point: Vec2): Vec2 => ({ x: point.x, y: point.y });
 
+const roundToStep = (value: number, step: number) => Math.round(value / step) * step;
+
+const roundPoint = (point: Vec2): Vec2 => ({
+  x: roundToStep(point.x, ROUNDING_STEP),
+  y: roundToStep(point.y, ROUNDING_STEP)
+});
+
+const snapValue = (value: number, target: number, threshold: number) =>
+  Math.abs(value - target) <= threshold ? target : value;
+
+const snapPointsToNeighbors = (points: Vec2[]): void => {
+  if (points.length < 3) {
+    return;
+  }
+
+  for (let index = 1; index < points.length - 1; index += 1) {
+    const prev = points[index - 1];
+    const current = points[index];
+    const next = points[index + 1];
+
+    current.x = snapValue(current.x, prev.x, ALIGNMENT_SNAP_DISTANCE);
+    current.x = snapValue(current.x, next.x, ALIGNMENT_SNAP_DISTANCE);
+    current.y = snapValue(current.y, prev.y, ALIGNMENT_SNAP_DISTANCE);
+    current.y = snapValue(current.y, next.y, ALIGNMENT_SNAP_DISTANCE);
+  }
+};
+
 export const cloneConnectorEndpoint = (endpoint: ConnectorEndpoint): ConnectorEndpoint => {
   if (isAttachedConnectorEndpoint(endpoint)) {
     assertCardinalPort(endpoint.port, 'Connector endpoint');
@@ -352,6 +381,7 @@ export const tidyOrthogonalWaypoints = (start: Vec2, waypoints: Vec2[], end: Vec
   }
 
   const points = [start, ...waypoints.map((point) => clonePoint(point)), end];
+  snapPointsToNeighbors(points);
   const axes = computeSegmentAxes(points);
 
   for (let index = 1; index < points.length - 1; index += 1) {
@@ -382,8 +412,10 @@ export const tidyOrthogonalWaypoints = (start: Vec2, waypoints: Vec2[], end: Vec
     }
   }
 
+  snapPointsToNeighbors(points);
   const enforced = ensureOrthogonalSegments(points);
-  const simplified = simplifyPolyline(enforced);
+  const rounded = enforced.map((point) => roundPoint(point));
+  const simplified = simplifyPolyline(rounded);
   if (simplified.length <= 2) {
     return [];
   }
@@ -471,11 +503,13 @@ export const getConnectorPath = (
 
     const rawPoints = [start, ...waypoints, end];
     const orthogonal = ensureOrthogonalSegments(rawPoints);
-    points = sanitizePoints(orthogonal);
+    const roundedPoints = orthogonal.map((point) => roundPoint(point));
+    points = sanitizePoints(roundedPoints);
     waypoints = points.slice(1, points.length - 1).map((point) => ({ ...point }));
   } else if (connector.mode === 'straight') {
     waypoints = [];
-    points = sanitizePoints([start, end]);
+    const straightPoints = [start, end].map((point) => roundPoint(point));
+    points = sanitizePoints(straightPoints);
   }
 
   if (connector.mode === 'elbow') {
