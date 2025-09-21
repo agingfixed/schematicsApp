@@ -1,5 +1,7 @@
 .connector-toolbar {
   position: absolute;
+  left: 0;
+  top: 0;
   z-index: 20;
   background: rgba(15, 23, 42, 0.94);
   backdrop-filter: blur(16px);
@@ -12,6 +14,7 @@
   box-shadow: 0 24px 48px rgba(2, 6, 23, 0.5);
   color: #e2e8f0;
   pointer-events: auto;
+  will-change: transform;
 }
 
 .connector-toolbar__section {

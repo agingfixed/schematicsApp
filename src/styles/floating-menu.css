@@ -6,6 +6,7 @@
 }
 
 .floating-menu[data-dragging='true'] {
+  z-index: 1200;
   box-shadow: 0 26px 56px rgba(2, 6, 23, 0.6), 0 0 0 1px rgba(148, 163, 184, 0.28);
 }
 

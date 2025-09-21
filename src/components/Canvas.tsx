@@ -277,6 +277,9 @@ const CanvasComponent = (
   const selectedConnectorIds = selection.connectorIds;
 
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
+  const [lastPointerPosition, setLastPointerPosition] = useState<{ x: number; y: number } | null>(
+    null
+  );
   const [linkFocusSignal, setLinkFocusSignal] = useState(0);
   const [activeGuides, setActiveGuides] = useState<SnapMatch[]>([]);
   const [distanceBadges, setDistanceBadges] = useState<SnapDistanceBadge[]>([]);
@@ -1369,6 +1372,7 @@ const CanvasComponent = (
   };
 
   const handleNodePointerDown = (event: React.PointerEvent, node: NodeModel) => {
+    setLastPointerPosition(getRelativePoint(event));
     if (tool === 'connector') {
       pendingTextEditRef.current = null;
       const worldPoint = getWorldPoint(event);
@@ -1655,6 +1659,7 @@ const CanvasComponent = (
     event: React.PointerEvent<SVGPathElement>,
     connector: ConnectorModel
   ) => {
+    setLastPointerPosition(getRelativePoint(event));
     if (tool !== 'select') {
       return;
     }
@@ -1894,6 +1899,7 @@ const CanvasComponent = (
     event: React.PointerEvent<SVGCircleElement>,
     connector: ConnectorModel
   ) => {
+    setLastPointerPosition(getRelativePoint(event));
     if (event.button !== 0) {
       return;
     }
@@ -2530,6 +2536,7 @@ const CanvasComponent = (
           onModeChange={(mode) => handleConnectorModeChange(selectedConnector, mode)}
           onFlipDirection={() => handleConnectorFlip(selectedConnector)}
           onTidyPath={() => handleConnectorTidy(selectedConnector)}
+          pointerPosition={lastPointerPosition}
         />
       )}
       {selectedConnector && editingConnectorId === selectedConnector.id && (
@@ -2539,6 +2546,7 @@ const CanvasComponent = (
           viewportSize={viewport}
           isVisible={tool === 'select' && !isPanning && editingConnectorId === selectedConnector.id}
           onChange={(style) => handleConnectorLabelStyleChange(selectedConnector, style)}
+          pointerPosition={lastPointerPosition}
         />
       )}
       {selectedNode && (
@@ -2549,6 +2557,7 @@ const CanvasComponent = (
           viewportSize={viewport}
           isVisible={tool === 'select' && !isPanning}
           focusLinkSignal={linkFocusSignal}
+          pointerPosition={lastPointerPosition}
         />
       )}
       {editorNode && (
