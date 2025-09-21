@@ -29,8 +29,7 @@ const fillOptions = [
 
 const modeOptions = [
   { value: 'orthogonal', label: 'Elbow' },
-  { value: 'straight', label: 'Straight' },
-  { value: 'curved', label: 'Curved' }
+  { value: 'straight', label: 'Straight' }
 ] as const;
 
 export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({

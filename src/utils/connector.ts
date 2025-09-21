@@ -1,10 +1,10 @@
-import { ConnectorModel, NodeModel, Vec2 } from '../types/scene';
+import { ConnectorModel, ConnectorPort, NodeModel, Vec2 } from '../types/scene';
 
 const EPSILON = 1e-6;
 const AUTO_COLLAPSE_DISTANCE = 2.5;
 const AUTO_COLLAPSE_ANGLE = (3 * Math.PI) / 180;
 const MIN_SEGMENT_LENGTH = 6;
-const CURVE_SAMPLE_STEPS = 16;
+const SNAP_PORT_KEYS: ConnectorPort[] = ['top', 'right', 'bottom', 'left', 'center'];
 
 export const getNodeCenter = (node: NodeModel): Vec2 => ({
   x: node.position.x + node.size.width / 2,
@@ -88,6 +88,41 @@ export const getConnectorAnchor = (node: NodeModel, toward: Vec2): Vec2 => {
   }
 };
 
+export const getConnectorPortPositions = (
+  node: NodeModel
+): Record<ConnectorPort, Vec2> => {
+  const center = getNodeCenter(node);
+  return {
+    top: { x: center.x, y: node.position.y },
+    right: { x: node.position.x + node.size.width, y: center.y },
+    bottom: { x: center.x, y: node.position.y + node.size.height },
+    left: { x: node.position.x, y: center.y },
+    center
+  };
+};
+
+export const getConnectorPortAnchor = (node: NodeModel, port: ConnectorPort): Vec2 => {
+  const positions = getConnectorPortPositions(node);
+  return positions[port] ?? positions.center;
+};
+
+export const getNearestConnectorPort = (node: NodeModel, point: Vec2): ConnectorPort => {
+  const positions = getConnectorPortPositions(node);
+  let best: ConnectorPort = 'center';
+  let bestDistance = Number.POSITIVE_INFINITY;
+
+  for (const key of SNAP_PORT_KEYS) {
+    const current = positions[key];
+    const distance = Math.hypot(current.x - point.x, current.y - point.y);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      best = key;
+    }
+  }
+
+  return best;
+};
+
 export interface ConnectorPath {
   start: Vec2;
   end: Vec2;
@@ -122,33 +157,25 @@ const createDefaultOrthogonalWaypoints = (start: Vec2, end: Vec2): Vec2[] => {
   ];
 };
 
-const manhattanDistance = (a: Vec2, b: Vec2) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+type SegmentAxis = 'horizontal' | 'vertical';
 
-const applyOrthogonalHeuristics = (start: Vec2, baseWaypoints: Vec2[], end: Vec2): Vec2[] => {
-  if (!baseWaypoints.length) {
-    return [];
+const computeSegmentAxes = (points: Vec2[]): SegmentAxis[] => {
+  const axes: SegmentAxis[] = [];
+
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const start = points[index];
+    const end = points[index + 1];
+    const dx = Math.abs(end.x - start.x);
+    const dy = Math.abs(end.y - start.y);
+
+    if (dx < EPSILON && dy < EPSILON) {
+      axes.push(axes[index - 1] ?? 'horizontal');
+    } else {
+      axes.push(dx >= dy ? 'horizontal' : 'vertical');
+    }
   }
 
-  const waypoints = baseWaypoints.map((point) => clonePoint(point));
-  const all = [start, ...waypoints, end];
-
-  for (let index = 1; index < all.length - 1; index += 1) {
-    const prev = all[index - 1];
-    const current = all[index];
-    const next = all[index + 1];
-
-    const optionA = { x: prev.x, y: next.y };
-    const optionB = { x: next.x, y: prev.y };
-
-    const distanceA = manhattanDistance(prev, optionA) + manhattanDistance(optionA, next);
-    const distanceB = manhattanDistance(prev, optionB) + manhattanDistance(optionB, next);
-
-    const chosen = distanceA <= distanceB ? optionA : optionB;
-    current.x = chosen.x;
-    current.y = chosen.y;
-  }
-
-  return waypoints;
+  return axes;
 };
 
 const shouldCollapsePoint = (prev: Vec2, current: Vec2, next: Vec2): boolean => {
@@ -216,11 +243,42 @@ export const tidyOrthogonalWaypoints = (start: Vec2, waypoints: Vec2[], end: Vec
     return [];
   }
 
-  const points = [start, ...applyOrthogonalHeuristics(start, waypoints, end), end];
+  const points = [start, ...waypoints.map((point) => clonePoint(point)), end];
+  const axes = computeSegmentAxes(points);
+
+  for (let index = 1; index < points.length - 1; index += 1) {
+    const prev = points[index - 1];
+    const next = points[index + 1];
+    const current = points[index];
+    const prevAxis = axes[index - 1] ?? axes[index] ?? 'horizontal';
+    const nextAxis = axes[index] ?? axes[index - 1] ?? 'horizontal';
+
+    if (prevAxis === 'horizontal' && nextAxis === 'horizontal') {
+      const target = Math.abs(current.y - prev.y) <= Math.abs(current.y - next.y) ? prev.y : next.y;
+      current.y = target;
+    } else if (prevAxis === 'vertical' && nextAxis === 'vertical') {
+      const target = Math.abs(current.x - prev.x) <= Math.abs(current.x - next.x) ? prev.x : next.x;
+      current.x = target;
+    } else {
+      if (prevAxis === 'horizontal') {
+        current.y = prev.y;
+      } else {
+        current.x = prev.x;
+      }
+
+      if (nextAxis === 'horizontal') {
+        current.y = next.y;
+      } else {
+        current.x = next.x;
+      }
+    }
+  }
+
   const simplified = simplifyPolyline(points);
   if (simplified.length <= 2) {
     return [];
   }
+
   return simplified.slice(1, simplified.length - 1).map((point) => clonePoint(point));
 };
 
@@ -233,54 +291,6 @@ const sanitizePoints = (points: Vec2[]): Vec2[] =>
     return !nearlyEqual(prev.x, point.x) || !nearlyEqual(prev.y, point.y);
   });
 
-const catmullRomPoint = (p0: Vec2, p1: Vec2, p2: Vec2, p3: Vec2, t: number): Vec2 => {
-  const t2 = t * t;
-  const t3 = t2 * t;
-  const x =
-    0.5 *
-    ((2 * p1.x) +
-      (-p0.x + p2.x) * t +
-      (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * t2 +
-      (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * t3);
-  const y =
-    0.5 *
-    ((2 * p1.y) +
-      (-p0.y + p2.y) * t +
-      (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * t2 +
-      (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * t3);
-  return { x, y };
-};
-
-const sampleCatmullRom = (points: Vec2[], steps = CURVE_SAMPLE_STEPS): Vec2[] => {
-  if (points.length <= 1) {
-    return points.map((point) => clonePoint(point));
-  }
-
-  if (points.length === 2) {
-    return sanitizePoints([points[0], points[1]]);
-  }
-
-  const result: Vec2[] = [];
-
-  for (let index = 0; index < points.length - 1; index += 1) {
-    const p0 = index === 0 ? points[index] : points[index - 1];
-    const p1 = points[index];
-    const p2 = points[index + 1];
-    const p3 = index + 2 < points.length ? points[index + 2] : points[index + 1];
-
-    if (index === 0) {
-      result.push(clonePoint(p1));
-    }
-
-    for (let step = 1; step <= steps; step += 1) {
-      const t = step / steps;
-      result.push(catmullRomPoint(p0, p1, p2, p3, t));
-    }
-  }
-
-  return sanitizePoints(result);
-};
-
 export const getConnectorPath = (
   connector: ConnectorModel,
   source: NodeModel,
@@ -292,8 +302,12 @@ export const getConnectorPath = (
     ? baseWaypoints[baseWaypoints.length - 1]
     : getNodeCenter(source);
 
-  const start = getConnectorAnchor(source, targetReference);
-  const end = getConnectorAnchor(target, sourceReference);
+  const start = connector.sourcePort
+    ? getConnectorPortAnchor(source, connector.sourcePort)
+    : getConnectorAnchor(source, targetReference);
+  const end = connector.targetPort
+    ? getConnectorPortAnchor(target, connector.targetPort)
+    : getConnectorAnchor(target, sourceReference);
 
   let waypoints: Vec2[] = [];
   let points: Vec2[] = [];
@@ -305,11 +319,6 @@ export const getConnectorPath = (
   } else if (connector.mode === 'straight') {
     waypoints = [];
     points = sanitizePoints([start, end]);
-  } else {
-    const base = baseWaypoints.length ? baseWaypoints : createDefaultOrthogonalWaypoints(start, end);
-    const anchors = sanitizePoints([start, ...base, end]);
-    waypoints = anchors.slice(1, anchors.length - 1).map((point) => clonePoint(point));
-    points = anchors.length >= 2 ? sampleCatmullRom(anchors) : anchors.map((point) => clonePoint(point));
   }
 
   return {

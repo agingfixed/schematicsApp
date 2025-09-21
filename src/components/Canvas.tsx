@@ -12,6 +12,7 @@ import React, {
 import {
   CanvasTransform,
   ConnectorModel,
+  ConnectorPort,
   NodeModel,
   Tool,
   Vec2
@@ -32,6 +33,9 @@ import {
   findClosestPointOnPolyline,
   getConnectorAnchor,
   getConnectorPath,
+  getConnectorPortAnchor,
+  getConnectorPortPositions,
+  getNearestConnectorPort,
   getNormalAtRatio,
   getPointAtRatio,
   measurePolyline,
@@ -81,71 +85,12 @@ const DEFAULT_CONNECTOR_LABEL_STYLE = {
   color: '#f8fafc',
   background: 'rgba(15,23,42,0.85)'
 };
-const MIN_CURVE_OFFSET = 18;
-const MAX_CURVE_OFFSET = 140;
+const PORT_VISIBILITY_DISTANCE = 72;
+const PORT_SNAP_DISTANCE = 8;
+const POINT_TOLERANCE = 0.5;
 
-const computeDefaultCurvedWaypoints = (
-  start: Vec2,
-  end: Vec2,
-  reference?: Vec2[]
-): Vec2[] => {
-  const dx = end.x - start.x;
-  const dy = end.y - start.y;
-  const distance = Math.hypot(dx, dy);
-
-  if (distance < 1) {
-    return [];
-  }
-
-  let normal = { x: -dy / distance, y: dx / distance };
-  let projectedMagnitude = Math.min(MAX_CURVE_OFFSET, Math.max(MIN_CURVE_OFFSET, distance / 2.4));
-
-  if (reference && reference.length) {
-    const first = reference[0];
-    const toFirst = { x: first.x - start.x, y: first.y - start.y };
-    const projectionFirst = toFirst.x * normal.x + toFirst.y * normal.y;
-    if (projectionFirst < 0) {
-      normal = { x: -normal.x, y: -normal.y };
-    }
-
-    const projections: number[] = [];
-    const firstMagnitude = Math.abs(toFirst.x * normal.x + toFirst.y * normal.y);
-    if (firstMagnitude > 0.5) {
-      projections.push(firstMagnitude);
-    }
-
-    if (reference.length > 1) {
-      const last = reference[reference.length - 1];
-      const toLastFromStart = { x: last.x - start.x, y: last.y - start.y };
-      const toLastFromEnd = { x: last.x - end.x, y: last.y - end.y };
-      const lastMagnitudeA = Math.abs(toLastFromStart.x * normal.x + toLastFromStart.y * normal.y);
-      const lastMagnitudeB = Math.abs(toLastFromEnd.x * normal.x + toLastFromEnd.y * normal.y);
-      if (lastMagnitudeA > 0.5) {
-        projections.push(lastMagnitudeA);
-      }
-      if (lastMagnitudeB > 0.5) {
-        projections.push(lastMagnitudeB);
-      }
-    }
-
-    if (projections.length) {
-      const average = projections.reduce((sum, value) => sum + value, 0) / projections.length;
-      projectedMagnitude = Math.min(MAX_CURVE_OFFSET, Math.max(MIN_CURVE_OFFSET, average));
-    }
-  }
-
-  const anchorOne = {
-    x: start.x + dx / 3 + normal.x * projectedMagnitude,
-    y: start.y + dy / 3 + normal.y * projectedMagnitude
-  };
-  const anchorTwo = {
-    x: start.x + (2 * dx) / 3 + normal.x * projectedMagnitude,
-    y: start.y + (2 * dy) / 3 + normal.y * projectedMagnitude
-  };
-
-  return [anchorOne, anchorTwo];
-};
-
+const pointsRoughlyEqual = (a: Vec2, b: Vec2) =>
+  Math.abs(a.x - b.x) <= POINT_TOLERANCE && Math.abs(a.y - b.y) <= POINT_TOLERANCE;
 export interface CanvasHandle {
   zoomIn: () => void;
   zoomOut: () => void;
@@ -181,14 +126,28 @@ interface SpacingDragState {
   translation: number;
 }
 
+interface ConnectionSnap {
+  nodeId: string;
+  port: ConnectorPort;
+  position: Vec2;
+}
+
 type PendingConnection =
-  | { type: 'create'; sourceId: string; worldPoint: Vec2 }
+  | {
+      type: 'create';
+      sourceId: string;
+      worldPoint: Vec2;
+      originPort?: ConnectorPort | null;
+      snapPort?: ConnectionSnap | null;
+    }
   | {
       type: 'reconnect-target';
       connectorId: string;
       sourceId: string;
       initialTargetId: string;
       worldPoint: Vec2;
+      originPort?: ConnectorPort | null;
+      snapPort?: ConnectionSnap | null;
     }
   | {
       type: 'reconnect-source';
@@ -196,6 +155,8 @@ type PendingConnection =
       targetId: string;
       initialSourceId: string;
       worldPoint: Vec2;
+      originPort?: ConnectorPort | null;
+      snapPort?: ConnectionSnap | null;
     };
 
 interface ConnectorDragState {
@@ -212,6 +173,10 @@ interface ConnectorDragState {
   currentWaypoints: Vec2[];
   initialPointer: Vec2;
   moved: boolean;
+  split?: {
+    inserted: [number, number, number];
+    axis: 'horizontal' | 'vertical';
+  };
 }
 
 interface ConnectorLabelDragState {
@@ -225,6 +190,14 @@ interface ConnectorLabelDragState {
 }
 
 type ResizeHandle = 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w' | 'nw';
+
+interface PortHint {
+  nodeId: string;
+  port: ConnectorPort;
+  position: Vec2;
+  screen: Vec2;
+  active: boolean;
+}
 
 interface ResizeState {
   pointerId: number;
@@ -311,6 +284,7 @@ const CanvasComponent = (
   const [editingConnectorId, setEditingConnectorId] = useState<string | null>(null);
   const [connectorCommitSignal, setConnectorCommitSignal] = useState(0);
   const [connectorCancelSignal, setConnectorCancelSignal] = useState(0);
+  const [portHints, setPortHints] = useState<PortHint[]>([]);
   const inlineEditorRef = useRef<InlineTextEditorHandle | null>(null);
   const editingEntryPointRef = useRef<{ x: number; y: number } | null>(null);
   const pendingTextEditRef = useRef<{
@@ -653,28 +627,9 @@ const CanvasComponent = (
       if (mode === connector.mode) {
         return;
       }
-      if (mode === 'orthogonal' || mode === 'straight') {
-        updateConnector(connector.id, { mode, points: [] });
-        return;
-      }
-
-      const sourceNode = getNodeById({ nodes, connectors }, connector.sourceId);
-      const targetNode = getNodeById({ nodes, connectors }, connector.targetId);
-      if (!sourceNode || !targetNode) {
-        updateConnector(connector.id, { mode, points: [] });
-        return;
-      }
-
-      const geometry = getConnectorPath(connector, sourceNode, targetNode);
-      const fallback = connector.points?.map((point) => ({ ...point })) ?? [];
-      const reference = geometry.waypoints.length
-        ? geometry.waypoints.map((point) => ({ ...point }))
-        : fallback;
-      const nextPoints = computeDefaultCurvedWaypoints(geometry.start, geometry.end, reference);
-
-      updateConnector(connector.id, { mode, points: nextPoints });
+      updateConnector(connector.id, { mode, points: [] });
     },
-    [nodes, connectors, updateConnector]
+    [updateConnector]
   );
 
   const handleConnectorLabelStyleChange = useCallback(
@@ -711,6 +666,8 @@ const CanvasComponent = (
       updateConnector(connector.id, {
         sourceId: connector.targetId,
         targetId: connector.sourceId,
+        sourcePort: connector.targetPort,
+        targetPort: connector.sourcePort,
         points: reversedPoints,
         labelPosition:
           connector.labelPosition !== undefined ? 1 - connector.labelPosition : connector.labelPosition
@@ -723,6 +680,12 @@ const CanvasComponent = (
     setGlobalTransform(transform);
     onTransformChange?.(transform);
   }, [transform, onTransformChange, setGlobalTransform]);
+
+  useEffect(() => {
+    if (!pendingConnection) {
+      setPortHints([]);
+    }
+  }, [pendingConnection]);
 
   useEffect(() => {
     if (editingConnectorId && !selectedConnectorIds.includes(editingConnectorId)) {
@@ -1094,6 +1057,90 @@ const CanvasComponent = (
       const worldPoint = getWorldPoint(event);
       connectorDragState.moved = true;
 
+      if (
+        connectorDragState.kind === 'segment' &&
+        connectorDragState.segmentIndex !== undefined &&
+        connectorDragState.axis &&
+        connectorDragState.split
+      ) {
+        const nextPoints = connectorDragState.basePoints.map((point) => ({ ...point }));
+        const [anchorIndex, pivotIndex, tailIndex] = connectorDragState.split.inserted;
+
+        if (
+          !nextPoints[anchorIndex] ||
+          !nextPoints[pivotIndex] ||
+          !nextPoints[tailIndex]
+        ) {
+          connectorDragState.split = undefined;
+        } else {
+          const offset =
+            connectorDragState.axis === 'horizontal'
+              ? worldPoint.y - connectorDragState.initialPointer.y
+              : worldPoint.x - connectorDragState.initialPointer.x;
+
+          if (connectorDragState.axis === 'horizontal') {
+            nextPoints[pivotIndex] = {
+              ...nextPoints[pivotIndex],
+              y: nextPoints[pivotIndex].y + offset
+            };
+            nextPoints[tailIndex] = {
+              ...nextPoints[tailIndex],
+              y: nextPoints[tailIndex].y + offset
+            };
+          } else {
+            nextPoints[pivotIndex] = {
+              ...nextPoints[pivotIndex],
+              x: nextPoints[pivotIndex].x + offset
+            };
+            nextPoints[tailIndex] = {
+              ...nextPoints[tailIndex],
+              x: nextPoints[tailIndex].x + offset
+            };
+          }
+
+          const anchorSnapshot = { ...nextPoints[anchorIndex] };
+          const pivotSnapshot = { ...nextPoints[pivotIndex] };
+          const tailSnapshot = { ...nextPoints[tailIndex] };
+
+          const startPoint = nextPoints[0];
+          const endPoint = nextPoints[nextPoints.length - 1];
+          let interior = nextPoints.slice(1, nextPoints.length - 1);
+          if (connectorDragState.mode === 'orthogonal') {
+            interior = tidyOrthogonalWaypoints(startPoint, interior, endPoint);
+          }
+
+          const newBase = [
+            startPoint,
+            ...interior.map((point) => ({ ...point })),
+            endPoint
+          ];
+
+          connectorDragState.basePoints = newBase.map((point) => ({ ...point }));
+          connectorDragState.workingPoints = connectorDragState.basePoints.map((point) => ({ ...point }));
+          connectorDragState.currentWaypoints = interior.map((point) => ({ ...point }));
+          connectorDragState.initialPointer = worldPoint;
+
+          const splitAxis = connectorDragState.split.axis;
+          const anchorIdx = newBase.findIndex((point) => pointsRoughlyEqual(point, anchorSnapshot));
+          const pivotIdx = newBase.findIndex((point) => pointsRoughlyEqual(point, pivotSnapshot));
+          const tailIdx = newBase.findIndex((point) => pointsRoughlyEqual(point, tailSnapshot));
+
+          if (anchorIdx === -1 || pivotIdx === -1 || tailIdx === -1) {
+            connectorDragState.split = undefined;
+          } else {
+            connectorDragState.split = {
+              inserted: [anchorIdx, pivotIdx, tailIdx],
+              axis: splitAxis
+            };
+          }
+
+          updateConnector(connectorDragState.connectorId, {
+            points: connectorDragState.currentWaypoints
+          });
+          return;
+        }
+      }
+
       const nextPoints = connectorDragState.basePoints.map((point) => ({ ...point }));
 
       if (connectorDragState.kind === 'waypoint' && connectorDragState.waypointIndex !== undefined) {
@@ -1144,6 +1191,7 @@ const CanvasComponent = (
       connectorDragState.workingPoints = connectorDragState.basePoints.map((point) => ({ ...point }));
       connectorDragState.currentWaypoints = interior.map((point) => ({ ...point }));
       connectorDragState.initialPointer = worldPoint;
+      connectorDragState.split = undefined;
 
       updateConnector(connectorDragState.connectorId, {
         points: connectorDragState.currentWaypoints
@@ -1152,8 +1200,65 @@ const CanvasComponent = (
     }
 
     if (connectionPointerRef.current === event.pointerId) {
+      const pending = pendingConnection;
       const worldPoint = getWorldPoint(event);
-      setPendingConnection((current) => (current ? { ...current, worldPoint } : current));
+      const screenPoint = getRelativePoint(event);
+      const hints: PortHint[] = [];
+      let best: { hint: PortHint; distance: number } | null = null;
+
+      if (pending) {
+        for (const node of nodes) {
+          if (pending.type === 'create' && node.id === pending.sourceId) {
+            continue;
+          }
+          const positions = getConnectorPortPositions(node);
+          for (const portKey of Object.keys(positions) as ConnectorPort[]) {
+            const position = positions[portKey];
+            const screen = worldToScreen(position, transform);
+            const dx = screen.x - screenPoint.x;
+            const dy = screen.y - screenPoint.y;
+            const distance = Math.hypot(dx, dy);
+            if (distance <= PORT_VISIBILITY_DISTANCE) {
+              const hint: PortHint = {
+                nodeId: node.id,
+                port: portKey,
+                position,
+                screen,
+                active: false
+              };
+              hints.push(hint);
+              if (!best || distance < best.distance) {
+                best = { hint, distance };
+              }
+            }
+          }
+        }
+      }
+
+      let activeHint: PortHint | null = null;
+      if (best && best.distance <= PORT_SNAP_DISTANCE) {
+        activeHint = { ...best.hint, active: true };
+      }
+
+      const normalizedHints = hints.map((hint) => ({
+        ...hint,
+        active: Boolean(activeHint && hint.nodeId === activeHint.nodeId && hint.port === activeHint.port)
+      }));
+
+      setPortHints(normalizedHints);
+      const nextWorld = activeHint ? activeHint.position : worldPoint;
+
+      setPendingConnection((current) =>
+        current
+          ? {
+              ...current,
+              worldPoint: nextWorld,
+              snapPort: activeHint
+                ? { nodeId: activeHint.nodeId, port: activeHint.port, position: activeHint.position }
+                : null
+            }
+          : current
+      );
     }
   };
 
@@ -1239,6 +1344,7 @@ const CanvasComponent = (
 
     if (!handled && connectionPointerRef.current === event.pointerId) {
       setPendingConnection(null);
+      setPortHints([]);
       connectionPointerRef.current = null;
       releasePointerCapture(event.pointerId);
       handled = true;
@@ -1266,7 +1372,15 @@ const CanvasComponent = (
     if (tool === 'connector') {
       pendingTextEditRef.current = null;
       const worldPoint = getWorldPoint(event);
-      setPendingConnection({ type: 'create', sourceId: node.id, worldPoint });
+      const originPort = getNearestConnectorPort(node, worldPoint);
+      setPendingConnection({
+        type: 'create',
+        sourceId: node.id,
+        worldPoint,
+        originPort,
+        snapPort: null
+      });
+      setPortHints([]);
       connectionPointerRef.current = event.pointerId;
       return;
     }
@@ -1385,7 +1499,8 @@ const CanvasComponent = (
   };
 
   const handleNodePointerUp = (event: React.PointerEvent, node: NodeModel) => {
-    if (!pendingConnection) {
+    const pending = pendingConnection;
+    if (!pending) {
       return;
     }
 
@@ -1393,42 +1508,70 @@ const CanvasComponent = (
       return;
     }
 
-    if (pendingConnection.type === 'create') {
-      if (pendingConnection.sourceId !== node.id) {
-        addConnector(pendingConnection.sourceId, node.id);
+    const snap = pending.snapPort && pending.snapPort.nodeId === node.id ? pending.snapPort : null;
+
+    if (pending.type === 'create') {
+      if (pending.sourceId !== node.id) {
+        addConnector(pending.sourceId, node.id, {
+          sourcePort: pending.originPort ?? undefined,
+          targetPort: snap?.port
+        });
       }
-    } else if (pendingConnection.type === 'reconnect-target') {
-      const isSameAsBefore = node.id === pendingConnection.initialTargetId;
-      const isSelfLoop = node.id === pendingConnection.sourceId;
-      if (!isSameAsBefore && !isSelfLoop) {
-        const exists = hasConnectorBetween(
-          pendingConnection.sourceId,
-          node.id,
-          pendingConnection.connectorId
-        );
-        if (!exists) {
-          updateConnector(pendingConnection.connectorId, { targetId: node.id, points: [] });
-          setSelection({ nodeIds: [], connectorIds: [pendingConnection.connectorId] });
+    } else if (pending.type === 'reconnect-target') {
+      const connector = connectors.find((item) => item.id === pending.connectorId);
+      if (connector) {
+        const isSelfLoop = node.id === pending.sourceId;
+        if (!isSelfLoop) {
+          const existingPort = connector.targetPort ?? null;
+          const nextPort =
+            snap?.port ??
+            (node.id === pending.initialTargetId ? pending.originPort ?? existingPort ?? undefined : undefined);
+
+          const targetChanged = node.id !== connector.targetId;
+          const portChanged =
+            node.id === connector.targetId ? nextPort !== (existingPort ?? undefined) : true;
+
+          if (targetChanged) {
+            const exists = hasConnectorBetween(pending.sourceId, node.id, pending.connectorId);
+            if (!exists) {
+              updateConnector(pending.connectorId, { targetId: node.id, targetPort: nextPort, points: [] });
+              setSelection({ nodeIds: [], connectorIds: [pending.connectorId] });
+            }
+          } else if (portChanged && nextPort !== (existingPort ?? undefined)) {
+            updateConnector(pending.connectorId, { targetId: node.id, targetPort: nextPort, points: [] });
+          }
         }
       }
-    } else if (pendingConnection.type === 'reconnect-source') {
-      const isSameAsBefore = node.id === pendingConnection.initialSourceId;
-      const isSelfLoop = node.id === pendingConnection.targetId;
-      if (!isSameAsBefore && !isSelfLoop) {
-        const exists = hasConnectorBetween(
-          node.id,
-          pendingConnection.targetId,
-          pendingConnection.connectorId
-        );
-        if (!exists) {
-          updateConnector(pendingConnection.connectorId, { sourceId: node.id, points: [] });
-          setSelection({ nodeIds: [], connectorIds: [pendingConnection.connectorId] });
+    } else if (pending.type === 'reconnect-source') {
+      const connector = connectors.find((item) => item.id === pending.connectorId);
+      if (connector) {
+        const isSelfLoop = node.id === pending.targetId;
+        if (!isSelfLoop) {
+          const existingPort = connector.sourcePort ?? null;
+          const nextPort =
+            snap?.port ??
+            (node.id === pending.initialSourceId ? pending.originPort ?? existingPort ?? undefined : undefined);
+
+          const sourceChanged = node.id !== connector.sourceId;
+          const portChanged =
+            node.id === connector.sourceId ? nextPort !== (existingPort ?? undefined) : true;
+
+          if (sourceChanged) {
+            const exists = hasConnectorBetween(node.id, pending.targetId, pending.connectorId);
+            if (!exists) {
+              updateConnector(pending.connectorId, { sourceId: node.id, sourcePort: nextPort, points: [] });
+              setSelection({ nodeIds: [], connectorIds: [pending.connectorId] });
+            }
+          } else if (portChanged && nextPort !== (existingPort ?? undefined)) {
+            updateConnector(pending.connectorId, { sourceId: node.id, sourcePort: nextPort, points: [] });
+          }
         }
       }
     }
 
     setPendingConnection(null);
     connectionPointerRef.current = null;
+    setPortHints([]);
   };
 
   const handleSpacingHandlePointerDown = (
@@ -1580,27 +1723,72 @@ const CanvasComponent = (
     }
 
     const worldPoint = getWorldPoint(event);
-    const { index } = findClosestPointOnPolyline(worldPoint, geometry.points);
+    const closest = findClosestPointOnPolyline(worldPoint, geometry.points);
+    const { index } = closest;
     const start = geometry.points[index];
     const end = geometry.points[index + 1] ?? start;
     const axis = Math.abs(end.x - start.x) >= Math.abs(end.y - start.y) ? 'horizontal' : 'vertical';
 
     beginTransaction();
     const basePoints = geometry.points.map((point) => ({ ...point }));
-    connectorDragStateRef.current = {
-      pointerId: event.pointerId,
-      connectorId: connector.id,
-      kind: 'segment',
-      segmentIndex: index,
-      axis,
-      mode: connector.mode,
-      basePoints,
-      workingPoints: basePoints.map((point) => ({ ...point })),
-      originalWaypoints: connector.points?.map((point) => ({ ...point })) ?? [],
-      currentWaypoints: connector.points?.map((point) => ({ ...point })) ?? [],
-      initialPointer: worldPoint,
-      moved: false
-    };
+
+    if (event.altKey) {
+      const insertIndex = Math.min(index + 1, basePoints.length - 1);
+      const startPoint = basePoints[index];
+      const endPoint = basePoints[index + 1] ?? startPoint;
+
+      const anchorPoint = { ...closest.point };
+      if (axis === 'horizontal') {
+        const minX = Math.min(startPoint.x, endPoint.x);
+        const maxX = Math.max(startPoint.x, endPoint.x);
+        anchorPoint.x = Math.max(minX, Math.min(maxX, anchorPoint.x));
+        anchorPoint.y = startPoint.y;
+        const pivotPoint: Vec2 = { x: anchorPoint.x, y: worldPoint.y };
+        const tailPoint: Vec2 = { x: endPoint.x, y: worldPoint.y };
+        basePoints.splice(insertIndex, 0, anchorPoint, pivotPoint, tailPoint);
+      } else {
+        const minY = Math.min(startPoint.y, endPoint.y);
+        const maxY = Math.max(startPoint.y, endPoint.y);
+        anchorPoint.y = Math.max(minY, Math.min(maxY, anchorPoint.y));
+        anchorPoint.x = startPoint.x;
+        const pivotPoint: Vec2 = { x: worldPoint.x, y: anchorPoint.y };
+        const tailPoint: Vec2 = { x: worldPoint.x, y: endPoint.y };
+        basePoints.splice(insertIndex, 0, anchorPoint, pivotPoint, tailPoint);
+      }
+
+      const interior = basePoints.slice(1, basePoints.length - 1).map((point) => ({ ...point }));
+      connectorDragStateRef.current = {
+        pointerId: event.pointerId,
+        connectorId: connector.id,
+        kind: 'segment',
+        segmentIndex: insertIndex + 1,
+        axis,
+        mode: connector.mode,
+        basePoints: basePoints.map((point) => ({ ...point })),
+        workingPoints: basePoints.map((point) => ({ ...point })),
+        originalWaypoints: connector.points?.map((point) => ({ ...point })) ?? [],
+        currentWaypoints: interior,
+        initialPointer: worldPoint,
+        moved: false,
+        split: { inserted: [insertIndex, insertIndex + 1, insertIndex + 2], axis }
+      };
+      updateConnector(connector.id, { points: interior });
+    } else {
+      connectorDragStateRef.current = {
+        pointerId: event.pointerId,
+        connectorId: connector.id,
+        kind: 'segment',
+        segmentIndex: index,
+        axis,
+        mode: connector.mode,
+        basePoints,
+        workingPoints: basePoints.map((point) => ({ ...point })),
+        originalWaypoints: connector.points?.map((point) => ({ ...point })) ?? [],
+        currentWaypoints: connector.points?.map((point) => ({ ...point })) ?? [],
+        initialPointer: worldPoint,
+        moved: false
+      };
+    }
     containerRef.current?.setPointerCapture(event.pointerId);
   };
 
@@ -1677,13 +1865,17 @@ const CanvasComponent = (
       setSelection({ nodeIds: [], connectorIds: [connector.id] });
     }
 
+    setPortHints([]);
+
     if (endpoint === 'end') {
       setPendingConnection({
         type: 'reconnect-target',
         connectorId: connector.id,
         sourceId: connector.sourceId,
         initialTargetId: connector.targetId,
-        worldPoint
+        worldPoint,
+        originPort: connector.targetPort ?? null,
+        snapPort: null
       });
     } else {
       setPendingConnection({
@@ -1691,7 +1883,9 @@ const CanvasComponent = (
         connectorId: connector.id,
         targetId: connector.targetId,
         initialSourceId: connector.sourceId,
-        worldPoint
+        worldPoint,
+        originPort: connector.sourcePort ?? null,
+        snapPort: null
       });
     }
   };
@@ -2042,6 +2236,7 @@ const CanvasComponent = (
       if (event.key === 'Escape') {
         clearSelection();
         setPendingConnection(null);
+        setPortHints([]);
         if (editingConnectorId) {
           setConnectorCancelSignal((value) => value + 1);
           setEditingConnectorId(null);
@@ -2114,11 +2309,17 @@ const CanvasComponent = (
     }
 
     if (pendingConnection.type === 'reconnect-source') {
-      const targetNode = getNodeById({ nodes, connectors }, pendingConnection.targetId);
+      const connector = connectors.find((item) => item.id === pendingConnection.connectorId);
+      if (!connector) {
+        return null;
+      }
+      const targetNode = getNodeById({ nodes, connectors }, connector.targetId);
       if (!targetNode) {
         return null;
       }
-      const end = getConnectorAnchor(targetNode, pendingConnection.worldPoint);
+      const end = connector.targetPort
+        ? getConnectorPortAnchor(targetNode, connector.targetPort)
+        : getConnectorAnchor(targetNode, pendingConnection.worldPoint);
       return { start: pendingConnection.worldPoint, end };
     }
 
@@ -2126,7 +2327,13 @@ const CanvasComponent = (
     if (!sourceNode) {
       return null;
     }
-    const start = getConnectorAnchor(sourceNode, pendingConnection.worldPoint);
+    const sourcePort =
+      pendingConnection.type === 'reconnect-target'
+        ? connectors.find((item) => item.id === pendingConnection.connectorId)?.sourcePort ?? null
+        : pendingConnection.originPort ?? null;
+    const start = sourcePort
+      ? getConnectorPortAnchor(sourceNode, sourcePort)
+      : getConnectorAnchor(sourceNode, pendingConnection.worldPoint);
     return { start, end: pendingConnection.worldPoint };
   }, [pendingConnection, nodes, connectors]);
 
@@ -2248,6 +2455,13 @@ const CanvasComponent = (
             />
           ))}
         </svg>
+        {portHints.map((hint) => (
+          <div
+            key={`port-${hint.nodeId}-${hint.port}`}
+            className={`connector-port-hint${hint.active ? ' is-active' : ''}`}
+            style={{ left: hint.screen.x, top: hint.screen.y }}
+          />
+        ))}
         {badgeScreens.map((badge) => (
           <div
             key={badge.id}
