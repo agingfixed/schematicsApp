@@ -81,7 +81,7 @@
 }
 
 .diagram-node__label.is-editing {
-  opacity: 0.25;
+  opacity: 0;
 }
 
 .diagram-node__link-chip {
