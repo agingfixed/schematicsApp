@@ -88,38 +88,6 @@ const buildRoundedPath = (points: Vec2[], radius: number) => {
   return path;
 };
 
-const buildCurvedPath = (points: Vec2[]) => {
-  if (!points.length) {
-    return '';
-  }
-  if (points.length === 1) {
-    const point = points[0];
-    return `M ${point.x} ${point.y}`;
-  }
-
-  let path = `M ${points[0].x} ${points[0].y}`;
-
-  for (let index = 0; index < points.length - 1; index += 1) {
-    const p0 = index === 0 ? points[index] : points[index - 1];
-    const p1 = points[index];
-    const p2 = points[index + 1];
-    const p3 = index + 2 < points.length ? points[index + 2] : points[index + 1];
-
-    const c1 = {
-      x: p1.x + (p2.x - p0.x) / 6,
-      y: p1.y + (p2.y - p0.y) / 6
-    };
-    const c2 = {
-      x: p2.x - (p3.x - p1.x) / 6,
-      y: p2.y - (p3.y - p1.y) / 6
-    };
-
-    path += ` C ${c1.x} ${c1.y} ${c2.x} ${c2.y} ${p2.x} ${p2.y}`;
-  }
-
-  return path;
-};
-
 const elbowHandlePath = (previous: Vec2, current: Vec2, next: Vec2) => {
   const handleLength = 12;
   const inDir = {
@@ -160,13 +128,18 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
   onLabelPointerDown
 }) => {
   const [draft, setDraft] = useState(connector.label ?? '');
+  const [hoveredSegment, setHoveredSegment] = useState<number | null>(null);
   const labelRef = useRef<HTMLDivElement | null>(null);
+  const isComposingRef = useRef(false);
   const previousCommitRef = useRef(commitSignal);
   const previousCancelRef = useRef(cancelSignal);
+
+  const hasFocusedRef = useRef(false);
 
   useEffect(() => {
     if (!labelEditing) {
       setDraft(connector.label ?? '');
+      hasFocusedRef.current = false;
     }
   }, [connector.label, labelEditing]);
 
@@ -178,13 +151,26 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
     if (!element) {
       return;
     }
-    element.innerText = connector.label ?? '';
-    const frame = requestAnimationFrame(() => {
-      element.focus({ preventScroll: true });
-      document.getSelection()?.selectAllChildren(element);
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [labelEditing, connector.label]);
+    if (!hasFocusedRef.current) {
+      element.textContent = draft;
+      const frame = requestAnimationFrame(() => {
+        element.focus({ preventScroll: true });
+        const selection = window.getSelection();
+        if (!selection) {
+          return;
+        }
+        const range = document.createRange();
+        range.selectNodeContents(element);
+        selection.removeAllRanges();
+        selection.addRange(range);
+      });
+      hasFocusedRef.current = true;
+      return () => cancelAnimationFrame(frame);
+    }
+    if (element.textContent !== draft) {
+      element.textContent = draft;
+    }
+  }, [labelEditing, draft]);
 
   const geometry = useMemo(() => {
     if (!source || !target) {
@@ -195,32 +181,39 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
 
   const cornerRadius = connector.mode === 'orthogonal' ? connector.style.cornerRadius ?? 12 : 0;
 
-  const anchors = useMemo(() => {
-    if (!geometry) {
-      return [] as Vec2[];
-    }
-    return [geometry.start, ...geometry.waypoints, geometry.end];
-  }, [geometry]);
-
   const pathData = useMemo(() => {
     if (!geometry) {
       return '';
     }
-    if (connector.mode === 'curved') {
-      return buildCurvedPath(anchors);
-    }
     return buildRoundedPath(geometry.points, cornerRadius);
-  }, [geometry, cornerRadius, connector.mode, anchors]);
+  }, [geometry, cornerRadius]);
 
   const hitPathData = useMemo(() => {
     if (!geometry) {
       return '';
     }
-    if (connector.mode === 'curved') {
-      return buildCurvedPath(anchors);
-    }
     return buildRoundedPath(geometry.points, 0);
-  }, [geometry, connector.mode, anchors]);
+  }, [geometry]);
+
+  const segments = useMemo(() => {
+    if (!geometry) {
+      return [] as Array<{ start: Vec2; end: Vec2; axis: 'horizontal' | 'vertical'; index: number }>;
+    }
+    const list: Array<{ start: Vec2; end: Vec2; axis: 'horizontal' | 'vertical'; index: number }> = [];
+    for (let index = 0; index < geometry.points.length - 1; index += 1) {
+      const start = geometry.points[index];
+      const end = geometry.points[index + 1];
+      const axis = Math.abs(end.x - start.x) >= Math.abs(end.y - start.y) ? 'horizontal' : 'vertical';
+      list.push({ start, end, axis, index });
+    }
+    return list;
+  }, [geometry]);
+
+  useEffect(() => {
+    if (!selected) {
+      setHoveredSegment(null);
+    }
+  }, [selected]);
 
   const midpoint = useMemo(() => {
     if (!geometry) {
@@ -330,8 +323,19 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
     setDraft(event.currentTarget.textContent ?? '');
   };
 
+  const handleLabelCompositionStart = () => {
+    isComposingRef.current = true;
+  };
+
+  const handleLabelCompositionEnd = (event: React.CompositionEvent<HTMLDivElement>) => {
+    isComposingRef.current = false;
+    setDraft(event.currentTarget.textContent ?? '');
+  };
+
   const commitDraft = () => {
-    const next = clampLabel(draft);
+    const element = labelRef.current;
+    const content = element?.textContent ?? draft;
+    const next = clampLabel(content);
     if (next !== (connector.label ?? '')) {
       onCommitLabel(next);
     } else {
@@ -370,7 +374,11 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
   };
 
   const handleLabelKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    event.stopPropagation();
     if (event.key === 'Enter' && !event.shiftKey) {
+      if (isComposingRef.current) {
+        return;
+      }
       event.preventDefault();
       commitDraft();
     }
@@ -378,6 +386,36 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
       event.preventDefault();
       setDraft(connector.label ?? '');
       onCancelLabelEdit();
+    }
+  };
+
+  const handleLabelPaste = (event: React.ClipboardEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const text = event.clipboardData?.getData('text/plain') ?? '';
+    if (!text) {
+      return;
+    }
+    const selection = window.getSelection();
+    if (selection && selection.rangeCount > 0) {
+      const range = selection.getRangeAt(0);
+      range.deleteContents();
+      const node = document.createTextNode(text);
+      range.insertNode(node);
+      range.setStartAfter(node);
+      range.setEndAfter(node);
+      selection.removeAllRanges();
+      selection.addRange(range);
+    } else {
+      document.execCommand('insertText', false, text);
+    }
+    const element = labelRef.current;
+    setDraft(element?.textContent ?? '');
+  };
+
+  const handleLabelPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (labelEditing) {
+      event.preventDefault();
+      event.stopPropagation();
     }
   };
 
@@ -389,7 +427,17 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
   const markerStartUrl = startArrowShape !== 'none' ? `url(#${startMarkerId})` : undefined;
   const markerEndUrl = endArrowShape !== 'none' ? `url(#${endMarkerId})` : undefined;
 
-  const hasLabel = Boolean(connector.label) || labelEditing;
+  const trimmedLabel = connector.label?.trim() ?? '';
+  const hasLabel = Boolean(trimmedLabel) || labelEditing;
+  const isLabelEmpty = labelEditing ? draft.trim().length === 0 : trimmedLabel.length === 0;
+  const displayLabel = trimmedLabel.length ? connector.label ?? '' : 'Label';
+  const labelClassName = [
+    'diagram-connector__label',
+    labelEditing ? 'is-editing' : '',
+    isLabelEmpty ? 'is-empty' : ''
+  ]
+    .filter(Boolean)
+    .join(' ');
 
   const handleLabelDoubleClick = (event: React.MouseEvent<HTMLDivElement>) => {
     event.stopPropagation();
@@ -408,6 +456,24 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
         {endMarker}
       </defs>
       <path className="diagram-connector__hit" d={hitPathData} strokeWidth={28} onPointerDown={onPointerDown} />
+      {segments.map((segment) => {
+        const isHovered = hoveredSegment === segment.index;
+        const cursor = segment.axis === 'horizontal' ? 'ns-resize' : 'ew-resize';
+        return (
+          <path
+            key={`${connector.id}-segment-${segment.index}`}
+            className={`diagram-connector__segment${isHovered ? ' is-hovered' : ''}`}
+            d={`M ${segment.start.x} ${segment.start.y} L ${segment.end.x} ${segment.end.y}`}
+            onPointerEnter={() => setHoveredSegment(segment.index)}
+            onPointerLeave={() => setHoveredSegment((value) => (value === segment.index ? null : value))}
+            onPointerDown={(event) => {
+              setHoveredSegment(segment.index);
+              onPointerDown(event);
+            }}
+            style={{ cursor }}
+          />
+        );
+      })}
       <path
         className="diagram-connector__line"
         d={pathData}
@@ -481,7 +547,8 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
           <foreignObject x={labelPlacement.center.x - 80} y={labelPlacement.center.y - 28} width={160} height={56}>
             <div
               ref={labelRef}
-              className={`diagram-connector__label ${labelEditing ? 'is-editing' : ''}`}
+              className={labelClassName}
+              data-placeholder="Label"
               contentEditable={labelEditing}
               suppressContentEditableWarning
               spellCheck={false}
@@ -491,12 +558,16 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
                 color: labelColor,
                 background: labelBackground
               }}
+              onPointerDown={handleLabelPointerDown}
               onInput={handleLabelInput}
               onBlur={handleLabelBlur}
               onKeyDown={handleLabelKeyDown}
+              onCompositionStart={handleLabelCompositionStart}
+              onCompositionEnd={handleLabelCompositionEnd}
+              onPaste={handleLabelPaste}
               onDoubleClick={handleLabelDoubleClick}
             >
-              {draft || 'Label'}
+              {!labelEditing ? displayLabel : undefined}
             </div>
           </foreignObject>
         </>
