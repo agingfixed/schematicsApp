@@ -1,17 +1,20 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   FloatingMenuPlacement,
+  FloatingMenuPosition,
   FloatingMenuType,
   DEFAULT_MENU_PLACEMENT,
   useFloatingMenuStore
 } from '../state/menuStore';
 
 const CLAMP_MARGIN = 12;
+const DRAG_THRESHOLD = 3;
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
 type DragState = {
   pointerId: number;
+  pointerTarget: HTMLDivElement | null;
   offsetX: number;
   offsetY: number;
   width: number;
@@ -21,6 +24,8 @@ type DragState = {
   originLeft: number;
   originTop: number;
   hasMoved: boolean;
+  lastLeft: number;
+  lastTop: number;
 };
 
 export interface UseFloatingMenuDragOptions {
@@ -55,8 +60,65 @@ export const useFloatingMenuDrag = ({
   const resetMenu = useFloatingMenuStore((state) => state.resetMenu);
 
   const dragStateRef = useRef<DragState | null>(null);
+  const frameRef = useRef<number | null>(null);
+  const pendingPositionRef = useRef<FloatingMenuPosition | null>(null);
   const [menuSize, setMenuSize] = useState<{ width: number; height: number } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+
+  const releaseActiveDrag = useCallback(() => {
+    const state = dragStateRef.current;
+    if (!state) {
+      return;
+    }
+    const element = state.pointerTarget ?? menuRef.current;
+    if (element && typeof element.hasPointerCapture === 'function') {
+      try {
+        if (element.hasPointerCapture(state.pointerId)) {
+          element.releasePointerCapture(state.pointerId);
+        }
+      } catch (error) {
+        // Ignore failures when the element has been detached from the DOM.
+      }
+    }
+    dragStateRef.current = null;
+  }, [menuRef]);
+
+  const clearPendingPosition = useCallback(() => {
+    if (frameRef.current !== null) {
+      cancelAnimationFrame(frameRef.current);
+      frameRef.current = null;
+    }
+    pendingPositionRef.current = null;
+  }, []);
+
+  const flushPendingPosition = useCallback(() => {
+    if (pendingPositionRef.current) {
+      setMenuFreePosition(menuType, pendingPositionRef.current);
+    }
+    clearPendingPosition();
+  }, [clearPendingPosition, menuType, setMenuFreePosition]);
+
+  const schedulePositionUpdate = useCallback(
+    (position: FloatingMenuPosition, options?: { immediate?: boolean }) => {
+      if (options?.immediate) {
+        pendingPositionRef.current = position;
+        flushPendingPosition();
+        return;
+      }
+      pendingPositionRef.current = position;
+      if (frameRef.current !== null) {
+        return;
+      }
+      frameRef.current = requestAnimationFrame(() => {
+        frameRef.current = null;
+        if (pendingPositionRef.current) {
+          setMenuFreePosition(menuType, pendingPositionRef.current);
+          pendingPositionRef.current = null;
+        }
+      });
+    },
+    [flushPendingPosition, menuType, setMenuFreePosition]
+  );
 
   useLayoutEffect(() => {
     if (!isVisible) {
@@ -87,10 +149,20 @@ export const useFloatingMenuDrag = ({
 
   useEffect(() => {
     if (!isVisible) {
-      dragStateRef.current = null;
+      releaseActiveDrag();
       setIsDragging(false);
+      clearPendingPosition();
+      resetMenu(menuType);
     }
-  }, [isVisible]);
+  }, [clearPendingPosition, isVisible, menuType, releaseActiveDrag, resetMenu]);
+
+  useEffect(() => {
+    return () => {
+      releaseActiveDrag();
+      clearPendingPosition();
+      resetMenu(menuType);
+    };
+  }, [clearPendingPosition, menuType, releaseActiveDrag, resetMenu]);
 
   const handlePointerDown = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
@@ -106,9 +178,11 @@ export const useFloatingMenuDrag = ({
       const container = (element.offsetParent as HTMLElement | null) ?? element.parentElement;
       const rect = element.getBoundingClientRect();
       const containerRect = container?.getBoundingClientRect() ?? rect;
+      const pointerTarget = event.currentTarget;
 
       dragStateRef.current = {
         pointerId: event.pointerId,
+        pointerTarget,
         offsetX: event.clientX - rect.left,
         offsetY: event.clientY - rect.top,
         width: rect.width,
@@ -117,11 +191,17 @@ export const useFloatingMenuDrag = ({
         containerTop: containerRect.top,
         originLeft: rect.left - containerRect.left,
         originTop: rect.top - containerRect.top,
-        hasMoved: false
+        hasMoved: false,
+        lastLeft: rect.left - containerRect.left,
+        lastTop: rect.top - containerRect.top
       };
 
       setMenuSize({ width: rect.width, height: rect.height });
-      element.setPointerCapture(event.pointerId);
+      try {
+        pointerTarget.setPointerCapture(event.pointerId);
+      } catch (error) {
+        // Ignore failures when the pointer cannot be captured (e.g. already released).
+      }
       setIsDragging(true);
       event.preventDefault();
       event.stopPropagation();
@@ -129,15 +209,15 @@ export const useFloatingMenuDrag = ({
     [menuRef]
   );
 
-  const handlePointerMove = useCallback(
-    (event: React.PointerEvent<HTMLDivElement>) => {
+  const updatePositionFromEvent = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>, options?: { immediate?: boolean }) => {
       const state = dragStateRef.current;
       if (!state || state.pointerId !== event.pointerId) {
-        return;
+        return false;
       }
-
-      event.preventDefault();
-      event.stopPropagation();
+      if (!viewportSize.width || !viewportSize.height) {
+        return false;
+      }
 
       const relativeX = event.clientX - state.containerLeft;
       const relativeY = event.clientY - state.containerTop;
@@ -150,15 +230,32 @@ export const useFloatingMenuDrag = ({
 
       if (!state.hasMoved) {
         const delta = Math.hypot(nextLeft - state.originLeft, nextTop - state.originTop);
-        if (delta <= 0.5) {
-          return;
+        if (delta <= DRAG_THRESHOLD) {
+          return false;
         }
         state.hasMoved = true;
       }
 
-      setMenuFreePosition(menuType, { x: nextLeft, y: nextTop });
+      state.lastLeft = nextLeft;
+      state.lastTop = nextTop;
+      schedulePositionUpdate({ x: nextLeft, y: nextTop }, options);
+      return true;
     },
-    [menuType, setMenuFreePosition, viewportSize.height, viewportSize.width]
+    [schedulePositionUpdate, viewportSize.height, viewportSize.width]
+  );
+
+  const handlePointerMove = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      const state = dragStateRef.current;
+      if (!state || state.pointerId !== event.pointerId) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      updatePositionFromEvent(event);
+    },
+    [updatePositionFromEvent]
   );
 
   const releasePointer = useCallback(
@@ -167,23 +264,21 @@ export const useFloatingMenuDrag = ({
       if (!state || state.pointerId !== event.pointerId) {
         return;
       }
-      const element = menuRef.current;
-      if (element && element.hasPointerCapture(event.pointerId)) {
-        element.releasePointerCapture(event.pointerId);
-      }
-      dragStateRef.current = null;
+      releaseActiveDrag();
       setIsDragging(false);
+      clearPendingPosition();
       event.preventDefault();
       event.stopPropagation();
     },
-    [menuRef]
+    [clearPendingPosition, releaseActiveDrag]
   );
 
   const handlePointerUp = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
+      updatePositionFromEvent(event, { immediate: true });
       releasePointer(event);
     },
-    [releasePointer]
+    [releasePointer, updatePositionFromEvent]
   );
 
   const handlePointerCancel = useCallback(
@@ -259,7 +354,7 @@ export const useFloatingMenuDrag = ({
         Math.max(CLAMP_MARGIN, viewportSize.height - height - CLAMP_MARGIN)
       );
 
-      setMenuFreePosition(menuType, { x: nextLeft, y: nextTop });
+      schedulePositionUpdate({ x: nextLeft, y: nextTop }, { immediate: true });
     },
     [
       menuRef,
@@ -267,15 +362,16 @@ export const useFloatingMenuDrag = ({
       menuState.isFree,
       menuState.position,
       menuType,
-      setMenuFreePosition,
+      schedulePositionUpdate,
       viewportSize.height,
       viewportSize.width
     ]
   );
 
   const resetToAnchor = useCallback(() => {
+    clearPendingPosition();
     resetMenu(menuType);
-  }, [resetMenu, menuType]);
+  }, [clearPendingPosition, resetMenu, menuType]);
 
   return {
     menuState,

@@ -1,7 +1,8 @@
-import React, { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { useMemo, useRef } from 'react';
 import { ConnectorModel } from '../types/scene';
 import { FloatingMenuChrome } from './FloatingMenuChrome';
 import { useFloatingMenuDrag } from '../hooks/useFloatingMenuDrag';
+import { computeFloatingMenuPlacement } from '../utils/floatingMenu';
 import '../styles/connector-toolbar.css';
 
 interface ConnectorToolbarProps {
@@ -13,6 +14,7 @@ interface ConnectorToolbarProps {
   onModeChange: (mode: ConnectorModel['mode']) => void;
   onFlipDirection: () => void;
   onTidyPath: () => void;
+  pointerPosition: { x: number; y: number } | null;
 }
 
 const TOOLBAR_OFFSET = 14;
@@ -42,14 +44,15 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
   onStyleChange,
   onModeChange,
   onFlipDirection,
-  onTidyPath
+  onTidyPath,
+  pointerPosition
 }) => {
   const toolbarRef = useRef<HTMLDivElement>(null);
-  const [placement, setPlacement] = useState<'top' | 'bottom'>('top');
 
   const {
     menuState,
     isDragging,
+    menuSize,
     handlePointerDown: handleDragPointerDown,
     handlePointerMove: handleDragPointerMove,
     handlePointerUp: handleDragPointerUp,
@@ -63,20 +66,18 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
     isVisible: isVisible && Boolean(anchor)
   });
 
-  useLayoutEffect(() => {
-    if (!anchor || !isVisible || !toolbarRef.current || menuState.isFree) {
-      return;
+  const anchoredPlacement = useMemo(() => {
+    if (!anchor || menuState.isFree) {
+      return null;
     }
-    const element = toolbarRef.current;
-    const height = element.offsetHeight;
-    const topSpace = anchor.y - TOOLBAR_OFFSET - height;
-    const bottomSpace = viewportSize.height - (anchor.y + TOOLBAR_OFFSET + height);
-    if (placement === 'top' && topSpace < 8 && bottomSpace > topSpace) {
-      setPlacement('bottom');
-    } else if (placement === 'bottom' && bottomSpace < 8 && topSpace > bottomSpace) {
-      setPlacement('top');
-    }
-  }, [anchor, viewportSize.height, placement, isVisible, menuState.isFree]);
+    return computeFloatingMenuPlacement(
+      { x: anchor.x, y: anchor.y, width: 0, height: 0 },
+      menuSize ?? { width: 0, height: 0 },
+      viewportSize,
+      pointerPosition,
+      { gap: TOOLBAR_OFFSET }
+    );
+  }, [anchor, menuState.isFree, menuSize, viewportSize, pointerPosition]);
 
   const style = useMemo(() => {
     if (!anchor) {
@@ -84,24 +85,29 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
     }
     if (menuState.isFree && menuState.position) {
       return {
-        left: menuState.position.x,
-        top: menuState.position.y,
-        transform: 'translate(0, 0)'
+        left: 0,
+        top: 0,
+        transform: `translate3d(${menuState.position.x}px, ${menuState.position.y}px, 0)`
       } as React.CSSProperties;
     }
-    if (placement === 'top') {
-      return {
-        left: anchor.x,
-        top: anchor.y - TOOLBAR_OFFSET,
-        transform: 'translate(-50%, -100%)'
-      } as React.CSSProperties;
-    }
+    const placementResult =
+      anchoredPlacement ??
+      computeFloatingMenuPlacement(
+        { x: anchor.x, y: anchor.y, width: 0, height: 0 },
+        menuSize ?? { width: 0, height: 0 },
+        viewportSize,
+        pointerPosition,
+        { gap: TOOLBAR_OFFSET }
+      );
+
     return {
-      left: anchor.x,
-      top: anchor.y + TOOLBAR_OFFSET,
-      transform: 'translate(-50%, 0)'
+      left: 0,
+      top: 0,
+      transform: `translate3d(${placementResult.position.x}px, ${placementResult.position.y}px, 0)`
     } as React.CSSProperties;
-  }, [anchor, placement, menuState.isFree, menuState.position]);
+  }, [anchor, anchoredPlacement, menuState.isFree, menuState.position, menuSize, viewportSize, pointerPosition]);
+
+  const orientation = anchoredPlacement?.orientation ?? 'top';
 
   if (!isVisible || !anchor) {
     return null;
@@ -157,7 +163,7 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
   return (
     <div
       ref={toolbarRef}
-      className={`connector-toolbar floating-menu connector-toolbar--${placement}`}
+      className={`connector-toolbar floating-menu connector-toolbar--${orientation}`}
       style={style}
       data-free={menuState.isFree || undefined}
       data-dragging={isDragging || undefined}
