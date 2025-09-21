@@ -1,18 +1,10 @@
-import {
-  CardinalConnectorPort,
-  ConnectorModel,
-  ConnectorPort,
-  NodeModel,
-  Vec2
-} from '../types/scene';
+import { ConnectorModel, ConnectorPort, NodeModel, Vec2 } from '../types/scene';
 
 const EPSILON = 1e-6;
 const AUTO_COLLAPSE_DISTANCE = 2.5;
 const AUTO_COLLAPSE_ANGLE = (3 * Math.PI) / 180;
 const MIN_SEGMENT_LENGTH = 6;
-export const CARDINAL_PORTS: CardinalConnectorPort[] = ['top', 'right', 'bottom', 'left'];
-
-type SegmentAxis = 'horizontal' | 'vertical';
+const SNAP_PORT_KEYS: ConnectorPort[] = ['top', 'right', 'bottom', 'left', 'center'];
 
 export const getNodeCenter = (node: NodeModel): Vec2 => ({
   x: node.position.x + node.size.width / 2,
@@ -114,12 +106,12 @@ export const getConnectorPortAnchor = (node: NodeModel, port: ConnectorPort): Ve
   return positions[port] ?? positions.center;
 };
 
-export const getNearestConnectorPort = (node: NodeModel, point: Vec2): CardinalConnectorPort => {
+export const getNearestConnectorPort = (node: NodeModel, point: Vec2): ConnectorPort => {
   const positions = getConnectorPortPositions(node);
-  let best: CardinalConnectorPort = 'top';
+  let best: ConnectorPort = 'center';
   let bestDistance = Number.POSITIVE_INFINITY;
 
-  for (const key of CARDINAL_PORTS) {
+  for (const key of SNAP_PORT_KEYS) {
     const current = positions[key];
     const distance = Math.hypot(current.x - point.x, current.y - point.y);
     if (distance < bestDistance) {
@@ -129,34 +121,6 @@ export const getNearestConnectorPort = (node: NodeModel, point: Vec2): CardinalC
   }
 
   return best;
-};
-
-const isCardinalPort = (port?: ConnectorPort | null): port is CardinalConnectorPort =>
-  Boolean(port) && CARDINAL_PORTS.includes(port as CardinalConnectorPort);
-
-const PORT_AXIS: Record<CardinalConnectorPort, SegmentAxis> = {
-  top: 'vertical',
-  bottom: 'vertical',
-  left: 'horizontal',
-  right: 'horizontal'
-};
-
-const PORT_DIRECTION: Record<CardinalConnectorPort, -1 | 1> = {
-  top: -1,
-  bottom: 1,
-  left: -1,
-  right: 1
-};
-
-const createPortStubPoint = (anchor: Vec2, port: CardinalConnectorPort, clearance: number): Vec2 => {
-  const direction = PORT_DIRECTION[port];
-  const axis = PORT_AXIS[port];
-
-  if (axis === 'vertical') {
-    return { x: anchor.x, y: anchor.y + direction * clearance };
-  }
-
-  return { x: anchor.x + direction * clearance, y: anchor.y };
 };
 
 export interface ConnectorPath {
@@ -192,6 +156,8 @@ const createDefaultOrthogonalWaypoints = (start: Vec2, end: Vec2): Vec2[] => {
     { x: end.x, y: midY }
   ];
 };
+
+type SegmentAxis = 'horizontal' | 'vertical';
 
 const computeSegmentAxes = (points: Vec2[]): SegmentAxis[] => {
   const axes: SegmentAxis[] = [];
@@ -343,49 +309,12 @@ export const getConnectorPath = (
     ? getConnectorPortAnchor(target, connector.targetPort)
     : getConnectorAnchor(target, sourceReference);
 
-  const strokeWidth = connector.style.strokeWidth ?? 2;
-  const clearance = Math.max(strokeWidth + 4, 12);
-  const startStub = isCardinalPort(connector.sourcePort)
-    ? createPortStubPoint(start, connector.sourcePort, clearance)
-    : null;
-  const endStub = isCardinalPort(connector.targetPort)
-    ? createPortStubPoint(end, connector.targetPort, clearance)
-    : null;
-
   let waypoints: Vec2[] = [];
   let points: Vec2[] = [];
 
   if (connector.mode === 'orthogonal') {
-    const routeStart = startStub ?? start;
-    const routeEnd = endStub ?? end;
-    const base = baseWaypoints.length
-      ? baseWaypoints
-      : createDefaultOrthogonalWaypoints(routeStart, routeEnd);
-    waypoints = tidyOrthogonalWaypoints(routeStart, base, routeEnd);
-
-    if (startStub) {
-      if (!waypoints.length) {
-        waypoints = [startStub];
-      } else if (nearlyEqual(waypoints[0].x, startStub.x) && nearlyEqual(waypoints[0].y, startStub.y)) {
-        waypoints[0] = startStub;
-      } else {
-        waypoints = [startStub, ...waypoints];
-      }
-    }
-
-    if (endStub) {
-      if (!waypoints.length) {
-        waypoints = [endStub];
-      } else {
-        const last = waypoints[waypoints.length - 1];
-        if (nearlyEqual(last.x, endStub.x) && nearlyEqual(last.y, endStub.y)) {
-          waypoints[waypoints.length - 1] = endStub;
-        } else {
-          waypoints = [...waypoints, endStub];
-        }
-      }
-    }
-
+    const base = baseWaypoints.length ? baseWaypoints : createDefaultOrthogonalWaypoints(start, end);
+    waypoints = tidyOrthogonalWaypoints(start, base, end);
     points = sanitizePoints([start, ...waypoints, end]);
   } else if (connector.mode === 'straight') {
     waypoints = [];

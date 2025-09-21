@@ -11,7 +11,6 @@ import React, {
 } from 'react';
 import {
   CanvasTransform,
-  CardinalConnectorPort,
   ConnectorModel,
   ConnectorPort,
   NodeModel,
@@ -32,7 +31,6 @@ import {
 } from '../utils/scene';
 import {
   findClosestPointOnPolyline,
-  CARDINAL_PORTS,
   getConnectorAnchor,
   getConnectorPath,
   getConnectorPortAnchor,
@@ -90,13 +88,6 @@ const DEFAULT_CONNECTOR_LABEL_STYLE = {
 const PORT_VISIBILITY_DISTANCE = 72;
 const PORT_SNAP_DISTANCE = 8;
 const POINT_TOLERANCE = 0.5;
-const PORT_TIE_DISTANCE = 0.25;
-const PORT_PRIORITY: Record<CardinalConnectorPort, number> = {
-  top: 0,
-  right: 1,
-  bottom: 2,
-  left: 3
-};
 
 const pointsRoughlyEqual = (a: Vec2, b: Vec2) =>
   Math.abs(a.x - b.x) <= POINT_TOLERANCE && Math.abs(a.y - b.y) <= POINT_TOLERANCE;
@@ -137,7 +128,7 @@ interface SpacingDragState {
 
 interface ConnectionSnap {
   nodeId: string;
-  port: CardinalConnectorPort;
+  port: ConnectorPort;
   position: Vec2;
 }
 
@@ -202,7 +193,7 @@ type ResizeHandle = 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w' | 'nw';
 
 interface PortHint {
   nodeId: string;
-  port: CardinalConnectorPort;
+  port: ConnectorPort;
   position: Vec2;
   screen: Vec2;
   active: boolean;
@@ -1216,7 +1207,7 @@ const CanvasComponent = (
       const worldPoint = getWorldPoint(event);
       const screenPoint = getRelativePoint(event);
       const hints: PortHint[] = [];
-      let best: { hint: PortHint; distance: number; hovered: boolean } | null = null;
+      let best: { hint: PortHint; distance: number } | null = null;
 
       if (pending) {
         for (const node of nodes) {
@@ -1224,8 +1215,7 @@ const CanvasComponent = (
             continue;
           }
           const positions = getConnectorPortPositions(node);
-          const nodeHovered = hoveredNodeId === node.id;
-          for (const portKey of CARDINAL_PORTS) {
+          for (const portKey of Object.keys(positions) as ConnectorPort[]) {
             const position = positions[portKey];
             const screen = worldToScreen(position, transform);
             const dx = screen.x - screenPoint.x;
@@ -1240,20 +1230,8 @@ const CanvasComponent = (
                 active: false
               };
               hints.push(hint);
-              if (!best || distance < best.distance - PORT_TIE_DISTANCE) {
-                best = { hint, distance, hovered: nodeHovered };
-              } else if (best && Math.abs(distance - best.distance) <= PORT_TIE_DISTANCE) {
-                const currentHovered = nodeHovered;
-                const bestHovered = best.hovered;
-                if (currentHovered && !bestHovered) {
-                  best = { hint, distance, hovered: currentHovered };
-                } else if (currentHovered === bestHovered) {
-                  const currentPriority = PORT_PRIORITY[portKey];
-                  const bestPriority = PORT_PRIORITY[best.hint.port];
-                  if (currentPriority < bestPriority) {
-                    best = { hint, distance, hovered: currentHovered };
-                  }
-                }
+              if (!best || distance < best.distance) {
+                best = { hint, distance };
               }
             }
           }
