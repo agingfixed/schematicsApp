@@ -21,7 +21,9 @@ const TOOLBAR_OFFSET = 14;
 
 const arrowOptions = [
   { value: 'none', label: 'None' },
-  { value: 'triangle', label: 'Triangle' },
+  { value: 'triangle', label: 'Triangle (Inward)' },
+  { value: 'arrow', label: 'Arrow' },
+  { value: 'line-arrow', label: 'Line Arrow' },
   { value: 'diamond', label: 'Diamond' },
   { value: 'circle', label: 'Circle' }
 ] as const;
@@ -35,6 +37,18 @@ const modeOptions = [
   { value: 'orthogonal', label: 'Elbow' },
   { value: 'straight', label: 'Straight' }
 ] as const;
+
+const getLockedFillForShape = (
+  shape: ConnectorModel['style']['startArrow']['shape']
+): ConnectorModel['style']['startArrow']['fill'] | null => {
+  if (shape === 'line-arrow') {
+    return 'outlined';
+  }
+  if (shape === 'triangle' || shape === 'arrow') {
+    return 'filled';
+  }
+  return null;
+};
 
 export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
   connector,
@@ -113,6 +127,15 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
     return null;
   }
 
+  const startShape = connector.style.startArrow?.shape ?? 'none';
+  const endShape = connector.style.endArrow?.shape ?? 'none';
+  const startLockedFill = getLockedFillForShape(startShape);
+  const endLockedFill = getLockedFillForShape(endShape);
+  const startFillDisabled = startLockedFill !== null;
+  const endFillDisabled = endLockedFill !== null;
+  const startFillValue = startLockedFill ?? connector.style.startArrow?.fill ?? 'filled';
+  const endFillValue = endLockedFill ?? connector.style.endArrow?.fill ?? 'filled';
+
   const handleStrokeWidthChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const value = Number(event.target.value);
     if (Number.isFinite(value)) {
@@ -136,11 +159,17 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
     (event: React.ChangeEvent<HTMLSelectElement>) => {
       const shape = event.target.value as ConnectorModel['style']['startArrow']['shape'];
       const current = connector.style[key] ?? { shape: 'none', fill: 'filled' };
-      handleArrowChange(key, { ...current, shape });
+      const lockedFill = getLockedFillForShape(shape);
+      const nextFill = lockedFill ?? current.fill ?? 'filled';
+      handleArrowChange(key, { ...current, shape, fill: nextFill });
     };
 
   const handleArrowFillChange = (key: 'startArrow' | 'endArrow') =>
     (event: React.ChangeEvent<HTMLSelectElement>) => {
+      const currentShape = connector.style[key]?.shape;
+      if (currentShape && getLockedFillForShape(currentShape)) {
+        return;
+      }
       const fill = event.target.value as ConnectorModel['style']['startArrow']['fill'];
       const current = connector.style[key] ?? { shape: 'none', fill: 'filled' };
       handleArrowChange(key, { ...current, fill });
@@ -206,7 +235,7 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
       <div className="connector-toolbar__section">
         <label className="connector-toolbar__field">
           <span>Start</span>
-          <select value={connector.style.startArrow?.shape ?? 'none'} onChange={handleArrowShapeChange('startArrow')}>
+          <select value={startShape} onChange={handleArrowShapeChange('startArrow')}>
             {arrowOptions.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
@@ -216,7 +245,11 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
         </label>
         <label className="connector-toolbar__field">
           <span>Fill</span>
-          <select value={connector.style.startArrow?.fill ?? 'filled'} onChange={handleArrowFillChange('startArrow')}>
+          <select
+            value={startFillValue}
+            onChange={handleArrowFillChange('startArrow')}
+            disabled={startFillDisabled}
+          >
             {fillOptions.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
@@ -226,7 +259,7 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
         </label>
         <label className="connector-toolbar__field">
           <span>End</span>
-          <select value={connector.style.endArrow?.shape ?? 'none'} onChange={handleArrowShapeChange('endArrow')}>
+          <select value={endShape} onChange={handleArrowShapeChange('endArrow')}>
             {arrowOptions.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
@@ -236,7 +269,11 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
         </label>
         <label className="connector-toolbar__field">
           <span>Fill</span>
-          <select value={connector.style.endArrow?.fill ?? 'filled'} onChange={handleArrowFillChange('endArrow')}>
+          <select
+            value={endFillValue}
+            onChange={handleArrowFillChange('endArrow')}
+            disabled={endFillDisabled}
+          >
             {fillOptions.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}

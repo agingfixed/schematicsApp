@@ -103,7 +103,7 @@ const defaultConnectorStyle: ConnectorModel['style'] = {
   strokeWidth: 2,
   dashed: false,
   startArrow: { shape: 'none', fill: 'filled' },
-  endArrow: { shape: 'triangle', fill: 'filled' },
+  endArrow: { shape: 'arrow', fill: 'filled' },
   arrowSize: 1,
   cornerRadius: 12
 };
