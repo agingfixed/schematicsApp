@@ -154,6 +154,7 @@
   text-align: center;
   box-shadow: 0 6px 20px rgba(2, 6, 23, 0.45);
   min-height: 20px;
+  min-width: 36px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -164,6 +165,29 @@
   user-select: text;
   cursor: text;
   outline: none;
+}
+
+.diagram-connector__label[data-placeholder]:empty::before {
+  content: attr(data-placeholder);
+  color: rgba(226, 232, 240, 0.68);
+  pointer-events: none;
+}
+
+.diagram-connector__label.is-empty:not(.is-editing) {
+  color: rgba(248, 250, 252, 0.7);
+}
+
+.diagram-connector__segment {
+  pointer-events: stroke;
+  stroke: transparent;
+  stroke-width: calc(var(--connector-width, 2) + 12);
+  stroke-linecap: round;
+  fill: none;
+  transition: stroke 0.18s ease;
+}
+
+.diagram-connector__segment.is-hovered {
+  stroke: rgba(96, 165, 250, 0.45);
 }
 
 .diagram-connector__handle {
@@ -236,6 +260,26 @@
   pointer-events: none;
   z-index: 4;
   font-family: inherit;
+}
+
+.connector-port-hint {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid rgba(148, 163, 184, 0.85);
+  background: rgba(15, 23, 42, 0.92);
+  transform: translate(-50%, -50%);
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.4);
+  transition: border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease, opacity 0.18s ease;
+  opacity: 0.9;
+}
+
+.connector-port-hint.is-active {
+  border-color: #60a5fa;
+  background: rgba(59, 130, 246, 0.22);
+  box-shadow: 0 10px 24px rgba(59, 130, 246, 0.45);
+  opacity: 1;
 }
 
 .canvas-guides {

@@ -4,6 +4,7 @@ import {
   CanvasTransform,
   ConnectorModel,
   ConnectorLabelStyle,
+  ConnectorPort,
   NodeFontWeight,
   NodeKind,
   NodeModel,
@@ -69,7 +70,11 @@ interface SceneStoreActions {
     updates: Array<{ id: string; position: Vec2; size: { width: number; height: number } }>
   ) => void;
   removeNode: (id: string) => void;
-  addConnector: (sourceId: string, targetId: string) => ConnectorModel | null;
+  addConnector: (
+    sourceId: string,
+    targetId: string,
+    options?: { sourcePort?: ConnectorPort; targetPort?: ConnectorPort }
+  ) => ConnectorModel | null;
   updateConnector: (id: string, patch: Partial<ConnectorModel>) => void;
   removeConnector: (id: string) => void;
   setSelection: (selection: SelectionState) => void;
@@ -360,7 +365,7 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
         editingNodeId: current.editingNodeId === id ? null : current.editingNodeId
       };
     }),
-  addConnector: (sourceId, targetId) => {
+  addConnector: (sourceId, targetId, options) => {
     if (sourceId === targetId) {
       return null;
     }
@@ -379,6 +384,8 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
       mode: 'orthogonal',
       sourceId,
       targetId,
+      sourcePort: options?.sourcePort,
+      targetPort: options?.targetPort,
       style: { ...defaultConnectorStyle },
       labelPosition: 0.5,
       labelOffset: 18,

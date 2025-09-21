@@ -37,7 +37,9 @@ export interface NodeModel {
   shadow?: boolean;
 }
 
-export type ConnectorMode = 'orthogonal' | 'straight' | 'curved';
+export type ConnectorMode = 'orthogonal' | 'straight';
+
+export type ConnectorPort = 'top' | 'right' | 'bottom' | 'left' | 'center';
 
 export type ArrowShape = 'none' | 'triangle' | 'diamond' | 'circle';
 export type ArrowFill = 'filled' | 'outlined';
@@ -69,6 +71,8 @@ export interface ConnectorModel {
   mode: ConnectorMode;
   sourceId: string;
   targetId: string;
+  sourcePort?: ConnectorPort;
+  targetPort?: ConnectorPort;
   points?: Vec2[];
   label?: string;
   labelPosition?: number;
