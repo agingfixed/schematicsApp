@@ -2,7 +2,6 @@ import React, { useMemo, useRef, useState } from 'react';
 import { Canvas, CanvasHandle } from './components/Canvas';
 import { Toolbar } from './components/Toolbar';
 import { MiniMap } from './components/MiniMap';
-import { PropertiesPanel } from './components/PropertiesPanel';
 import {
   selectScene,
   selectShowMiniMap,
@@ -42,7 +41,6 @@ export const App: React.FC = () => {
             />
           )}
         </div>
-        <PropertiesPanel />
       </div>
     </div>
   );

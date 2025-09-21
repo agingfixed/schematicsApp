@@ -1,19 +1,22 @@
 import React, {
   ForwardedRef,
   forwardRef,
+  useCallback,
   useEffect,
   useImperativeHandle,
-  useRef,
-  useState
+  useRef
 } from 'react';
 import { NodeModel } from '../types/scene';
-import '../styles/selection-toolbar.css';
+import '../styles/inline-text-editor.css';
+
+type CaretPoint = { x: number; y: number };
 
 interface InlineTextEditorProps {
   node: NodeModel;
   bounds: { x: number; y: number; width: number; height: number } | null;
   isEditing: boolean;
   scale: number;
+  entryPoint: CaretPoint | null;
   onCommit: (value: string) => void;
   onCancel: () => void;
 }
@@ -23,40 +26,120 @@ export interface InlineTextEditorHandle {
   cancel: () => void;
 }
 
+type DocumentWithCaret = Document & {
+  caretRangeFromPoint?: (x: number, y: number) => Range | null;
+  caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null;
+};
+
+const placeCaretAtPoint = (element: HTMLElement, point: CaretPoint | null) => {
+  const selection = window.getSelection();
+  if (!selection) {
+    return;
+  }
+
+  selection.removeAllRanges();
+
+  let range: Range | null = null;
+  if (point) {
+    const doc = document as DocumentWithCaret;
+    if (typeof doc.caretRangeFromPoint === 'function') {
+      range = doc.caretRangeFromPoint(point.x, point.y) ?? null;
+    } else if (typeof doc.caretPositionFromPoint === 'function') {
+      const position = doc.caretPositionFromPoint(point.x, point.y);
+      if (position && position.offsetNode) {
+        range = document.createRange();
+        range.setStart(position.offsetNode, position.offset);
+        range.collapse(true);
+      }
+    }
+  }
+
+  if (range && element.contains(range.startContainer)) {
+    selection.addRange(range);
+    return;
+  }
+
+  const fallback = document.createRange();
+  fallback.selectNodeContents(element);
+  fallback.collapse(false);
+  selection.addRange(fallback);
+};
+
 const InlineTextEditorComponent = (
-  { node, bounds, isEditing, scale, onCommit, onCancel }: InlineTextEditorProps,
+  { node, bounds, isEditing, scale, entryPoint, onCommit, onCancel }: InlineTextEditorProps,
   ref: ForwardedRef<InlineTextEditorHandle>
 ) => {
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const [value, setValue] = useState(node.text);
+  const editorRef = useRef<HTMLDivElement>(null);
+  const valueRef = useRef(node.text);
+  const isComposingRef = useRef(false);
+  const cancelledRef = useRef(false);
 
-  useEffect(() => {
-    if (isEditing) {
-      setValue(node.text);
+  const readCurrentValue = useCallback(() => {
+    const element = editorRef.current;
+    if (!element) {
+      return valueRef.current;
     }
-  }, [isEditing, node.text]);
+    return element.innerText.replace(/\r/g, '');
+  }, []);
+
+  const commitValue = useCallback(() => {
+    const text = readCurrentValue();
+    valueRef.current = text;
+    onCommit(text);
+  }, [onCommit, readCurrentValue]);
+
+  const cancelEditing = useCallback(() => {
+    cancelledRef.current = true;
+    onCancel();
+  }, [onCancel]);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      commit: () => {
+        if (isEditing) {
+          commitValue();
+        }
+      },
+      cancel: () => {
+        if (isEditing) {
+          cancelEditing();
+        }
+      }
+    }),
+    [commitValue, cancelEditing, isEditing]
+  );
 
   useEffect(() => {
     if (!isEditing) {
+      valueRef.current = node.text;
       return;
     }
-    const textarea = textareaRef.current;
-    if (!textarea) {
+
+    const element = editorRef.current;
+    if (!element) {
       return;
     }
+
+    cancelledRef.current = false;
+    isComposingRef.current = false;
+    valueRef.current = node.text;
+    element.innerText = node.text;
+
     const frame = requestAnimationFrame(() => {
-      textarea.focus();
-      textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+      element.focus({ preventScroll: true });
+      placeCaretAtPoint(element, entryPoint);
     });
+
     return () => cancelAnimationFrame(frame);
-  }, [isEditing]);
+  }, [isEditing, node.text, entryPoint]);
 
   if (!isEditing || !bounds) {
     return null;
   }
 
-  const padding = 10 * scale;
-  const borderRadius = 14 * scale;
+  const paddingY = 10 * scale;
+  const paddingX = 14 * scale;
 
   const style: React.CSSProperties = {
     position: 'absolute',
@@ -64,63 +147,71 @@ const InlineTextEditorComponent = (
     top: bounds.y,
     width: bounds.width,
     height: bounds.height,
-    padding: `${padding}px`,
+    padding: `${paddingY}px ${paddingX}px`,
     fontSize: node.fontSize * scale,
     fontWeight: node.fontWeight,
     lineHeight: 1.3,
-    color: '#f8fafc',
-    background: 'rgba(15, 23, 42, 0.92)',
-    borderRadius,
-    border: `${1.2 * scale}px solid rgba(148, 163, 184, 0.5)`,
-    boxShadow: `0 ${18 * scale}px ${44 * scale}px rgba(2, 6, 23, 0.45)`,
-    resize: 'none',
-    outline: 'none',
-    whiteSpace: 'pre-wrap',
-    overflowWrap: 'break-word',
+    color: '#e2e8f0',
     textAlign: node.textAlign,
-    transformOrigin: 'top left',
-    backgroundClip: 'padding-box'
+    whiteSpace: 'pre-wrap',
+    wordBreak: 'break-word',
+    overflow: 'hidden',
+    background: 'transparent',
+    caretColor: '#f8fafc',
+    zIndex: 30
   };
 
-  const handleCommit = () => {
-    onCommit(value);
+  const handleInput = () => {
+    valueRef.current = readCurrentValue();
   };
 
-  useImperativeHandle(
-    ref,
-    () => ({
-      commit: handleCommit,
-      cancel: onCancel
-    }),
-    [value, onCommit, onCancel]
-  );
-
-  const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key === 'Enter' && !event.shiftKey) {
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Enter' && !event.shiftKey && !event.metaKey && !event.ctrlKey) {
+      if (isComposingRef.current) {
+        return;
+      }
       event.preventDefault();
-      handleCommit();
-    }
-    if (event.key === 'Escape') {
+      commitValue();
+    } else if (event.key === 'Escape') {
       event.preventDefault();
-      onCancel();
+      cancelEditing();
     }
   };
 
   const handleBlur = () => {
-    handleCommit();
+    if (isComposingRef.current || cancelledRef.current) {
+      return;
+    }
+    commitValue();
+  };
+
+  const handleCompositionStart = () => {
+    isComposingRef.current = true;
+  };
+
+  const handleCompositionEnd = () => {
+    isComposingRef.current = false;
+    valueRef.current = readCurrentValue();
   };
 
   return (
-    <textarea
-      ref={textareaRef}
+    <div
+      ref={editorRef}
       className="inline-text-editor"
       style={style}
-      value={value}
-      onChange={(event) => setValue(event.target.value)}
+      contentEditable
+      suppressContentEditableWarning
+      spellCheck={false}
+      role="textbox"
+      aria-multiline="true"
+      onInput={handleInput}
       onKeyDown={handleKeyDown}
       onBlur={handleBlur}
-      spellCheck={false}
+      onCompositionStart={handleCompositionStart}
+      onCompositionEnd={handleCompositionEnd}
       onPointerDown={(event) => event.stopPropagation()}
+      onPointerMove={(event) => event.stopPropagation()}
+      onPointerUp={(event) => event.stopPropagation()}
       onWheel={(event) => event.stopPropagation()}
     />
   );
