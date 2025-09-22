@@ -337,6 +337,62 @@ const CanvasComponent = (
     [nodes, connectors]
   );
 
+  const finalizePendingConnection = useCallback(
+    (pending: PendingConnection, dropEndpoint: ConnectorEndpoint) => {
+      if (pending.type === 'create') {
+        const source = pending.source;
+        if (
+          isAttachedConnectorEndpoint(dropEndpoint) &&
+          dropEndpoint.nodeId === source.nodeId
+        ) {
+          return;
+        }
+        if (
+          isAttachedConnectorEndpoint(source) &&
+          isAttachedConnectorEndpoint(dropEndpoint) &&
+          hasConnectorBetween(source, dropEndpoint)
+        ) {
+          return;
+        }
+        addConnector(source, dropEndpoint);
+        return;
+      }
+
+      const connector = connectors.find((item) => item.id === pending.connectorId);
+      if (!connector) {
+        return;
+      }
+      const otherEndpoint = pending.endpoint === 'source' ? connector.target : connector.source;
+      const skipSelfLoop =
+        isAttachedConnectorEndpoint(otherEndpoint) &&
+        isAttachedConnectorEndpoint(dropEndpoint) &&
+        otherEndpoint.nodeId === dropEndpoint.nodeId;
+
+      if (skipSelfLoop) {
+        return;
+      }
+
+      const duplicate =
+        isAttachedConnectorEndpoint(dropEndpoint) &&
+        isAttachedConnectorEndpoint(otherEndpoint) &&
+        (pending.endpoint === 'source'
+          ? hasConnectorBetween(dropEndpoint, otherEndpoint, connector.id)
+          : hasConnectorBetween(otherEndpoint, dropEndpoint, connector.id));
+
+      if (duplicate) {
+        return;
+      }
+
+      const patch: Partial<ConnectorModel> =
+        pending.endpoint === 'source'
+          ? { source: dropEndpoint, points: [] }
+          : { target: dropEndpoint, points: [] };
+      updateConnector(connector.id, patch);
+      setSelection({ nodeIds: [], connectorIds: [connector.id] });
+    },
+    [addConnector, connectors, hasConnectorBetween, setSelection, updateConnector]
+  );
+
   const getRelativePoint = (event: PointerEvent | React.PointerEvent) => {
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect) {
@@ -1375,20 +1431,13 @@ const CanvasComponent = (
       const pending = pendingConnection;
       if (pending) {
         const dropPoint = getWorldPoint(event);
-        const dropEndpoint: ConnectorEndpoint = { position: dropPoint };
-        if (pending.type === 'create') {
-          addConnector(pending.source, dropEndpoint);
+        let dropEndpoint: ConnectorEndpoint;
+        if (!pending.bypassSnap && pending.snapPort) {
+          dropEndpoint = { nodeId: pending.snapPort.nodeId, port: pending.snapPort.port };
         } else {
-          const connector = connectors.find((item) => item.id === pending.connectorId);
-          if (connector) {
-            const patch: Partial<ConnectorModel> =
-              pending.endpoint === 'source'
-                ? { source: dropEndpoint, points: [] }
-                : { target: dropEndpoint, points: [] };
-            updateConnector(connector.id, patch);
-            setSelection({ nodeIds: [], connectorIds: [connector.id] });
-          }
+          dropEndpoint = { position: dropPoint };
         }
+        finalizePendingConnection(pending, dropEndpoint);
       }
       setPendingConnection(null);
       setPortHints([]);
@@ -1569,56 +1618,12 @@ const CanvasComponent = (
       dropEndpoint = { position: dropPoint };
     }
 
-    if (pending.type === 'create') {
-      const source = pending.source;
-      if (
-        isAttachedConnectorEndpoint(dropEndpoint) &&
-        dropEndpoint.nodeId === source.nodeId
-      ) {
-        // Prevent creating loops to the same node.
-      } else {
-        if (
-          isAttachedConnectorEndpoint(source) &&
-          isAttachedConnectorEndpoint(dropEndpoint) &&
-          hasConnectorBetween(source, dropEndpoint)
-        ) {
-          // Skip creating duplicate connectors.
-        } else {
-          addConnector(source, dropEndpoint);
-        }
-      }
-    } else if (pending.type === 'reconnect') {
-      const connector = connectors.find((item) => item.id === pending.connectorId);
-      if (connector) {
-        const otherEndpoint = pending.endpoint === 'source' ? connector.target : connector.source;
-        const skipSelfLoop =
-          isAttachedConnectorEndpoint(otherEndpoint) &&
-          isAttachedConnectorEndpoint(dropEndpoint) &&
-          otherEndpoint.nodeId === dropEndpoint.nodeId;
-
-        if (!skipSelfLoop) {
-          const duplicate =
-            isAttachedConnectorEndpoint(dropEndpoint) &&
-            isAttachedConnectorEndpoint(otherEndpoint) &&
-            (pending.endpoint === 'source'
-              ? hasConnectorBetween(dropEndpoint, otherEndpoint, connector.id)
-              : hasConnectorBetween(otherEndpoint, dropEndpoint, connector.id));
-
-          if (!duplicate) {
-            const patch: Partial<ConnectorModel> =
-              pending.endpoint === 'source'
-                ? { source: dropEndpoint, points: [] }
-                : { target: dropEndpoint, points: [] };
-            updateConnector(connector.id, patch);
-            setSelection({ nodeIds: [], connectorIds: [connector.id] });
-          }
-        }
-      }
-    }
+    finalizePendingConnection(pending, dropEndpoint);
 
     setPendingConnection(null);
     connectionPointerRef.current = null;
     setPortHints([]);
+    releasePointerCapture(event.pointerId);
   };
 
   const handleSpacingHandlePointerDown = (
@@ -1901,6 +1906,7 @@ const CanvasComponent = (
 
     const worldPoint = getWorldPoint(event);
     connectionPointerRef.current = event.pointerId;
+    containerRef.current?.setPointerCapture(event.pointerId);
 
     if (!selectedConnectorIds.includes(connector.id)) {
       setSelection({ nodeIds: [], connectorIds: [connector.id] });

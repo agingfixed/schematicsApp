@@ -213,30 +213,11 @@
   stroke-width: 3;
 }
 
-.diagram-connector__endpoint {
-  pointer-events: all;
-  fill: rgba(15, 23, 42, 0.92);
-  stroke: #60a5fa;
-  stroke-width: 2;
-  cursor: grab;
-  transition: transform 0.15s ease, fill 0.2s ease, stroke 0.2s ease, opacity 0.2s ease;
-}
-
 .diagram-connector__endpoint-hit {
   pointer-events: all;
   fill: transparent;
   stroke: transparent;
   cursor: grab;
-}
-
-.diagram-connector__endpoint:hover {
-  transform: scale(1.12);
-  fill: rgba(37, 99, 235, 0.3);
-}
-
-.diagram-connector__endpoint-hit:hover + .diagram-connector__endpoint {
-  transform: scale(1.12);
-  fill: rgba(37, 99, 235, 0.3);
 }
 
 .diagram-connector__label-leader {
@@ -393,17 +374,8 @@
   box-shadow: 0 10px 24px rgba(45, 212, 191, 0.35);
 }
 
-.diagram-connector__endpoint:active {
-  transform: scale(0.9);
-  cursor: grabbing;
-}
-
 .diagram-connector__endpoint-hit:active {
   cursor: grabbing;
-}
-
-.diagram-connector__endpoint-hit:active + .diagram-connector__endpoint {
-  transform: scale(0.9);
 }
 
 .connector-pending {
