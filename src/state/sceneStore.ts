@@ -173,7 +173,7 @@ const initialState: SceneStoreState = {
   snap: {
     enabled: true,
     tolerance: 6,
-    showDistanceLabels: true,
+    showDistanceLabels: false,
     showSpacingHandles: true,
     snapToGrid: true
   },
