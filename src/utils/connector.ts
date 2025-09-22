@@ -1379,6 +1379,9 @@ export const getConnectorPath = (
   }
 
   if (connector.mode === 'elbow') {
+    enforcePortOrientation();
+    const reorthogonalized = ensureOrthogonalSegments(points);
+    points = sanitizePoints(reorthogonalized.map((point) => roundPoint(point)));
     for (let index = 0; index < points.length - 1; index += 1) {
       const current = points[index];
       const nextPoint = points[index + 1];
