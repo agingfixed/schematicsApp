@@ -132,10 +132,8 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
   ]);
 
   // Connectors avoid nodes by default; only an explicit `false` opts into
-  // overlapping other shapes. Straight connectors ignore avoidance so that
-  // their geometry remains a single segment.
-  const isStraight = connector.mode === 'straight';
-  const avoidNodesEnabled = !isStraight && connector.style.avoidNodes !== false;
+  // overlapping other shapes.
+  const avoidNodesEnabled = connector.style.avoidNodes !== false;
 
   if (!isVisible || !anchor) {
     return null;
@@ -166,9 +164,6 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
   };
 
   const handleAvoidNodesToggle = () => {
-    if (isStraight) {
-      return;
-    }
     onStyleChange({ avoidNodes: !avoidNodesEnabled });
   };
 
@@ -348,10 +343,6 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
           className={`connector-toolbar__button${avoidNodesEnabled ? '' : ' is-active'}`}
           onClick={handleAvoidNodesToggle}
           aria-pressed={!avoidNodesEnabled}
-          disabled={isStraight}
-          title={
-            isStraight ? 'Straight connectors always allow lines to pass behind nodes.' : undefined
-          }
         >
           {/*
             The label reflects the current avoidance mode so users can tell at

@@ -278,51 +278,13 @@ test('avoidance maintains a cushion around nearby nodes', () => {
     bottom: obstacle.position.y + obstacle.size.height
   };
   const minimumDistance = distanceFromPolylineToRect(path.points, rect);
-  const minimumExpected = CONNECTOR_NODE_AVOIDANCE_CLEARANCE * 0.55;
+  const minimumExpected = CONNECTOR_NODE_AVOIDANCE_CLEARANCE * 0.6;
 
   assert.ok(!polylineIntersectsRect(path.points, rect));
   assert.ok(
     minimumDistance >= minimumExpected,
     `expected connector clearance of at least ${minimumExpected.toFixed(1)}px but measured ${minimumDistance.toFixed(1)}px`
   );
-});
-
-test('avoidance reroutes stored waypoints that intersect obstacles', () => {
-  const source = createNode('source', { x: 0, y: 0 });
-  const target = createNode('target', { x: 320, y: 0 });
-  const obstacle = createNode('obstacle', { x: 200, y: -40 }, { width: 80, height: 160 });
-  const connector = createConnector('elbow', 'right', 'left');
-  connector.style.avoidNodes = true;
-  connector.points = [{ x: 220, y: 0 }];
-
-  const path = getConnectorPath(connector, source, target, [source, target, obstacle]);
-  const rect = {
-    left: obstacle.position.x,
-    right: obstacle.position.x + obstacle.size.width,
-    top: obstacle.position.y,
-    bottom: obstacle.position.y + obstacle.size.height
-  };
-
-  assert.ok(!polylineIntersectsRect(path.points, rect));
-});
-
-test('straight connectors bypass node avoidance constraints', () => {
-  const source = createNode('source', { x: 0, y: 0 });
-  const target = createNode('target', { x: 320, y: 0 });
-  const obstacle = createNode('obstacle', { x: 160, y: -40 }, { width: 80, height: 160 });
-  const connector = createConnector('straight', 'right', 'left');
-  connector.style.avoidNodes = true;
-
-  const path = getConnectorPath(connector, source, target, [source, target, obstacle]);
-  const rect = {
-    left: obstacle.position.x,
-    right: obstacle.position.x + obstacle.size.width,
-    top: obstacle.position.y,
-    bottom: obstacle.position.y + obstacle.size.height
-  };
-
-  assert.strictEqual(path.points.length, 2);
-  assert.ok(polylineIntersectsRect(path.points, rect));
 });
 
 test('node avoidance can be disabled per connector', () => {

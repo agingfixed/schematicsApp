@@ -1023,11 +1023,7 @@ export const getConnectorPath = (
   const end = cloneEndpointPosition(connector.target, targetNode);
 
   const strokeWidth = connector.style.strokeWidth ?? 2;
-  const preferAvoidance = connector.mode !== 'straight' && connector.style.avoidNodes !== false;
-  const baseClearance = Math.max(strokeWidth + 4, 12);
-  const clearance = preferAvoidance
-    ? Math.max(baseClearance, CONNECTOR_NODE_AVOIDANCE_CLEARANCE)
-    : baseClearance;
+  const clearance = Math.max(strokeWidth + 4, 12);
   const startStub =
     isAttachedConnectorEndpoint(connector.source) && sourceNode
       ? createPortStubPoint(start, connector.source.port, clearance)
@@ -1037,10 +1033,7 @@ export const getConnectorPath = (
       ? createPortStubPoint(end, connector.target.port, clearance)
       : null;
 
-  const routeStart = startStub ?? start;
-  const routeEnd = endStub ?? end;
-
-  const avoidNodesEnabled = preferAvoidance;
+  const avoidNodesEnabled = connector.style.avoidNodes !== false;
   const avoidanceAdjustments: AvoidanceAdjustments = {
     startAdjusted: false,
     endAdjusted: false
@@ -1049,122 +1042,27 @@ export const getConnectorPath = (
   let waypoints: Vec2[] = [];
   let points: Vec2[] = [];
 
-  const enforcePortOrientation = () => {
-    if (isAttachedConnectorEndpoint(connector.source) && sourceNode && points.length > 1) {
-      const first = points[0];
-      const second = points[1];
-      const port = connector.source.port;
-      const axis = PORT_AXIS[port];
-      const direction = PORT_DIRECTION[port];
-      const enforceOrientation = !avoidNodesEnabled || !avoidanceAdjustments.startAdjusted;
-      if (axis === 'horizontal') {
-        const dx = second.x - first.x;
-        const sign = Math.sign(dx || direction);
-        if (!enforceOrientation) {
-          const length = Math.hypot(second.x - first.x, second.y - first.y);
-          assertInvariant(length > EPSILON, 'Connector segment must extend away from the port.');
-        } else if (!nearlyEqual(first.y, second.y) || sign !== direction) {
-          const step = dx !== 0 ? Math.min(Math.abs(dx), NODE_AVOIDANCE_DETOUR) : NODE_AVOIDANCE_DETOUR;
-          const inserted = roundPoint({ x: first.x + direction * step, y: first.y });
-          if (!nearlyEqual(inserted.x, second.x) || !nearlyEqual(inserted.y, second.y)) {
-            points = [first, inserted, ...points.slice(1)];
-            if (points.length > 2) {
-              points[2] = roundPoint({ x: inserted.x, y: points[2].y });
-            }
-          } else {
-            points[1] = inserted;
-          }
-        }
-      } else {
-        const dy = second.y - first.y;
-        const sign = Math.sign(dy || direction);
-        if (!enforceOrientation) {
-          const length = Math.hypot(second.x - first.x, second.y - first.y);
-          assertInvariant(length > EPSILON, 'Connector segment must extend away from the port.');
-        } else if (!nearlyEqual(first.x, second.x) || sign !== direction) {
-          const step = dy !== 0 ? Math.min(Math.abs(dy), NODE_AVOIDANCE_DETOUR) : NODE_AVOIDANCE_DETOUR;
-          const inserted = roundPoint({ x: first.x, y: first.y + direction * step });
-          if (!nearlyEqual(inserted.x, second.x) || !nearlyEqual(inserted.y, second.y)) {
-            points = [first, inserted, ...points.slice(1)];
-            if (points.length > 2) {
-              points[2] = roundPoint({ x: points[2].x, y: inserted.y });
-            }
-          } else {
-            points[1] = inserted;
-          }
-        }
-      }
-    }
-
-    if (isAttachedConnectorEndpoint(connector.target) && targetNode && points.length > 1) {
-      const lastIndex = points.length - 1;
-      const last = points[lastIndex];
-      const prev = points[lastIndex - 1];
-      const port = connector.target.port;
-      const axis = PORT_AXIS[port];
-      const direction = -PORT_DIRECTION[port];
-      const enforceOrientation = !avoidNodesEnabled || !avoidanceAdjustments.endAdjusted;
-      if (axis === 'horizontal') {
-        const dx = last.x - prev.x;
-        const sign = Math.sign(dx || direction);
-        if (!enforceOrientation) {
-          const length = Math.hypot(last.x - prev.x, last.y - prev.y);
-          assertInvariant(length > EPSILON, 'Connector segment must approach the port.');
-        } else if (!nearlyEqual(last.y, prev.y) || sign !== direction) {
-          const step = dx !== 0 ? Math.min(Math.abs(dx), NODE_AVOIDANCE_DETOUR) : NODE_AVOIDANCE_DETOUR;
-          const inserted = roundPoint({ x: last.x - direction * step, y: last.y });
-          if (!nearlyEqual(inserted.x, prev.x) || !nearlyEqual(inserted.y, prev.y)) {
-            points = [...points.slice(0, lastIndex), inserted, last];
-            if (lastIndex - 1 >= 0) {
-              const adjustIndex = lastIndex - 1;
-              const current = points[adjustIndex];
-              points[adjustIndex] = roundPoint({ x: current.x, y: inserted.y });
-            }
-          } else {
-            points[lastIndex - 1] = inserted;
-          }
-        }
-      } else {
-        const dy = last.y - prev.y;
-        const sign = Math.sign(dy || direction);
-        if (!enforceOrientation) {
-          const length = Math.hypot(last.x - prev.x, last.y - prev.y);
-          assertInvariant(length > EPSILON, 'Connector segment must approach the port.');
-        } else if (!nearlyEqual(last.x, prev.x) || sign !== direction) {
-          const step = dy !== 0 ? Math.min(Math.abs(dy), NODE_AVOIDANCE_DETOUR) : NODE_AVOIDANCE_DETOUR;
-          const inserted = roundPoint({ x: last.x, y: last.y - direction * step });
-          if (!nearlyEqual(inserted.x, prev.x) || !nearlyEqual(inserted.y, prev.y)) {
-            points = [...points.slice(0, lastIndex), inserted, last];
-            if (lastIndex - 1 >= 0) {
-              const adjustIndex = lastIndex - 1;
-              const current = points[adjustIndex];
-              points[adjustIndex] = roundPoint({ x: inserted.x, y: current.y });
-            }
-          } else {
-            points[lastIndex - 1] = inserted;
-          }
-        }
-      }
-    }
-  };
-
   if (connector.mode === 'elbow') {
+    const routeStart = startStub ?? start;
+    const routeEnd = endStub ?? end;
     const base = baseWaypoints.length
       ? baseWaypoints
       : createDefaultOrthogonalWaypoints(routeStart, routeEnd);
-    const initialWaypoints = tidyOrthogonalWaypoints(routeStart, base, routeEnd);
+    waypoints = tidyOrthogonalWaypoints(routeStart, base, routeEnd);
 
     const rawPoints = [
       start,
       ...(startStub ? [startStub] : []),
-      ...initialWaypoints,
+      ...waypoints,
       ...(endStub ? [endStub] : []),
       end
     ];
     const orthogonal = ensureOrthogonalSegments(rawPoints);
     const roundedPoints = orthogonal.map((point) => roundPoint(point));
     points = sanitizePoints(roundedPoints);
+    waypoints = points.slice(1, points.length - 1).map((point) => ({ ...point }));
   } else if (connector.mode === 'straight') {
+    waypoints = [];
     const straightPoints = [start, end].map((point) => roundPoint(point));
     points = sanitizePoints(straightPoints);
   }
@@ -1181,37 +1079,108 @@ export const getConnectorPath = (
       .filter((node) => !exclude.has(node.id))
       .map((node) => expandNodeObstacle(node, 0));
     if (obstacles.length) {
-      const detectionObstacles =
-        CONNECTOR_NODE_AVOIDANCE_CLEARANCE > 0
-          ? obstacles.map((rect) => expandObstacleRect(rect, CONNECTOR_NODE_AVOIDANCE_CLEARANCE))
-          : obstacles;
       const avoided = adjustPolylineForObstacles(points, obstacles, avoidanceAdjustments);
       if (avoided.length >= 2) {
         points = avoided;
-        enforcePortOrientation();
-        points = sanitizePoints(points);
-
-        if (connector.mode === 'elbow' && polylineIntersectsAnyRect(points, detectionObstacles)) {
-          const originalPoints = points.map((point) => ({ ...point }));
-          const fallbackRoute = findOrthogonalRoute(routeStart, routeEnd, obstacles);
-          if (fallbackRoute && fallbackRoute.length >= 2) {
-            const fallbackPoints = [
-              start,
-              ...(startStub ? [startStub] : []),
-              ...fallbackRoute.slice(1, fallbackRoute.length - 1),
-              ...(endStub ? [endStub] : []),
-              end
-            ];
-            const fallbackOrthogonal = ensureOrthogonalSegments(fallbackPoints);
-            const fallbackRounded = fallbackOrthogonal.map((point) => roundPoint(point));
-            points = sanitizePoints(fallbackRounded);
-            enforcePortOrientation();
-            points = sanitizePoints(points);
-            if (polylineIntersectsAnyRect(points, detectionObstacles)) {
-              points = originalPoints;
+        if (isAttachedConnectorEndpoint(connector.source) && sourceNode && points.length > 1) {
+          const first = points[0];
+          const second = points[1];
+          const port = connector.source.port;
+          const axis = PORT_AXIS[port];
+          const direction = PORT_DIRECTION[port];
+          const enforceOrientation = !avoidNodesEnabled || !avoidanceAdjustments.startAdjusted;
+          if (axis === 'horizontal') {
+            const dx = second.x - first.x;
+            const sign = Math.sign(dx || direction);
+            if (!enforceOrientation) {
+              const length = Math.hypot(second.x - first.x, second.y - first.y);
+              assertInvariant(length > EPSILON, 'Connector segment must extend away from the port.');
+            } else if (!nearlyEqual(first.y, second.y) || sign !== direction) {
+              const step = dx !== 0 ? Math.min(Math.abs(dx), NODE_AVOIDANCE_DETOUR) : NODE_AVOIDANCE_DETOUR;
+              const inserted = roundPoint({ x: first.x + direction * step, y: first.y });
+              if (!nearlyEqual(inserted.x, second.x) || !nearlyEqual(inserted.y, second.y)) {
+                points = [first, inserted, ...points.slice(1)];
+                if (points.length > 2) {
+                  points[2] = roundPoint({ x: inserted.x, y: points[2].y });
+                }
+              } else {
+                points[1] = inserted;
+              }
+            }
+          } else {
+            const dy = second.y - first.y;
+            const sign = Math.sign(dy || direction);
+            if (!enforceOrientation) {
+              const length = Math.hypot(second.x - first.x, second.y - first.y);
+              assertInvariant(length > EPSILON, 'Connector segment must extend away from the port.');
+            } else if (!nearlyEqual(first.x, second.x) || sign !== direction) {
+              const step = dy !== 0 ? Math.min(Math.abs(dy), NODE_AVOIDANCE_DETOUR) : NODE_AVOIDANCE_DETOUR;
+              const inserted = roundPoint({ x: first.x, y: first.y + direction * step });
+              if (!nearlyEqual(inserted.x, second.x) || !nearlyEqual(inserted.y, second.y)) {
+                points = [first, inserted, ...points.slice(1)];
+                if (points.length > 2) {
+                  points[2] = roundPoint({ x: points[2].x, y: inserted.y });
+                }
+              } else {
+                points[1] = inserted;
+              }
             }
           }
         }
+
+        if (isAttachedConnectorEndpoint(connector.target) && targetNode && points.length > 1) {
+          const lastIndex = points.length - 1;
+          const last = points[lastIndex];
+          const prev = points[lastIndex - 1];
+          const port = connector.target.port;
+          const axis = PORT_AXIS[port];
+          const direction = -PORT_DIRECTION[port];
+          const enforceOrientation = !avoidNodesEnabled || !avoidanceAdjustments.endAdjusted;
+          if (axis === 'horizontal') {
+            const dx = last.x - prev.x;
+            const sign = Math.sign(dx || direction);
+            if (!enforceOrientation) {
+              const length = Math.hypot(last.x - prev.x, last.y - prev.y);
+              assertInvariant(length > EPSILON, 'Connector segment must approach the port.');
+            } else if (!nearlyEqual(last.y, prev.y) || sign !== direction) {
+              const step = dx !== 0 ? Math.min(Math.abs(dx), NODE_AVOIDANCE_DETOUR) : NODE_AVOIDANCE_DETOUR;
+              const inserted = roundPoint({ x: last.x - direction * step, y: last.y });
+              if (!nearlyEqual(inserted.x, prev.x) || !nearlyEqual(inserted.y, prev.y)) {
+                points = [...points.slice(0, lastIndex), inserted, last];
+                if (lastIndex - 1 >= 0) {
+                  const adjustIndex = lastIndex - 1;
+                  const current = points[adjustIndex];
+                  points[adjustIndex] = roundPoint({ x: current.x, y: inserted.y });
+                }
+              } else {
+                points[lastIndex - 1] = inserted;
+              }
+            }
+          } else {
+            const dy = last.y - prev.y;
+            const sign = Math.sign(dy || direction);
+            if (!enforceOrientation) {
+              const length = Math.hypot(last.x - prev.x, last.y - prev.y);
+              assertInvariant(length > EPSILON, 'Connector segment must approach the port.');
+            } else if (!nearlyEqual(last.x, prev.x) || sign !== direction) {
+              const step = dy !== 0 ? Math.min(Math.abs(dy), NODE_AVOIDANCE_DETOUR) : NODE_AVOIDANCE_DETOUR;
+              const inserted = roundPoint({ x: last.x, y: last.y - direction * step });
+              if (!nearlyEqual(inserted.x, prev.x) || !nearlyEqual(inserted.y, prev.y)) {
+                points = [...points.slice(0, lastIndex), inserted, last];
+                if (lastIndex - 1 >= 0) {
+                  const adjustIndex = lastIndex - 1;
+                  const current = points[adjustIndex];
+                  points[adjustIndex] = roundPoint({ x: inserted.x, y: current.y });
+                }
+              } else {
+                points[lastIndex - 1] = inserted;
+              }
+            }
+          }
+        }
+
+        points = sanitizePoints(points);
+        waypoints = points.slice(1, points.length - 1).map((point) => ({ ...point }));
       }
     }
   }
@@ -1325,8 +1294,6 @@ export const getConnectorPath = (
       assertInvariant(points.length <= 2, 'Straight connectors must not include extra waypoints.');
     }
   }
-
-  waypoints = points.slice(1, points.length - 1).map((point) => ({ ...point }));
 
   return {
     start,
