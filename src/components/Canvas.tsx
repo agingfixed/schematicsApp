@@ -75,6 +75,7 @@ import { ConnectorToolbar } from './ConnectorToolbar';
 import { ConnectorTextToolbar } from './ConnectorTextToolbar';
 import { InlineTextEditor, InlineTextEditorHandle } from './InlineTextEditor';
 import { useCommands } from '../state/commands';
+import { useFloatingMenuStore } from '../state/menuStore';
 import '../styles/canvas.css';
 
 const MIN_SCALE = 0.2;
@@ -314,6 +315,8 @@ const CanvasComponent = (
   const lastConnectorClickRef = useRef<{ connectorId: string; time: number } | null>(null);
   const pendingConnectorEditRef = useRef<{ connectorId: string; pointerId: number } | null>(null);
   const connectorLabelDragRef = useRef<ConnectorLabelDragState | null>(null);
+  const clearFloatingMenuPlacement = useFloatingMenuStore((state) => state.clearSharedPlacement);
+  const hadFloatingMenuRef = useRef(false);
 
   const hasConnectorBetween = useCallback(
     (source: AttachedConnectorEndpoint, target: AttachedConnectorEndpoint, ignoreId?: string) =>
@@ -432,6 +435,14 @@ const CanvasComponent = (
     }
     return connectors.find((item) => item.id === selectedConnectorIds[0]) ?? null;
   }, [connectors, selectedConnectorIds]);
+
+  useEffect(() => {
+    const hasMenu = Boolean(selectedConnector) || Boolean(selectedNode);
+    if (!hasMenu && hadFloatingMenuRef.current) {
+      clearFloatingMenuPlacement();
+    }
+    hadFloatingMenuRef.current = hasMenu;
+  }, [selectedConnector, selectedNode, clearFloatingMenuPlacement]);
 
   const selectedNodes = useMemo(
     () => nodes.filter((node) => selectedNodeIds.includes(node.id)),
@@ -1739,7 +1750,7 @@ const CanvasComponent = (
   };
 
   const handleConnectorPointerDown = (
-    event: React.PointerEvent<SVGPathElement>,
+    event: React.PointerEvent<SVGElement>,
     connector: ConnectorModel
   ) => {
     setLastPointerPosition(getRelativePoint(event));

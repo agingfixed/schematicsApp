@@ -17,7 +17,7 @@ interface DiagramConnectorProps {
   labelEditing: boolean;
   commitSignal: number;
   cancelSignal: number;
-  onPointerDown: (event: React.PointerEvent<SVGPathElement>) => void;
+  onPointerDown: (event: React.PointerEvent<SVGElement>) => void;
   onHandlePointerDown: (event: React.PointerEvent<SVGPathElement>, index: number) => void;
   onEndpointPointerDown: (
     event: React.PointerEvent<SVGCircleElement>,
@@ -452,19 +452,45 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
       {segments.map((segment) => {
         const isHovered = hoveredSegment === segment.index;
         const cursor = segment.axis === 'horizontal' ? 'ns-resize' : 'ew-resize';
+        const length = Math.hypot(segment.end.x - segment.start.x, segment.end.y - segment.start.y);
+        const showHandle =
+          selected && connector.mode === 'elbow' && length >= 6 && Number.isFinite(length);
+        const centerX = (segment.start.x + segment.end.x) / 2;
+        const centerY = (segment.start.y + segment.end.y) / 2;
         return (
-          <path
-            key={`${connector.id}-segment-${segment.index}`}
-            className={`diagram-connector__segment${isHovered ? ' is-hovered' : ''}`}
-            d={`M ${segment.start.x} ${segment.start.y} L ${segment.end.x} ${segment.end.y}`}
-            onPointerEnter={() => setHoveredSegment(segment.index)}
-            onPointerLeave={() => setHoveredSegment((value) => (value === segment.index ? null : value))}
-            onPointerDown={(event) => {
-              setHoveredSegment(segment.index);
-              onPointerDown(event);
-            }}
-            style={{ cursor }}
-          />
+          <React.Fragment key={`${connector.id}-segment-${segment.index}`}>
+            <path
+              className={`diagram-connector__segment${isHovered ? ' is-hovered' : ''}`}
+              d={`M ${segment.start.x} ${segment.start.y} L ${segment.end.x} ${segment.end.y}`}
+              onPointerEnter={() => setHoveredSegment(segment.index)}
+              onPointerLeave={() =>
+                setHoveredSegment((value) => (value === segment.index ? null : value))
+              }
+              onPointerDown={(event) => {
+                setHoveredSegment(segment.index);
+                onPointerDown(event);
+              }}
+              style={{ cursor }}
+            />
+            {showHandle && (
+              <circle
+                className={`diagram-connector__segment-handle${isHovered ? ' is-hovered' : ''}`}
+                cx={centerX}
+                cy={centerY}
+                r={6}
+                onPointerEnter={() => setHoveredSegment(segment.index)}
+                onPointerLeave={() =>
+                  setHoveredSegment((value) => (value === segment.index ? null : value))
+                }
+                onPointerDown={(event) => {
+                  event.stopPropagation();
+                  setHoveredSegment(segment.index);
+                  onPointerDown(event);
+                }}
+                style={{ cursor }}
+              />
+            )}
+          </React.Fragment>
         );
       })}
       <path
