@@ -1,5 +1,5 @@
 import React from 'react';
-import { NodeModel, Tool } from '../types/scene';
+import { CardinalConnectorPort, NodeModel, Tool } from '../types/scene';
 
 interface DiagramNodeProps {
   node: NodeModel;
@@ -93,12 +93,13 @@ export const DiagramNode: React.FC<DiagramNodeProps> = ({
   const cursor = tool === 'connector' ? 'crosshair' : 'move';
 
   const connectorHandleOffset = 18;
-  const connectorHandles = [
+  const connectorHandles: Array<{ key: CardinalConnectorPort; x: number; y: number }> = [
     { key: 'top', x: node.size.width / 2, y: -connectorHandleOffset },
     { key: 'right', x: node.size.width + connectorHandleOffset, y: node.size.height / 2 },
     { key: 'bottom', x: node.size.width / 2, y: node.size.height + connectorHandleOffset },
     { key: 'left', x: -connectorHandleOffset, y: node.size.height / 2 }
   ];
+  const connectorHandleRadius = 9;
 
   const labelClassName = `diagram-node__label ${editing ? 'is-editing' : ''}`;
 
@@ -133,7 +134,8 @@ export const DiagramNode: React.FC<DiagramNodeProps> = ({
               className="diagram-node__connector-handle"
               cx={handle.x}
               cy={handle.y}
-              r={7}
+              r={connectorHandleRadius}
+              data-port={handle.key}
             />
           ))}
         </g>
