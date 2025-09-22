@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   CARDINAL_PORTS,
+  CONNECTOR_NODE_AVOIDANCE_CLEARANCE,
   cloneConnectorEndpoint,
   getConnectorPath,
   getConnectorPortPositions,
@@ -91,6 +92,27 @@ const polylineIntersectsRect = (points: Vec2[], rect: { left: number; right: num
     }
   }
   return false;
+};
+
+const distanceFromSegmentToRect = (a: Vec2, b: Vec2, rect: { left: number; right: number; top: number; bottom: number }) => {
+  const segLeft = Math.min(a.x, b.x);
+  const segRight = Math.max(a.x, b.x);
+  const segTop = Math.min(a.y, b.y);
+  const segBottom = Math.max(a.y, b.y);
+  const dx = Math.max(rect.left - segRight, 0, segLeft - rect.right);
+  const dy = Math.max(rect.top - segBottom, 0, segTop - rect.bottom);
+  return Math.hypot(dx, dy);
+};
+
+const distanceFromPolylineToRect = (points: Vec2[], rect: { left: number; right: number; top: number; bottom: number }) => {
+  if (polylineIntersectsRect(points, rect)) {
+    return 0;
+  }
+  let best = Number.POSITIVE_INFINITY;
+  for (let index = 0; index < points.length - 1; index += 1) {
+    best = Math.min(best, distanceFromSegmentToRect(points[index], points[index + 1], rect));
+  }
+  return best;
 };
 
 test('cardinal connector ports recognise the supported values', () => {
@@ -239,6 +261,30 @@ test('elbow connectors avoid intermediate nodes when avoidance is enabled', () =
   };
 
   assert.ok(!polylineIntersectsRect(path.points, rect));
+});
+
+test('avoidance maintains a cushion around nearby nodes', () => {
+  const source = createNode('source', { x: 0, y: 0 });
+  const target = createNode('target', { x: 320, y: 0 });
+  const obstacle = createNode('obstacle', { x: 180, y: 70 }, { width: 80, height: 80 });
+  const connector = createConnector('elbow', 'right', 'left');
+  connector.style.avoidNodes = true;
+
+  const path = getConnectorPath(connector, source, target, [source, target, obstacle]);
+  const rect = {
+    left: obstacle.position.x,
+    right: obstacle.position.x + obstacle.size.width,
+    top: obstacle.position.y,
+    bottom: obstacle.position.y + obstacle.size.height
+  };
+  const minimumDistance = distanceFromPolylineToRect(path.points, rect);
+  const minimumExpected = CONNECTOR_NODE_AVOIDANCE_CLEARANCE * 0.6;
+
+  assert.ok(!polylineIntersectsRect(path.points, rect));
+  assert.ok(
+    minimumDistance >= minimumExpected,
+    `expected connector clearance of at least ${minimumExpected.toFixed(1)}px but measured ${minimumDistance.toFixed(1)}px`
+  );
 });
 
 test('node avoidance can be disabled per connector', () => {
