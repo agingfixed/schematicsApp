@@ -5,12 +5,12 @@
   z-index: 20;
   background: rgba(15, 23, 42, 0.94);
   backdrop-filter: blur(16px);
-  border-radius: 14px;
-  padding: 12px 16px;
+  border-radius: calc(14px * var(--menu-scale));
+  padding: calc(12px * var(--menu-scale)) calc(16px * var(--menu-scale));
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  min-width: 260px;
+  gap: calc(10px * var(--menu-scale));
+  min-width: calc(260px * var(--menu-scale));
   box-shadow: 0 24px 48px rgba(2, 6, 23, 0.5);
   color: #e2e8f0;
   pointer-events: auto;
@@ -20,15 +20,15 @@
 .connector-toolbar__section {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: calc(12px * var(--menu-scale));
   flex-wrap: wrap;
 }
 
 .connector-toolbar__field {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  font-size: 12px;
+  gap: calc(4px * var(--menu-scale));
+  font-size: calc(12px * var(--menu-scale));
 }
 
 .connector-toolbar__field input[type='number'],
@@ -36,23 +36,23 @@
 .connector-toolbar__field input[type='range'] {
   background: rgba(30, 41, 59, 0.85);
   border: 1px solid rgba(148, 163, 184, 0.2);
-  border-radius: 8px;
-  padding: 4px 8px;
+  border-radius: calc(8px * var(--menu-scale));
+  padding: calc(4px * var(--menu-scale)) calc(8px * var(--menu-scale));
   color: #e2e8f0;
-  font-size: 12px;
-  min-width: 72px;
+  font-size: calc(12px * var(--menu-scale));
+  min-width: calc(72px * var(--menu-scale));
 }
 
 .connector-toolbar__field input[type='range'] {
-  min-width: 120px;
+  min-width: calc(120px * var(--menu-scale));
 }
 
 .connector-toolbar__field input[type='color'] {
   padding: 0;
   border: none;
-  width: 36px;
-  height: 24px;
-  border-radius: 6px;
+  width: calc(36px * var(--menu-scale));
+  height: calc(24px * var(--menu-scale));
+  border-radius: calc(6px * var(--menu-scale));
   background: transparent;
 }
 
@@ -60,9 +60,9 @@
   background: rgba(37, 99, 235, 0.18);
   color: #bfdbfe;
   border: 1px solid rgba(96, 165, 250, 0.3);
-  border-radius: 8px;
-  padding: 6px 12px;
-  font-size: 12px;
+  border-radius: calc(8px * var(--menu-scale));
+  padding: calc(6px * var(--menu-scale)) calc(12px * var(--menu-scale));
+  font-size: calc(12px * var(--menu-scale));
   cursor: pointer;
   transition: background 0.15s ease, border 0.15s ease;
 }
@@ -79,5 +79,5 @@
 
 .connector-toolbar__section--actions {
   justify-content: flex-end;
-  gap: 8px;
+  gap: calc(8px * var(--menu-scale));
 }
