@@ -36,8 +36,14 @@ const AUTO_COLLAPSE_ANGLE = (5 * Math.PI) / 180;
 const MIN_SEGMENT_LENGTH = 6;
 const ALIGNMENT_SNAP_DISTANCE = 6;
 const ROUNDING_STEP = 0.5;
-const NODE_AVOIDANCE_PADDING = 18;
+/**
+ * Default clearance (in pixels) between connector segments and nearby nodes.
+ * Adjust this export to tighten or loosen the avoidance cushion globally.
+ */
+export const CONNECTOR_NODE_AVOIDANCE_CLEARANCE = 18;
+const NODE_AVOIDANCE_PADDING = CONNECTOR_NODE_AVOIDANCE_CLEARANCE;
 const NODE_AVOIDANCE_DETOUR = 8;
+const MAX_AVOIDANCE_PASSES = 4;
 export const CARDINAL_PORTS: CardinalConnectorPort[] = ['top', 'right', 'bottom', 'left'];
 const CARDINAL_PORT_LOOKUP = new Set<string>(CARDINAL_PORTS);
 
@@ -302,6 +308,13 @@ const expandNodeObstacle = (node: NodeModel, padding: number): ObstacleRect => (
   bottom: node.position.y + node.size.height + padding
 });
 
+const expandObstacleRect = (rect: ObstacleRect, padding: number): ObstacleRect => ({
+  left: rect.left - padding,
+  right: rect.right + padding,
+  top: rect.top - padding,
+  bottom: rect.bottom + padding
+});
+
 const pushPointIfNeeded = (list: Vec2[], point: Vec2) => {
   const rounded = roundPoint(point);
   const last = list[list.length - 1];
@@ -411,6 +424,15 @@ const axisSegmentCrossesRect = (a: Vec2, b: Vec2, rect: ObstacleRect): boolean =
 
 const segmentIntersectsAnyRect = (a: Vec2, b: Vec2, obstacles: ObstacleRect[]) =>
   obstacles.some((rect) => segmentIntersectsRect(a, b, rect));
+
+const polylineIntersectsAnyRect = (points: Vec2[], obstacles: ObstacleRect[]) => {
+  for (let index = 0; index < points.length - 1; index += 1) {
+    if (segmentIntersectsAnyRect(points[index], points[index + 1], obstacles)) {
+      return true;
+    }
+  }
+  return false;
+};
 
 const createDefaultOrthogonalWaypoints = (start: Vec2, end: Vec2): Vec2[] => {
   const dx = Math.abs(end.x - start.x);
@@ -909,37 +931,70 @@ const adjustPolylineForObstacles = (
     return points.map((point) => clonePoint(point));
   }
 
-  const adjusted: Vec2[] = [roundPoint(points[0])];
+  const detectionObstacles =
+    CONNECTOR_NODE_AVOIDANCE_CLEARANCE > 0
+      ? obstacles.map((rect) => expandObstacleRect(rect, CONNECTOR_NODE_AVOIDANCE_CLEARANCE))
+      : obstacles;
+  // The padded obstacles let us detect potential collisions before the polyline
+  // would actually clip a node, which keeps the visible path clear of nearby
+  // node bodies by the configured clearance distance.
 
-  for (let index = 0; index < points.length - 1; index += 1) {
-    const start = roundPoint(points[index]);
-    const end = roundPoint(points[index + 1]);
+  const adjustOnce = (input: Vec2[]): { result: Vec2[]; changed: boolean } => {
+    const adjusted: Vec2[] = [roundPoint(input[0])];
+    let changed = false;
 
-    if (!segmentIntersectsAnyRect(start, end, obstacles)) {
-      pushPointIfNeeded(adjusted, end);
-      continue;
-    }
+    for (let index = 0; index < input.length - 1; index += 1) {
+      const start = roundPoint(input[index]);
+      const end = roundPoint(input[index + 1]);
 
-    if (adjustments) {
-      if (index === 0) {
-        adjustments.startAdjusted = true;
+      if (!segmentIntersectsAnyRect(start, end, detectionObstacles)) {
+        pushPointIfNeeded(adjusted, end);
+        continue;
       }
-      if (index === points.length - 2) {
-        adjustments.endAdjusted = true;
+
+      if (adjustments) {
+        if (index === 0) {
+          adjustments.startAdjusted = true;
+        }
+        if (index === input.length - 2) {
+          adjustments.endAdjusted = true;
+        }
+      }
+
+      const route = findOrthogonalRoute(start, end, obstacles);
+      if (!route) {
+        pushPointIfNeeded(adjusted, end);
+        continue;
+      }
+
+      if (route.length > 2) {
+        changed = true;
+      }
+
+      for (let routeIndex = 1; routeIndex < route.length; routeIndex += 1) {
+        pushPointIfNeeded(adjusted, route[routeIndex]);
       }
     }
 
-    const route = findOrthogonalRoute(start, end, obstacles);
-    if (!route) {
-      pushPointIfNeeded(adjusted, end);
-      continue;
+    return { result: sanitizePoints(adjusted), changed };
+  };
+
+  let current = points.map((point) => clonePoint(point));
+
+  for (let pass = 0; pass < MAX_AVOIDANCE_PASSES; pass += 1) {
+    const { result, changed } = adjustOnce(current);
+    current = result;
+
+    if (!changed) {
+      break;
     }
-    for (let routeIndex = 1; routeIndex < route.length; routeIndex += 1) {
-      pushPointIfNeeded(adjusted, route[routeIndex]);
+
+    if (!polylineIntersectsAnyRect(current, detectionObstacles)) {
+      break;
     }
   }
 
-  return sanitizePoints(adjusted);
+  return current;
 };
 
 const cloneEndpointPosition = (

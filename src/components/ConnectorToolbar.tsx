@@ -131,6 +131,8 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
     placementOptions
   ]);
 
+  // Connectors avoid nodes by default; only an explicit `false` opts into
+  // overlapping other shapes.
   const avoidNodesEnabled = connector.style.avoidNodes !== false;
 
   if (!isVisible || !anchor) {
@@ -245,14 +247,6 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
         >
           {connector.style.dashed ? 'Dashed' : 'Solid'}
         </button>
-        <button
-          type="button"
-          className={`connector-toolbar__button${avoidNodesEnabled ? ' is-active' : ''}`}
-          onClick={handleAvoidNodesToggle}
-          aria-pressed={avoidNodesEnabled}
-        >
-          {avoidNodesEnabled ? 'Avoid nodes' : 'Allow overlap'}
-        </button>
       </div>
       <div className="connector-toolbar__section">
         <label className="connector-toolbar__field">
@@ -343,6 +337,19 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
       <div className="connector-toolbar__section connector-toolbar__section--actions">
         <button type="button" className="connector-toolbar__button" onClick={onFlipDirection}>
           Flip
+        </button>
+        <button
+          type="button"
+          className={`connector-toolbar__button${avoidNodesEnabled ? '' : ' is-active'}`}
+          onClick={handleAvoidNodesToggle}
+          aria-pressed={!avoidNodesEnabled}
+        >
+          {/*
+            The label reflects the current avoidance mode so users can tell at
+            a glance whether connectors will hug nodes (Avoid On) or are
+            allowed to pass beneath them (Avoid Off).
+          */}
+          {avoidNodesEnabled ? 'Avoid On' : 'Avoid Off'}
         </button>
         <button type="button" className="connector-toolbar__button" onClick={onTidyPath}>
           Tidy
