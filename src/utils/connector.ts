@@ -31,9 +31,9 @@ const assertInvariant = (condition: unknown, message: string) => {
     throw new Error(message);
   }
 };
-const AUTO_COLLAPSE_DISTANCE = 6;
-const AUTO_COLLAPSE_ANGLE = (5 * Math.PI) / 180;
-const MIN_SEGMENT_LENGTH = 6;
+const AUTO_COLLAPSE_DISTANCE = 10;
+const AUTO_COLLAPSE_ANGLE = (9 * Math.PI) / 180;
+const MIN_SEGMENT_LENGTH = 8;
 const ALIGNMENT_SNAP_DISTANCE = 6;
 const ROUNDING_STEP = 0.5;
 /**

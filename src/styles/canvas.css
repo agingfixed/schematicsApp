@@ -193,6 +193,25 @@
   stroke: rgba(96, 165, 250, 0.45);
 }
 
+.diagram-connector__segment-handle {
+  pointer-events: all;
+  fill: rgba(59, 130, 246, 0.9);
+  stroke: #bfdbfe;
+  stroke-width: 1.5;
+  filter: drop-shadow(0 0 4px rgba(59, 130, 246, 0.35));
+  transition: transform 0.15s ease, fill 0.15s ease, stroke 0.15s ease;
+}
+
+.diagram-connector__segment-handle.is-hovered {
+  transform: scale(1.1);
+  fill: rgba(96, 165, 250, 0.95);
+  stroke: #e0f2fe;
+}
+
+.diagram-connector__segment-handle:active {
+  transform: scale(0.95);
+}
+
 .diagram-connector__handle {
   pointer-events: all;
   fill: none;
