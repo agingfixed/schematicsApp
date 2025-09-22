@@ -234,6 +234,21 @@ test('elbow connectors remain orthogonal and perpendicular at ports', () => {
   }
 });
 
+test('elbow connectors keep the outward stub when targets sit behind the source', () => {
+  const source = createNode('source', { x: 0, y: 0 }, { width: 200, height: 120 });
+  const target = createNode('target', { x: -120, y: 0 }, { width: 200, height: 120 });
+  const connector = createConnector('elbow', 'right', 'left');
+
+  const path = getConnectorPath(connector, source, target, [source, target]);
+
+  assert.ok(path.points.length >= 3, 'expected connector to include a stub segment');
+  const first = path.points[0];
+  const second = path.points[1];
+
+  assert.ok(Math.abs(second.y - first.y) < 1e-6, 'stub should remain horizontal');
+  assert.ok(second.x - first.x > 0, 'stub should extend outward from the right port');
+});
+
 test('straight connectors produce a single segment between ports', () => {
   const source = createNode('source', { x: 0, y: 0 });
   const target = createNode('target', { x: 320, y: 200 });
