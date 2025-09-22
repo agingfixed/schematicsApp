@@ -1,4 +1,4 @@
-import React, { useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { ConnectorModel } from '../types/scene';
 import { FloatingMenuChrome } from './FloatingMenuChrome';
 import { useFloatingMenuDrag } from '../hooks/useFloatingMenuDrag';
@@ -13,6 +13,7 @@ interface ConnectorTextToolbarProps {
   isVisible: boolean;
   onChange: (next: ConnectorModel['labelStyle']) => void;
   pointerPosition: { x: number; y: number } | null;
+  onPointerInteractionChange?: (active: boolean) => void;
 }
 
 const TOOLBAR_OFFSET = 12;
@@ -30,11 +31,44 @@ export const ConnectorTextToolbar: React.FC<ConnectorTextToolbarProps> = ({
   viewportSize,
   isVisible,
   onChange,
-  pointerPosition
+  pointerPosition,
+  onPointerInteractionChange
 }) => {
   const toolbarRef = useRef<HTMLDivElement>(null);
+  const pointerInteractionCleanupRef = useRef<(() => void) | null>(null);
 
   const labelStyle = { ...DEFAULT_STYLE, ...connector.labelStyle };
+
+  const handleToolbarPointerDownCapture = useCallback(() => {
+    if (!onPointerInteractionChange) {
+      return;
+    }
+    onPointerInteractionChange(true);
+    if (pointerInteractionCleanupRef.current) {
+      pointerInteractionCleanupRef.current();
+      pointerInteractionCleanupRef.current = null;
+    }
+    const handlePointerUp = () => {
+      onPointerInteractionChange(false);
+      document.removeEventListener('pointerup', handlePointerUp, true);
+      document.removeEventListener('pointercancel', handlePointerUp, true);
+      pointerInteractionCleanupRef.current = null;
+    };
+    document.addEventListener('pointerup', handlePointerUp, true);
+    document.addEventListener('pointercancel', handlePointerUp, true);
+    pointerInteractionCleanupRef.current = () => {
+      document.removeEventListener('pointerup', handlePointerUp, true);
+      document.removeEventListener('pointercancel', handlePointerUp, true);
+    };
+  }, [onPointerInteractionChange]);
+
+  useEffect(() => () => {
+    if (pointerInteractionCleanupRef.current) {
+      pointerInteractionCleanupRef.current();
+      pointerInteractionCleanupRef.current = null;
+    }
+    onPointerInteractionChange?.(false);
+  }, [onPointerInteractionChange]);
 
   const {
     menuState,
@@ -136,6 +170,7 @@ export const ConnectorTextToolbar: React.FC<ConnectorTextToolbarProps> = ({
       style={style}
       data-free={menuState.isFree || undefined}
       data-dragging={isDragging || undefined}
+      onPointerDownCapture={handleToolbarPointerDownCapture}
     >
       <FloatingMenuChrome
         title="Connector label"

@@ -85,6 +85,7 @@ const FIT_PADDING = 160;
 const DOUBLE_CLICK_DELAY = 320;
 const DEFAULT_CONNECTOR_LABEL_POSITION = 0.5;
 const DEFAULT_CONNECTOR_LABEL_OFFSET = 18;
+const MAX_CONNECTOR_LABEL_OFFSET = 120;
 const DEFAULT_CONNECTOR_LABEL_STYLE = {
   fontSize: 14,
   fontWeight: 600 as const,
@@ -114,6 +115,9 @@ const PENDING_CONNECTOR_STYLE: ConnectorModel['style'] = {
   arrowSize: 1,
   cornerRadius: 12
 };
+
+const clampConnectorLabelOffset = (value: number) =>
+  Math.max(-MAX_CONNECTOR_LABEL_OFFSET, Math.min(MAX_CONNECTOR_LABEL_OFFSET, value));
 
 const pointsRoughlyEqual = (a: Vec2, b: Vec2) =>
   Math.abs(a.x - b.x) <= POINT_TOLERANCE && Math.abs(a.y - b.y) <= POINT_TOLERANCE;
@@ -318,8 +322,18 @@ const CanvasComponent = (
   const lastConnectorClickRef = useRef<{ connectorId: string; time: number } | null>(null);
   const pendingConnectorEditRef = useRef<{ connectorId: string; pointerId: number } | null>(null);
   const connectorLabelDragRef = useRef<ConnectorLabelDragState | null>(null);
+  const connectorLabelToolbarInteractionRef = useRef(false);
   const clearFloatingMenuPlacement = useFloatingMenuStore((state) => state.clearSharedPlacement);
   const hadFloatingMenuRef = useRef(false);
+
+  const isConnectorLabelToolbarInteracting = useCallback(
+    () => connectorLabelToolbarInteractionRef.current,
+    []
+  );
+
+  const setConnectorLabelToolbarInteracting = useCallback((active: boolean) => {
+    connectorLabelToolbarInteractionRef.current = active;
+  }, []);
 
   const hasConnectorBetween = useCallback(
     (source: AttachedConnectorEndpoint, target: AttachedConnectorEndpoint, ignoreId?: string) =>
@@ -520,7 +534,9 @@ const CanvasComponent = (
       return null;
     }
     const position = selectedConnector.labelPosition ?? DEFAULT_CONNECTOR_LABEL_POSITION;
-    const offset = selectedConnector.labelOffset ?? DEFAULT_CONNECTOR_LABEL_OFFSET;
+    const offset = clampConnectorLabelOffset(
+      selectedConnector.labelOffset ?? DEFAULT_CONNECTOR_LABEL_OFFSET
+    );
     const { point, segmentIndex } = getPointAtRatio(geometry.points, position);
     const normal = getNormalAtRatio(geometry.points, segmentIndex);
     const labelCenter = {
@@ -697,13 +713,15 @@ const CanvasComponent = (
     (connectorId: string, value: string) => {
       updateConnector(connectorId, { label: value.trim().length ? value : undefined });
       setEditingConnectorId((current) => (current === connectorId ? null : current));
+      setConnectorLabelToolbarInteracting(false);
     },
-    [updateConnector]
+    [setConnectorLabelToolbarInteracting, updateConnector]
   );
 
   const handleConnectorLabelCancel = useCallback(() => {
+    setConnectorLabelToolbarInteracting(false);
     setEditingConnectorId(null);
-  }, []);
+  }, [setConnectorLabelToolbarInteracting]);
 
   const handleConnectorRequestLabelEdit = useCallback(
     (connectorId: string) => {
@@ -712,9 +730,15 @@ const CanvasComponent = (
       }
       commitEditingIfNeeded();
       setSelection({ nodeIds: [], connectorIds: [connectorId] });
+      setConnectorLabelToolbarInteracting(false);
       setEditingConnectorId(connectorId);
     },
-    [commitEditingIfNeeded, editingConnectorId, setSelection]
+    [
+      commitEditingIfNeeded,
+      editingConnectorId,
+      setConnectorLabelToolbarInteracting,
+      setSelection
+    ]
   );
 
   const handleConnectorStyleChange = useCallback(
@@ -1162,7 +1186,7 @@ const CanvasComponent = (
       const normal = getNormalAtRatio(geometry.points, closest.index);
       const offsetRaw =
         (worldPoint.x - closest.point.x) * normal.x + (worldPoint.y - closest.point.y) * normal.y;
-      const offset = Math.max(-280, Math.min(280, offsetRaw));
+      const offset = clampConnectorLabelOffset(offsetRaw);
       labelDrag.lastPosition = snappedPosition;
       labelDrag.lastOffset = offset;
       labelDrag.moved = true;
@@ -1496,6 +1520,7 @@ const CanvasComponent = (
 
     if (!handled && connectorEditRequest) {
       setSelection({ nodeIds: [], connectorIds: [connectorEditRequest] });
+      setConnectorLabelToolbarInteracting(false);
       setEditingConnectorId(connectorEditRequest);
       handled = true;
     }
@@ -1796,6 +1821,7 @@ const CanvasComponent = (
 
     const now = performance.now();
     const lastClick = lastConnectorClickRef.current;
+    const trimmedLabel = connector.label?.trim() ?? '';
     const allowEdit =
       willBeSingleSelected &&
       !event.shiftKey &&
@@ -1805,6 +1831,7 @@ const CanvasComponent = (
 
     if (
       allowEdit &&
+      trimmedLabel.length === 0 &&
       lastClick &&
       lastClick.connectorId === connector.id &&
       now - lastClick.time < DOUBLE_CLICK_DELAY
@@ -2020,13 +2047,17 @@ const CanvasComponent = (
     }
 
     beginTransaction();
+    const originalPosition = connector.labelPosition ?? DEFAULT_CONNECTOR_LABEL_POSITION;
+    const originalOffset = clampConnectorLabelOffset(
+      connector.labelOffset ?? DEFAULT_CONNECTOR_LABEL_OFFSET
+    );
     connectorLabelDragRef.current = {
       pointerId: event.pointerId,
       connectorId: connector.id,
-      originalPosition: connector.labelPosition ?? DEFAULT_CONNECTOR_LABEL_POSITION,
-      originalOffset: connector.labelOffset ?? DEFAULT_CONNECTOR_LABEL_OFFSET,
-      lastPosition: connector.labelPosition ?? DEFAULT_CONNECTOR_LABEL_POSITION,
-      lastOffset: connector.labelOffset ?? DEFAULT_CONNECTOR_LABEL_OFFSET,
+      originalPosition,
+      originalOffset,
+      lastPosition: originalPosition,
+      lastOffset: originalOffset,
       moved: false
     };
     containerRef.current?.setPointerCapture(event.pointerId);
@@ -2557,6 +2588,7 @@ const CanvasComponent = (
               onCancelLabelEdit={handleConnectorLabelCancel}
               onRequestLabelEdit={() => handleConnectorRequestLabelEdit(connector.id)}
               onLabelPointerDown={(event) => handleConnectorLabelPointerDown(event, connector)}
+              shouldIgnoreLabelBlur={isConnectorLabelToolbarInteracting}
             />
           ))}
           {nodes.map((node) => (
@@ -2683,6 +2715,7 @@ const CanvasComponent = (
           isVisible={tool === 'select' && !isPanning && editingConnectorId === selectedConnector.id}
           onChange={(style) => handleConnectorLabelStyleChange(selectedConnector, style)}
           pointerPosition={lastPointerPosition}
+          onPointerInteractionChange={setConnectorLabelToolbarInteracting}
         />
       )}
       {selectedNode && (
