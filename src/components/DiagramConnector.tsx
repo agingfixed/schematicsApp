@@ -26,7 +26,7 @@ interface DiagramConnectorProps {
   onCommitLabel: (value: string) => void;
   onCancelLabelEdit: () => void;
   onRequestLabelEdit: () => void;
-  onLabelPointerDown: (event: React.PointerEvent<SVGCircleElement>) => void;
+  onLabelPointerDown: (event: React.PointerEvent<Element>) => void;
 }
 
 const DEFAULT_LABEL_POSITION = 0.5;
@@ -406,7 +406,10 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
     if (labelEditing) {
       event.preventDefault();
       event.stopPropagation();
+      return;
     }
+    event.stopPropagation();
+    onLabelPointerDown(event);
   };
 
   const labelFontSize = connector.labelStyle?.fontSize ?? 14;
@@ -477,7 +480,7 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
                 className={`diagram-connector__segment-handle${isHovered ? ' is-hovered' : ''}`}
                 cx={centerX}
                 cy={centerY}
-                r={6}
+                r={7}
                 onPointerEnter={() => setHoveredSegment(segment.index)}
                 onPointerLeave={() =>
                   setHoveredSegment((value) => (value === segment.index ? null : value))
