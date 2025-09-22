@@ -58,6 +58,7 @@ export const useFloatingMenuDrag = ({
   );
   const setMenuFreePosition = useFloatingMenuStore((state) => state.setMenuFreePosition);
   const resetMenu = useFloatingMenuStore((state) => state.resetMenu);
+  const sharedPlacement = useFloatingMenuStore((state) => state.sharedPlacement);
 
   const dragStateRef = useRef<DragState | null>(null);
   const frameRef = useRef<number | null>(null);
@@ -146,6 +147,27 @@ export const useFloatingMenuDrag = ({
 
     return undefined;
   }, [menuRef, isVisible]);
+
+  useLayoutEffect(() => {
+    if (!isVisible) {
+      return;
+    }
+    if (menuState.isFree) {
+      return;
+    }
+    if (!sharedPlacement.isFree || !sharedPlacement.position) {
+      return;
+    }
+    setMenuFreePosition(menuType, sharedPlacement.position);
+  }, [
+    isVisible,
+    menuState.isFree,
+    sharedPlacement.isFree,
+    sharedPlacement.position?.x,
+    sharedPlacement.position?.y,
+    menuType,
+    setMenuFreePosition
+  ]);
 
   useEffect(() => {
     if (!isVisible) {
