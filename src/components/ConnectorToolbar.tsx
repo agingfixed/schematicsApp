@@ -3,6 +3,7 @@ import { ConnectorModel } from '../types/scene';
 import { FloatingMenuChrome } from './FloatingMenuChrome';
 import { useFloatingMenuDrag } from '../hooks/useFloatingMenuDrag';
 import { computeFloatingMenuPlacement } from '../utils/floatingMenu';
+import { useFrozenFloatingPlacement } from '../hooks/useFrozenFloatingPlacement';
 import '../styles/connector-toolbar.css';
 
 interface ConnectorToolbarProps {
@@ -80,18 +81,18 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
     isVisible: isVisible && Boolean(anchor)
   });
 
-  const anchoredPlacement = useMemo(() => {
-    if (!anchor || menuState.isFree) {
-      return null;
-    }
-    return computeFloatingMenuPlacement(
-      { x: anchor.x, y: anchor.y, width: 0, height: 0 },
-      menuSize ?? { width: 0, height: 0 },
-      viewportSize,
-      pointerPosition,
-      { gap: TOOLBAR_OFFSET }
-    );
-  }, [anchor, menuState.isFree, menuSize, viewportSize, pointerPosition]);
+  const placementOptions = useMemo(() => ({ gap: TOOLBAR_OFFSET }), []);
+
+  const { placement: anchoredPlacement, orientation } = useFrozenFloatingPlacement({
+    anchor: anchor ? { x: anchor.x, y: anchor.y, width: 0, height: 0 } : null,
+    menuState,
+    menuSize,
+    viewportSize,
+    pointerPosition,
+    options: placementOptions,
+    isVisible: isVisible && Boolean(anchor),
+    identity: connector.id
+  });
 
   const style = useMemo(() => {
     if (!anchor) {
@@ -111,7 +112,7 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
         menuSize ?? { width: 0, height: 0 },
         viewportSize,
         pointerPosition,
-        { gap: TOOLBAR_OFFSET }
+        placementOptions
       );
 
     return {
@@ -119,9 +120,18 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
       top: 0,
       transform: `translate3d(${placementResult.position.x}px, ${placementResult.position.y}px, 0)`
     } as React.CSSProperties;
-  }, [anchor, anchoredPlacement, menuState.isFree, menuState.position, menuSize, viewportSize, pointerPosition]);
+  }, [
+    anchor,
+    anchoredPlacement,
+    menuState.isFree,
+    menuState.position,
+    menuSize,
+    viewportSize,
+    pointerPosition,
+    placementOptions
+  ]);
 
-  const orientation = anchoredPlacement?.orientation ?? 'top';
+  const avoidNodesEnabled = connector.style.avoidNodes !== false;
 
   if (!isVisible || !anchor) {
     return null;
@@ -149,6 +159,10 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
 
   const handleDashToggle = () => {
     onStyleChange({ dashed: !connector.style.dashed });
+  };
+
+  const handleAvoidNodesToggle = () => {
+    onStyleChange({ avoidNodes: !avoidNodesEnabled });
   };
 
   const handleArrowChange = (key: 'startArrow' | 'endArrow', shape: ConnectorModel['style']['startArrow']) => {
@@ -230,6 +244,14 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
           onClick={handleDashToggle}
         >
           {connector.style.dashed ? 'Dashed' : 'Solid'}
+        </button>
+        <button
+          type="button"
+          className={`connector-toolbar__button${avoidNodesEnabled ? ' is-active' : ''}`}
+          onClick={handleAvoidNodesToggle}
+          aria-pressed={avoidNodesEnabled}
+        >
+          {avoidNodesEnabled ? 'Avoid nodes' : 'Allow overlap'}
         </button>
       </div>
       <div className="connector-toolbar__section">
