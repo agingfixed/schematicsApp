@@ -18,8 +18,7 @@ import {
   NodeModel,
   Tool,
   Vec2,
-  isAttachedConnectorEndpoint,
-  isFloatingConnectorEndpoint
+  isAttachedConnectorEndpoint
 } from '../types/scene';
 import {
   GRID_SIZE,
@@ -37,6 +36,7 @@ import {
   findClosestPointOnPolyline,
   CARDINAL_PORTS,
   cloneConnectorEndpoint,
+  buildRoundedConnectorPath,
   getConnectorPath,
   getConnectorPortAnchor,
   getConnectorPortPositions,
@@ -99,6 +99,16 @@ const PORT_PRIORITY: Record<CardinalConnectorPort, number> = {
   right: 1,
   bottom: 2,
   left: 3
+};
+
+const PENDING_CONNECTOR_STYLE: ConnectorModel['style'] = {
+  stroke: '#e5e7eb',
+  strokeWidth: 2,
+  dashed: false,
+  startArrow: { shape: 'none', fill: 'filled' },
+  endArrow: { shape: 'arrow', fill: 'filled' },
+  arrowSize: 1,
+  cornerRadius: 12
 };
 
 const pointsRoughlyEqual = (a: Vec2, b: Vec2) =>
@@ -335,6 +345,62 @@ const CanvasComponent = (
       return getNodeById({ nodes, connectors }, endpoint.nodeId);
     },
     [nodes, connectors]
+  );
+
+  const finalizePendingConnection = useCallback(
+    (pending: PendingConnection, dropEndpoint: ConnectorEndpoint) => {
+      if (pending.type === 'create') {
+        const source = pending.source;
+        if (
+          isAttachedConnectorEndpoint(dropEndpoint) &&
+          dropEndpoint.nodeId === source.nodeId
+        ) {
+          return;
+        }
+        if (
+          isAttachedConnectorEndpoint(source) &&
+          isAttachedConnectorEndpoint(dropEndpoint) &&
+          hasConnectorBetween(source, dropEndpoint)
+        ) {
+          return;
+        }
+        addConnector(source, dropEndpoint);
+        return;
+      }
+
+      const connector = connectors.find((item) => item.id === pending.connectorId);
+      if (!connector) {
+        return;
+      }
+      const otherEndpoint = pending.endpoint === 'source' ? connector.target : connector.source;
+      const skipSelfLoop =
+        isAttachedConnectorEndpoint(otherEndpoint) &&
+        isAttachedConnectorEndpoint(dropEndpoint) &&
+        otherEndpoint.nodeId === dropEndpoint.nodeId;
+
+      if (skipSelfLoop) {
+        return;
+      }
+
+      const duplicate =
+        isAttachedConnectorEndpoint(dropEndpoint) &&
+        isAttachedConnectorEndpoint(otherEndpoint) &&
+        (pending.endpoint === 'source'
+          ? hasConnectorBetween(dropEndpoint, otherEndpoint, connector.id)
+          : hasConnectorBetween(otherEndpoint, dropEndpoint, connector.id));
+
+      if (duplicate) {
+        return;
+      }
+
+      const patch: Partial<ConnectorModel> =
+        pending.endpoint === 'source'
+          ? { source: dropEndpoint, points: [] }
+          : { target: dropEndpoint, points: [] };
+      updateConnector(connector.id, patch);
+      setSelection({ nodeIds: [], connectorIds: [connector.id] });
+    },
+    [addConnector, connectors, hasConnectorBetween, setSelection, updateConnector]
   );
 
   const getRelativePoint = (event: PointerEvent | React.PointerEvent) => {
@@ -1375,20 +1441,13 @@ const CanvasComponent = (
       const pending = pendingConnection;
       if (pending) {
         const dropPoint = getWorldPoint(event);
-        const dropEndpoint: ConnectorEndpoint = { position: dropPoint };
-        if (pending.type === 'create') {
-          addConnector(pending.source, dropEndpoint);
+        let dropEndpoint: ConnectorEndpoint;
+        if (!pending.bypassSnap && pending.snapPort) {
+          dropEndpoint = { nodeId: pending.snapPort.nodeId, port: pending.snapPort.port };
         } else {
-          const connector = connectors.find((item) => item.id === pending.connectorId);
-          if (connector) {
-            const patch: Partial<ConnectorModel> =
-              pending.endpoint === 'source'
-                ? { source: dropEndpoint, points: [] }
-                : { target: dropEndpoint, points: [] };
-            updateConnector(connector.id, patch);
-            setSelection({ nodeIds: [], connectorIds: [connector.id] });
-          }
+          dropEndpoint = { position: dropPoint };
         }
+        finalizePendingConnection(pending, dropEndpoint);
       }
       setPendingConnection(null);
       setPortHints([]);
@@ -1569,56 +1628,12 @@ const CanvasComponent = (
       dropEndpoint = { position: dropPoint };
     }
 
-    if (pending.type === 'create') {
-      const source = pending.source;
-      if (
-        isAttachedConnectorEndpoint(dropEndpoint) &&
-        dropEndpoint.nodeId === source.nodeId
-      ) {
-        // Prevent creating loops to the same node.
-      } else {
-        if (
-          isAttachedConnectorEndpoint(source) &&
-          isAttachedConnectorEndpoint(dropEndpoint) &&
-          hasConnectorBetween(source, dropEndpoint)
-        ) {
-          // Skip creating duplicate connectors.
-        } else {
-          addConnector(source, dropEndpoint);
-        }
-      }
-    } else if (pending.type === 'reconnect') {
-      const connector = connectors.find((item) => item.id === pending.connectorId);
-      if (connector) {
-        const otherEndpoint = pending.endpoint === 'source' ? connector.target : connector.source;
-        const skipSelfLoop =
-          isAttachedConnectorEndpoint(otherEndpoint) &&
-          isAttachedConnectorEndpoint(dropEndpoint) &&
-          otherEndpoint.nodeId === dropEndpoint.nodeId;
-
-        if (!skipSelfLoop) {
-          const duplicate =
-            isAttachedConnectorEndpoint(dropEndpoint) &&
-            isAttachedConnectorEndpoint(otherEndpoint) &&
-            (pending.endpoint === 'source'
-              ? hasConnectorBetween(dropEndpoint, otherEndpoint, connector.id)
-              : hasConnectorBetween(otherEndpoint, dropEndpoint, connector.id));
-
-          if (!duplicate) {
-            const patch: Partial<ConnectorModel> =
-              pending.endpoint === 'source'
-                ? { source: dropEndpoint, points: [] }
-                : { target: dropEndpoint, points: [] };
-            updateConnector(connector.id, patch);
-            setSelection({ nodeIds: [], connectorIds: [connector.id] });
-          }
-        }
-      }
-    }
+    finalizePendingConnection(pending, dropEndpoint);
 
     setPendingConnection(null);
     connectionPointerRef.current = null;
     setPortHints([]);
+    releasePointerCapture(event.pointerId);
   };
 
   const handleSpacingHandlePointerDown = (
@@ -1901,6 +1916,7 @@ const CanvasComponent = (
 
     const worldPoint = getWorldPoint(event);
     connectionPointerRef.current = event.pointerId;
+    containerRef.current?.setPointerCapture(event.pointerId);
 
     if (!selectedConnectorIds.includes(connector.id)) {
       setSelection({ nodeIds: [], connectorIds: [connector.id] });
@@ -2341,40 +2357,73 @@ const CanvasComponent = (
     } as React.CSSProperties;
   }, [transform, gridVisible]);
 
-  const pendingLine = useMemo(() => {
+  const pendingPreview = useMemo(() => {
     if (!pendingConnection) {
       return null;
     }
+
+    const createPreview = (model: ConnectorModel) => {
+      const sourceNode = resolveEndpointNode(model.source);
+      const targetNode = resolveEndpointNode(model.target);
+      const geometry = getConnectorPath(model, sourceNode, targetNode);
+      const radius = model.mode === 'elbow' ? model.style.cornerRadius ?? 12 : 0;
+      const path = buildRoundedConnectorPath(geometry.points, radius);
+      if (!path) {
+        return null;
+      }
+      return {
+        path,
+        strokeWidth: model.style.strokeWidth ?? 2
+      };
+    };
 
     if (pendingConnection.type === 'reconnect') {
       const connector = connectors.find((item) => item.id === pendingConnection.connectorId);
       if (!connector) {
         return null;
       }
-      const otherEndpoint = pendingConnection.endpoint === 'source' ? connector.target : connector.source;
-      let anchor: Vec2;
-      if (isAttachedConnectorEndpoint(otherEndpoint)) {
-        const node = resolveEndpointNode(otherEndpoint);
-        anchor = node ? getConnectorPortAnchor(node, otherEndpoint.port) : pendingConnection.worldPoint;
-      } else if (isFloatingConnectorEndpoint(otherEndpoint)) {
-        anchor = otherEndpoint.position;
-      } else {
-        anchor = pendingConnection.worldPoint;
-      }
 
-      if (pendingConnection.endpoint === 'source') {
-        return { start: pendingConnection.worldPoint, end: anchor };
-      }
-      return { start: anchor, end: pendingConnection.worldPoint };
+      const movingEndpoint: ConnectorEndpoint =
+        !pendingConnection.bypassSnap && pendingConnection.snapPort
+          ? { nodeId: pendingConnection.snapPort.nodeId, port: pendingConnection.snapPort.port }
+          : { position: { ...pendingConnection.worldPoint } };
+      const fixedEndpoint = cloneConnectorEndpoint(pendingConnection.fixed);
+
+      const previewConnector: ConnectorModel =
+        pendingConnection.endpoint === 'source'
+          ? {
+              ...connector,
+              source: movingEndpoint,
+              target: fixedEndpoint,
+              points: [],
+              style: { ...connector.style }
+            }
+          : {
+              ...connector,
+              source: fixedEndpoint,
+              target: movingEndpoint,
+              points: [],
+              style: { ...connector.style }
+            };
+
+      return createPreview(previewConnector);
     }
 
-    const sourceEndpoint = pendingConnection.source;
-    let start: Vec2 = pendingConnection.worldPoint;
-    if (isAttachedConnectorEndpoint(sourceEndpoint)) {
-      const node = resolveEndpointNode(sourceEndpoint);
-      start = node ? getConnectorPortAnchor(node, sourceEndpoint.port) : start;
-    }
-    return { start, end: pendingConnection.worldPoint };
+    const targetEndpoint: ConnectorEndpoint =
+      !pendingConnection.bypassSnap && pendingConnection.snapPort
+        ? { nodeId: pendingConnection.snapPort.nodeId, port: pendingConnection.snapPort.port }
+        : { position: { ...pendingConnection.worldPoint } };
+
+    const previewConnector: ConnectorModel = {
+      id: 'pending',
+      mode: 'elbow',
+      source: cloneConnectorEndpoint(pendingConnection.source),
+      target: targetEndpoint,
+      points: [],
+      style: { ...PENDING_CONNECTOR_STYLE }
+    };
+
+    return createPreview(previewConnector);
   }, [pendingConnection, connectors, resolveEndpointNode]);
 
   return (
@@ -2471,16 +2520,14 @@ const CanvasComponent = (
               onDoubleClick={(event) => handleNodeDoubleClick(event, node)}
             />
           ))}
+          {pendingPreview && (
+            <path
+              className="connector-pending"
+              d={pendingPreview.path}
+              strokeWidth={pendingPreview.strokeWidth}
+            />
+          )}
         </g>
-      {pendingLine && (
-        <line
-          className="connector-pending"
-          x1={pendingLine.start.x * transform.scale + transform.x}
-          y1={pendingLine.start.y * transform.scale + transform.y}
-          x2={pendingLine.end.x * transform.scale + transform.x}
-          y2={pendingLine.end.y * transform.scale + transform.y}
-        />
-      )}
       </svg>
       <div className="canvas-overlays" aria-hidden>
         <svg className="canvas-guides" aria-hidden>

@@ -213,13 +213,31 @@
   stroke-width: 3;
 }
 
-.diagram-connector__endpoint {
-  pointer-events: all;
-  fill: rgba(15, 23, 42, 0.92);
-  stroke: #60a5fa;
-  stroke-width: 2;
-  cursor: grab;
-  transition: transform 0.15s ease, fill 0.2s ease, stroke 0.2s ease, opacity 0.2s ease;
+.diagram-connector__endpoint-group {
+  pointer-events: none;
+  transition: color 0.18s ease;
+}
+
+.diagram-connector__endpoint-group.is-hovered {
+  color: rgba(59, 130, 246, 0.95);
+}
+
+.diagram-connector__endpoint-visual {
+  pointer-events: none;
+  fill: currentColor;
+  stroke: rgba(15, 23, 42, 0.85);
+  stroke-width: 1.4;
+  opacity: 0.88;
+  filter: drop-shadow(0 2px 6px rgba(15, 23, 42, 0.45));
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: transform 0.18s ease, opacity 0.18s ease, stroke 0.18s ease, fill 0.18s ease;
+}
+
+.diagram-connector__endpoint-visual.is-hovered {
+  transform: scale(1.12);
+  opacity: 1;
+  stroke: rgba(15, 23, 42, 0.6);
 }
 
 .diagram-connector__endpoint-hit {
@@ -227,16 +245,23 @@
   fill: transparent;
   stroke: transparent;
   cursor: grab;
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: transform 0.18s ease, fill 0.18s ease, stroke 0.18s ease;
 }
 
-.diagram-connector__endpoint:hover {
+.diagram-connector__endpoint-hit.is-hovered {
+  fill: rgba(59, 130, 246, 0.18);
+  stroke: rgba(59, 130, 246, 0.7);
+  stroke-width: 1.5;
   transform: scale(1.12);
-  fill: rgba(37, 99, 235, 0.3);
 }
 
-.diagram-connector__endpoint-hit:hover + .diagram-connector__endpoint {
-  transform: scale(1.12);
-  fill: rgba(37, 99, 235, 0.3);
+.diagram-connector__endpoint-hit.is-hovered:active {
+  cursor: grabbing;
+  fill: rgba(59, 130, 246, 0.28);
+  stroke: rgba(59, 130, 246, 0.8);
+  transform: scale(1.05);
 }
 
 .diagram-connector__label-leader {
@@ -393,23 +418,17 @@
   box-shadow: 0 10px 24px rgba(45, 212, 191, 0.35);
 }
 
-.diagram-connector__endpoint:active {
-  transform: scale(0.9);
-  cursor: grabbing;
-}
-
 .diagram-connector__endpoint-hit:active {
   cursor: grabbing;
-}
-
-.diagram-connector__endpoint-hit:active + .diagram-connector__endpoint {
-  transform: scale(0.9);
 }
 
 .connector-pending {
   stroke: rgba(96, 165, 250, 0.65);
   stroke-width: 2;
   stroke-dasharray: 6 6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
   pointer-events: none;
 }
 
