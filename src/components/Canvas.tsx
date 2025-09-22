@@ -715,7 +715,17 @@ const CanvasComponent = (
       if (mode === connector.mode) {
         return;
       }
-      updateConnector(connector.id, { mode, points: [] });
+      let stylePatch: Partial<ConnectorModel['style']> | undefined;
+      if (mode === 'straight') {
+        stylePatch = { avoidNodes: false };
+      } else if (connector.mode === 'straight' && connector.style.avoidNodes === false) {
+        stylePatch = { avoidNodes: true };
+      }
+      updateConnector(connector.id, {
+        mode,
+        points: [],
+        ...(stylePatch ? { style: stylePatch } : {})
+      });
     },
     [updateConnector]
   );
