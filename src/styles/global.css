@@ -3,6 +3,7 @@
   font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   background-color: #111827;
   color: #f9fafb;
+  --menu-scale: 0.67;
 }
 
 * {

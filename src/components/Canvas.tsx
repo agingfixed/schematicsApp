@@ -1487,9 +1487,23 @@ const CanvasComponent = (
   const handleNodePointerDown = (event: React.PointerEvent, node: NodeModel) => {
     setLastPointerPosition(getRelativePoint(event));
     if (tool === 'connector') {
+      if (event.button !== 0) {
+        return;
+      }
       pendingTextEditRef.current = null;
+      event.stopPropagation();
+      event.preventDefault();
       const worldPoint = getWorldPoint(event);
-      const originPort = getNearestConnectorPort(node, worldPoint);
+      const targetElement = event.target as Element | null;
+      const requestedPort = (targetElement?.getAttribute?.('data-port') ?? null) as
+        | CardinalConnectorPort
+        | null;
+      let originPort: CardinalConnectorPort;
+      if (requestedPort && CARDINAL_PORTS.includes(requestedPort)) {
+        originPort = requestedPort;
+      } else {
+        originPort = getNearestConnectorPort(node, worldPoint);
+      }
       const source: AttachedConnectorEndpoint = { nodeId: node.id, port: originPort };
       setPendingConnection({
         type: 'create',
@@ -1500,6 +1514,7 @@ const CanvasComponent = (
       });
       setPortHints([]);
       connectionPointerRef.current = event.pointerId;
+      containerRef.current?.setPointerCapture(event.pointerId);
       return;
     }
 
@@ -2560,18 +2575,19 @@ const CanvasComponent = (
             style={{ left: hint.screen.x, top: hint.screen.y }}
           />
         ))}
-        {badgeScreens.map((badge) => (
-          <div
-            key={badge.id}
-            className={`distance-badge distance-badge--${badge.axis} distance-badge--${badge.direction}${
-              badge.equal ? ' is-equal' : ''
-            }`}
-            style={{ left: badge.screen.x, top: badge.screen.y }}
-          >
-            {badge.equal && <span className="distance-badge__equal">=</span>}
-            {Math.round(badge.value)}
-          </div>
-        ))}
+        {snapSettings.showDistanceLabels &&
+          badgeScreens.map((badge) => (
+            <div
+              key={badge.id}
+              className={`distance-badge distance-badge--${badge.axis} distance-badge--${badge.direction}${
+                badge.equal ? ' is-equal' : ''
+              }`}
+              style={{ left: badge.screen.x, top: badge.screen.y }}
+            >
+              {badge.equal && <span className="distance-badge__equal">=</span>}
+              {Math.round(badge.value)}
+            </div>
+          ))}
         {snapSettings.enabled &&
           snapSettings.showSpacingHandles &&
           smartSelectionState &&
