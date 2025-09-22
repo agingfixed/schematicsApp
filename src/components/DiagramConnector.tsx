@@ -513,24 +513,10 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
             onPointerDown={(event) => onEndpointPointerDown(event, 'start')}
           />
           <circle
-            className="diagram-connector__endpoint diagram-connector__endpoint--start"
-            cx={geometry.start.x}
-            cy={geometry.start.y}
-            r={9}
-            onPointerDown={(event) => onEndpointPointerDown(event, 'start')}
-          />
-          <circle
             className="diagram-connector__endpoint-hit"
             cx={geometry.end.x}
             cy={geometry.end.y}
             r={12}
-            onPointerDown={(event) => onEndpointPointerDown(event, 'end')}
-          />
-          <circle
-            className="diagram-connector__endpoint diagram-connector__endpoint--end"
-            cx={geometry.end.x}
-            cy={geometry.end.y}
-            r={9}
             onPointerDown={(event) => onEndpointPointerDown(event, 'end')}
           />
         </>
