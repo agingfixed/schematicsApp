@@ -238,6 +238,52 @@ export const cloneConnectorEndpoint = (endpoint: ConnectorEndpoint): ConnectorEn
   return { position: { ...endpoint.position } };
 };
 
+export const buildRoundedConnectorPath = (points: Vec2[], radius: number): string => {
+  if (!points.length) {
+    return '';
+  }
+  if (points.length === 1) {
+    const point = points[0];
+    return `M ${point.x} ${point.y}`;
+  }
+
+  const clampRadius = Math.max(0, radius || 0);
+  let path = `M ${points[0].x} ${points[0].y}`;
+
+  for (let index = 1; index < points.length; index += 1) {
+    const current = points[index];
+    const previous = points[index - 1];
+
+    if (index < points.length - 1 && clampRadius > 0.01) {
+      const next = points[index + 1];
+      const incoming = { x: current.x - previous.x, y: current.y - previous.y };
+      const outgoing = { x: next.x - current.x, y: next.y - current.y };
+      const incomingLength = Math.hypot(incoming.x, incoming.y);
+      const outgoingLength = Math.hypot(outgoing.x, outgoing.y);
+
+      if (incomingLength > 0.01 && outgoingLength > 0.01) {
+        const inUnit = { x: incoming.x / incomingLength, y: incoming.y / incomingLength };
+        const outUnit = { x: outgoing.x / outgoingLength, y: outgoing.y / outgoingLength };
+        const safeRadius = Math.min(clampRadius, incomingLength / 2, outgoingLength / 2);
+        const before = {
+          x: current.x - inUnit.x * safeRadius,
+          y: current.y - inUnit.y * safeRadius
+        };
+        const after = {
+          x: current.x + outUnit.x * safeRadius,
+          y: current.y + outUnit.y * safeRadius
+        };
+        path += ` L ${before.x} ${before.y} Q ${current.x} ${current.y} ${after.x} ${after.y}`;
+        continue;
+      }
+    }
+
+    path += ` L ${current.x} ${current.y}`;
+  }
+
+  return path;
+};
+
 const nearlyEqual = (a: number, b: number, tolerance = EPSILON) => Math.abs(a - b) <= tolerance;
 
 const createDefaultOrthogonalWaypoints = (start: Vec2, end: Vec2): Vec2[] => {
