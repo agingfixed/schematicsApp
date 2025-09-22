@@ -45,7 +45,8 @@ const defaultConnectorStyle: Mutable<ConnectorModel['style']> = {
   startArrow: { shape: 'none', fill: 'filled' },
   endArrow: { shape: 'arrow', fill: 'filled' },
   arrowSize: 1,
-  cornerRadius: 12
+  cornerRadius: 12,
+  avoidNodes: true
 };
 
 const createConnector = (
@@ -65,6 +66,31 @@ const createConnector = (
 const createRng = (seed: number) => () => {
   seed = (seed * 1664525 + 1013904223) >>> 0;
   return seed / 0x100000000;
+};
+
+const segmentIntersectsRect = (a: Vec2, b: Vec2, rect: { left: number; right: number; top: number; bottom: number }) => {
+  if (Math.abs(a.y - b.y) < 1e-6) {
+    const y = a.y;
+    const minX = Math.min(a.x, b.x);
+    const maxX = Math.max(a.x, b.x);
+    return y >= rect.top && y <= rect.bottom && maxX > rect.left && minX < rect.right;
+  }
+  if (Math.abs(a.x - b.x) < 1e-6) {
+    const x = a.x;
+    const minY = Math.min(a.y, b.y);
+    const maxY = Math.max(a.y, b.y);
+    return x >= rect.left && x <= rect.right && maxY > rect.top && minY < rect.bottom;
+  }
+  return false;
+};
+
+const polylineIntersectsRect = (points: Vec2[], rect: { left: number; right: number; top: number; bottom: number }) => {
+  for (let index = 0; index < points.length - 1; index += 1) {
+    if (segmentIntersectsRect(points[index], points[index + 1], rect)) {
+      return true;
+    }
+  }
+  return false;
 };
 
 test('cardinal connector ports recognise the supported values', () => {
@@ -121,7 +147,7 @@ test('elbow connectors remain orthogonal and perpendicular at ports', () => {
         const connector = createConnector('elbow', startPort, endPort);
         let path: ReturnType<typeof getConnectorPath> | null = null;
         try {
-          path = getConnectorPath(connector, source, target);
+          path = getConnectorPath(connector, source, target, [source, target]);
         } catch (error) {
           assert.fail(
             `Routing failed for ${startPort}→${endPort} (iteration ${iteration}): ${(error as Error).message}`
@@ -190,11 +216,47 @@ test('straight connectors produce a single segment between ports', () => {
   const source = createNode('source', { x: 0, y: 0 });
   const target = createNode('target', { x: 320, y: 200 });
   const connector = createConnector('straight', 'right', 'left');
-  const path = getConnectorPath(connector, source, target);
+  const path = getConnectorPath(connector, source, target, [source, target]);
   assert.deepStrictEqual(path.waypoints, []);
   assert.strictEqual(path.points.length, 2);
   assert.deepStrictEqual(path.points[0], getConnectorPortPositions(source).right);
   assert.deepStrictEqual(path.points[1], getConnectorPortPositions(target).left);
+});
+
+test('elbow connectors avoid intermediate nodes when avoidance is enabled', () => {
+  const source = createNode('source', { x: 0, y: 0 });
+  const target = createNode('target', { x: 320, y: 0 });
+  const obstacle = createNode('obstacle', { x: 160, y: -20 }, { width: 80, height: 80 });
+  const connector = createConnector('elbow', 'right', 'left');
+  connector.style.avoidNodes = true;
+
+  const path = getConnectorPath(connector, source, target, [source, target, obstacle]);
+  const rect = {
+    left: obstacle.position.x,
+    right: obstacle.position.x + obstacle.size.width,
+    top: obstacle.position.y,
+    bottom: obstacle.position.y + obstacle.size.height
+  };
+
+  assert.ok(!polylineIntersectsRect(path.points, rect));
+});
+
+test('node avoidance can be disabled per connector', () => {
+  const source = createNode('source', { x: 0, y: 0 });
+  const target = createNode('target', { x: 320, y: 0 });
+  const obstacle = createNode('obstacle', { x: 160, y: -20 }, { width: 80, height: 80 });
+  const connector = createConnector('elbow', 'right', 'left');
+  connector.style.avoidNodes = false;
+
+  const path = getConnectorPath(connector, source, target, [source, target, obstacle]);
+  const rect = {
+    left: obstacle.position.x,
+    right: obstacle.position.x + obstacle.size.width,
+    top: obstacle.position.y,
+    bottom: obstacle.position.y + obstacle.size.height
+  };
+
+  assert.ok(polylineIntersectsRect(path.points, rect));
 });
 
 test('tidyOrthogonalWaypoints collapses redundant points', () => {

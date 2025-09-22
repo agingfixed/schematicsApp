@@ -83,6 +83,7 @@ export interface ConnectorStyle {
   endArrow?: ConnectorArrowStyle;
   arrowSize?: number;
   cornerRadius?: number;
+  avoidNodes?: boolean;
 }
 
 export interface ConnectorModel {

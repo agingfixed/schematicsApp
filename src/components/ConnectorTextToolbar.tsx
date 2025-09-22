@@ -3,6 +3,7 @@ import { ConnectorModel } from '../types/scene';
 import { FloatingMenuChrome } from './FloatingMenuChrome';
 import { useFloatingMenuDrag } from '../hooks/useFloatingMenuDrag';
 import { computeFloatingMenuPlacement } from '../utils/floatingMenu';
+import { useFrozenFloatingPlacement } from '../hooks/useFrozenFloatingPlacement';
 import '../styles/connector-toolbar.css';
 
 interface ConnectorTextToolbarProps {
@@ -52,18 +53,18 @@ export const ConnectorTextToolbar: React.FC<ConnectorTextToolbarProps> = ({
     isVisible: isVisible && Boolean(anchor)
   });
 
-  const anchoredPlacement = useMemo(() => {
-    if (!anchor || menuState.isFree) {
-      return null;
-    }
-    return computeFloatingMenuPlacement(
-      { x: anchor.x, y: anchor.y, width: 0, height: 0 },
-      menuSize ?? { width: 0, height: 0 },
-      viewportSize,
-      pointerPosition,
-      { gap: TOOLBAR_OFFSET }
-    );
-  }, [anchor, menuState.isFree, menuSize, viewportSize, pointerPosition]);
+  const placementOptions = useMemo(() => ({ gap: TOOLBAR_OFFSET }), []);
+
+  const { placement: anchoredPlacement, orientation } = useFrozenFloatingPlacement({
+    anchor: anchor ? { x: anchor.x, y: anchor.y, width: 0, height: 0 } : null,
+    menuState,
+    menuSize,
+    viewportSize,
+    pointerPosition,
+    options: placementOptions,
+    isVisible: isVisible && Boolean(anchor),
+    identity: connector.id
+  });
 
   const style = useMemo(() => {
     if (!anchor) {
@@ -83,7 +84,7 @@ export const ConnectorTextToolbar: React.FC<ConnectorTextToolbarProps> = ({
         menuSize ?? { width: 0, height: 0 },
         viewportSize,
         pointerPosition,
-        { gap: TOOLBAR_OFFSET }
+        placementOptions
       );
 
     return {
@@ -91,9 +92,16 @@ export const ConnectorTextToolbar: React.FC<ConnectorTextToolbarProps> = ({
       top: 0,
       transform: `translate3d(${placementResult.position.x}px, ${placementResult.position.y}px, 0)`
     } as React.CSSProperties;
-  }, [anchor, anchoredPlacement, menuState.isFree, menuState.position, menuSize, viewportSize, pointerPosition]);
-
-  const orientation = anchoredPlacement?.orientation ?? 'top';
+  }, [
+    anchor,
+    anchoredPlacement,
+    menuState.isFree,
+    menuState.position,
+    menuSize,
+    viewportSize,
+    pointerPosition,
+    placementOptions
+  ]);
 
   if (!isVisible || !anchor) {
     return null;
