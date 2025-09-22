@@ -321,6 +321,35 @@ test('elbow connectors leave room for arrows and rounding near ports', () => {
   );
 });
 
+test('stored connector waypoints exclude automatic port stubs', () => {
+  const source = createNode('source', { x: 0, y: 0 });
+  const target = createNode('target', { x: 320, y: 0 });
+  const connector = createConnector('elbow', 'right', 'left');
+
+  const initialPath = getConnectorPath(connector, source, target, [source, target]);
+  assert.ok(initialPath.points.length >= 4);
+
+  const interiorPoints = initialPath.points.slice(1, initialPath.points.length - 1);
+  const containsPoint = (list: Vec2[], point: Vec2) =>
+    list.some((item) => Math.abs(item.x - point.x) < 1e-6 && Math.abs(item.y - point.y) < 1e-6);
+
+  const startStub = interiorPoints[0];
+  const endStub = interiorPoints[interiorPoints.length - 1];
+
+  assert.ok(
+    !containsPoint(initialPath.waypoints, startStub),
+    'Stored waypoints should omit the source port stub.'
+  );
+  assert.ok(
+    !containsPoint(initialPath.waypoints, endStub),
+    'Stored waypoints should omit the target port stub.'
+  );
+
+  connector.points = interiorPoints.map((point) => ({ ...point }));
+  const reroutedPath = getConnectorPath(connector, source, target, [source, target]);
+  assert.deepStrictEqual(reroutedPath.waypoints, initialPath.waypoints);
+});
+
 test('avoidance reroutes stored waypoints that intersect obstacles', () => {
   const source = createNode('source', { x: 0, y: 0 });
   const target = createNode('target', { x: 320, y: 0 });

@@ -23,7 +23,7 @@ import {
   getNodeById,
   getSceneBounds
 } from '../utils/scene';
-import { cloneConnectorEndpoint } from '../utils/connector';
+import { cloneConnectorEndpoint, getConnectorPath } from '../utils/connector';
 
 const HISTORY_LIMIT = 64;
 
@@ -435,30 +435,53 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
   updateConnector: (id, patch) =>
     set((current) => {
       const scene = cloneScene(current.scene);
-      const connector = scene.connectors.find((item) => item.id === id);
-      if (!connector) {
+      const index = scene.connectors.findIndex((item) => item.id === id);
+      if (index === -1) {
         return {};
       }
 
+      const existing = scene.connectors[index];
+      const nextConnector: ConnectorModel = {
+        ...existing,
+        source: cloneConnectorEndpoint(existing.source),
+        target: cloneConnectorEndpoint(existing.target),
+        style: { ...existing.style },
+        labelStyle: existing.labelStyle ? { ...existing.labelStyle } : undefined,
+        points: existing.points?.map((point) => ({ ...point }))
+      };
+
       const { style, points, labelStyle, source, target, ...rest } = patch;
 
-      if (points) {
-        connector.points = points.map((point) => ({ ...point }));
-      }
       if (style) {
-        connector.style = { ...connector.style, ...style };
+        nextConnector.style = { ...nextConnector.style, ...style };
       }
       if (labelStyle !== undefined) {
-        connector.labelStyle = labelStyle ? { ...labelStyle } : undefined;
+        nextConnector.labelStyle = labelStyle ? { ...labelStyle } : undefined;
       }
       if (source) {
-        connector.source = cloneConnectorEndpoint(source);
+        nextConnector.source = cloneConnectorEndpoint(source);
       }
       if (target) {
-        connector.target = cloneConnectorEndpoint(target);
+        nextConnector.target = cloneConnectorEndpoint(target);
+      }
+      if (points) {
+        nextConnector.points = points.map((point) => ({ ...point }));
       }
 
-      Object.assign(connector, rest);
+      Object.assign(nextConnector, rest);
+
+      if (points) {
+        const sourceNode = isAttachedConnectorEndpoint(nextConnector.source)
+          ? scene.nodes.find((node) => node.id === nextConnector.source.nodeId)
+          : undefined;
+        const targetNode = isAttachedConnectorEndpoint(nextConnector.target)
+          ? scene.nodes.find((node) => node.id === nextConnector.target.nodeId)
+          : undefined;
+        const geometry = getConnectorPath(nextConnector, sourceNode, targetNode, scene.nodes);
+        nextConnector.points = geometry.waypoints.map((point) => ({ ...point }));
+      }
+
+      scene.connectors[index] = nextConnector;
 
       return withSceneChange(current, scene);
     }),
