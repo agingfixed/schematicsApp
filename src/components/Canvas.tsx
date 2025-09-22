@@ -91,6 +91,9 @@ const DEFAULT_CONNECTOR_LABEL_STYLE = {
   color: '#f8fafc',
   background: 'rgba(15,23,42,0.85)'
 };
+const CONNECTOR_LABEL_SNAP_POINTS = [0.25, 0.5, 0.75];
+const CONNECTOR_LABEL_SNAP_DISTANCE = 32;
+const CONNECTOR_LABEL_SNAP_RATIO = 0.25;
 const PORT_VISIBILITY_DISTANCE = 72;
 const PORT_SNAP_DISTANCE = 12;
 const POINT_TOLERANCE = 0.5;
@@ -1132,7 +1135,8 @@ const CanvasComponent = (
       const worldPoint = getWorldPoint(event);
       const closest = findClosestPointOnPolyline(worldPoint, geometry.points);
       const measure = measurePolyline(geometry.points);
-      if (measure.totalLength <= 0) {
+      const totalLength = measure.totalLength;
+      if (totalLength <= 0) {
         return;
       }
       const start = geometry.points[closest.index];
@@ -1140,16 +1144,29 @@ const CanvasComponent = (
       const segmentLength = Math.hypot(end.x - start.x, end.y - start.y) || 1;
       const localLength = Math.hypot(closest.point.x - start.x, closest.point.y - start.y);
       const segmentOffset = measure.segments[closest.index] ?? 0;
-      let position = (segmentOffset + Math.min(localLength, segmentLength)) / measure.totalLength;
+      let position = (segmentOffset + Math.min(localLength, segmentLength)) / totalLength;
       position = Math.max(0, Math.min(1, position));
+      let snappedPosition = position;
+      const ratioTolerance = Math.min(
+        CONNECTOR_LABEL_SNAP_RATIO,
+        CONNECTOR_LABEL_SNAP_DISTANCE / totalLength
+      );
+      let bestSnapDistance = Number.POSITIVE_INFINITY;
+      for (const snapPoint of CONNECTOR_LABEL_SNAP_POINTS) {
+        const distance = Math.abs(position - snapPoint);
+        if (distance <= ratioTolerance && distance < bestSnapDistance) {
+          snappedPosition = snapPoint;
+          bestSnapDistance = distance;
+        }
+      }
       const normal = getNormalAtRatio(geometry.points, closest.index);
       const offsetRaw =
         (worldPoint.x - closest.point.x) * normal.x + (worldPoint.y - closest.point.y) * normal.y;
       const offset = Math.max(-280, Math.min(280, offsetRaw));
-      labelDrag.lastPosition = position;
+      labelDrag.lastPosition = snappedPosition;
       labelDrag.lastOffset = offset;
       labelDrag.moved = true;
-      updateConnector(connector.id, { labelPosition: position, labelOffset: offset });
+      updateConnector(connector.id, { labelPosition: snappedPosition, labelOffset: offset });
       return;
     }
 
@@ -1986,7 +2003,7 @@ const CanvasComponent = (
   };
 
   const handleConnectorLabelPointerDown = (
-    event: React.PointerEvent<SVGCircleElement>,
+    event: React.PointerEvent<Element>,
     connector: ConnectorModel
   ) => {
     setLastPointerPosition(getRelativePoint(event));
