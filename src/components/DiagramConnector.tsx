@@ -12,6 +12,7 @@ interface DiagramConnectorProps {
   connector: ConnectorModel;
   source?: NodeModel;
   target?: NodeModel;
+  nodes: NodeModel[];
   selected: boolean;
   labelEditing: boolean;
   commitSignal: number;
@@ -117,6 +118,7 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
   connector,
   source,
   target,
+  nodes,
   selected,
   labelEditing,
   commitSignal,
@@ -175,7 +177,10 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
     }
   }, [labelEditing, draft]);
 
-  const geometry = useMemo(() => getConnectorPath(connector, source, target), [connector, source, target]);
+  const geometry = useMemo(
+    () => getConnectorPath(connector, source, target, nodes),
+    [connector, source, target, nodes]
+  );
 
   const cornerRadius = connector.mode === 'elbow' ? connector.style.cornerRadius ?? 12 : 0;
 
@@ -482,13 +487,13 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
               className={`diagram-connector__endpoint-visual${startHovered ? ' is-hovered' : ''}`}
               cx={geometry.start.x}
               cy={geometry.start.y}
-              r={4.5}
+              r={5.5}
             />
             <circle
               className={`diagram-connector__endpoint-hit${startHovered ? ' is-hovered' : ''}`}
               cx={geometry.start.x}
               cy={geometry.start.y}
-              r={12}
+              r={16}
               onPointerEnter={() => setHoveredEndpoint('start')}
               onPointerLeave={() =>
                 setHoveredEndpoint((value) => (value === 'start' ? null : value))
@@ -507,13 +512,13 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
               className={`diagram-connector__endpoint-visual${endHovered ? ' is-hovered' : ''}`}
               cx={geometry.end.x}
               cy={geometry.end.y}
-              r={4.5}
+              r={5.5}
             />
             <circle
               className={`diagram-connector__endpoint-hit${endHovered ? ' is-hovered' : ''}`}
               cx={geometry.end.x}
               cy={geometry.end.y}
-              r={12}
+              r={16}
               onPointerEnter={() => setHoveredEndpoint('end')}
               onPointerLeave={() => setHoveredEndpoint((value) => (value === 'end' ? null : value))}
               onPointerDown={(event) => {

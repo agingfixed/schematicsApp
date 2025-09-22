@@ -104,7 +104,8 @@ const defaultConnectorStyle: ConnectorModel['style'] = {
   startArrow: { shape: 'none', fill: 'filled' },
   endArrow: { shape: 'arrow', fill: 'filled' },
   arrowSize: 1,
-  cornerRadius: 12
+  cornerRadius: 12,
+  avoidNodes: true
 };
 
 const defaultConnectorLabelStyle: ConnectorLabelStyle = {

@@ -7,6 +7,7 @@ import { FloatingMenuChrome } from './FloatingMenuChrome';
 import { useFloatingMenuDrag } from '../hooks/useFloatingMenuDrag';
 import { clamp01, parseHexColor, rgbaToCss, rgbToHex, RGBColor } from '../utils/color';
 import { computeFloatingMenuPlacement } from '../utils/floatingMenu';
+import { useFrozenFloatingPlacement } from '../hooks/useFrozenFloatingPlacement';
 import '../styles/selection-toolbar.css';
 
 const FONT_SIZE_MIN = 8;
@@ -106,6 +107,21 @@ export const SelectionToolbar: React.FC<SelectionToolbarProps> = ({
     menuRef: toolbarRef,
     viewportSize,
     isVisible: isVisible && Boolean(anchor)
+  });
+
+  const placementOptions = useMemo(() => ({ gap: TOOLBAR_GAP }), []);
+
+  const { placement: anchoredPlacement, orientation } = useFrozenFloatingPlacement({
+    anchor: anchor
+      ? { x: anchor.x, y: anchor.y, width: anchor.width, height: anchor.height }
+      : null,
+    menuState,
+    menuSize,
+    viewportSize,
+    pointerPosition,
+    options: placementOptions,
+    isVisible: isVisible && Boolean(anchor),
+    identity: node.id
   });
 
   const hasText = node.text.trim().length > 0;
@@ -248,24 +264,6 @@ export const SelectionToolbar: React.FC<SelectionToolbarProps> = ({
     return () => document.removeEventListener('mousedown', handlePointerDown);
   }, [fillOpen]);
 
-  const anchoredPlacement = useMemo(() => {
-    if (!anchor || menuState.isFree) {
-      return null;
-    }
-    return computeFloatingMenuPlacement(
-      {
-        x: anchor.x,
-        y: anchor.y,
-        width: anchor.width,
-        height: anchor.height
-      },
-      menuSize ?? { width: 0, height: 0 },
-      viewportSize,
-      pointerPosition,
-      { gap: TOOLBAR_GAP }
-    );
-  }, [anchor, menuState.isFree, menuSize, viewportSize, pointerPosition]);
-
   const style = useMemo(() => {
     if (!anchor) {
       return {} as React.CSSProperties;
@@ -289,7 +287,7 @@ export const SelectionToolbar: React.FC<SelectionToolbarProps> = ({
         menuSize ?? { width: 0, height: 0 },
         viewportSize,
         pointerPosition,
-        { gap: TOOLBAR_GAP }
+        placementOptions
       );
 
     return {
@@ -304,7 +302,8 @@ export const SelectionToolbar: React.FC<SelectionToolbarProps> = ({
     menuState.position,
     menuSize,
     viewportSize,
-    pointerPosition
+    pointerPosition,
+    placementOptions
   ]);
 
   if (!isVisible || !anchor) {
@@ -440,7 +439,7 @@ export const SelectionToolbar: React.FC<SelectionToolbarProps> = ({
       ref={toolbarRef}
       className="selection-toolbar floating-menu"
       style={style}
-      data-placement={!menuState.isFree ? anchoredPlacement?.orientation ?? 'top' : undefined}
+      data-placement={!menuState.isFree ? orientation : undefined}
       data-free={menuState.isFree || undefined}
       data-dragging={isDragging || undefined}
     >

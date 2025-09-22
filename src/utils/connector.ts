@@ -36,6 +36,8 @@ const AUTO_COLLAPSE_ANGLE = (5 * Math.PI) / 180;
 const MIN_SEGMENT_LENGTH = 6;
 const ALIGNMENT_SNAP_DISTANCE = 6;
 const ROUNDING_STEP = 0.5;
+const NODE_AVOIDANCE_PADDING = 18;
+const NODE_AVOIDANCE_DETOUR = 8;
 export const CARDINAL_PORTS: CardinalConnectorPort[] = ['top', 'right', 'bottom', 'left'];
 const CARDINAL_PORT_LOOKUP = new Set<string>(CARDINAL_PORTS);
 
@@ -286,6 +288,130 @@ export const buildRoundedConnectorPath = (points: Vec2[], radius: number): strin
 
 const nearlyEqual = (a: number, b: number, tolerance = EPSILON) => Math.abs(a - b) <= tolerance;
 
+interface ObstacleRect {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+}
+
+const expandNodeObstacle = (node: NodeModel, padding: number): ObstacleRect => ({
+  left: node.position.x - padding,
+  right: node.position.x + node.size.width + padding,
+  top: node.position.y - padding,
+  bottom: node.position.y + node.size.height + padding
+});
+
+const pushPointIfNeeded = (list: Vec2[], point: Vec2) => {
+  const rounded = roundPoint(point);
+  const last = list[list.length - 1];
+  if (!last || !nearlyEqual(last.x, rounded.x) || !nearlyEqual(last.y, rounded.y)) {
+    list.push(rounded);
+  }
+};
+
+const rectContainsPoint = (rect: ObstacleRect, point: Vec2, tolerance = EPSILON) =>
+  point.x > rect.left + tolerance &&
+  point.x < rect.right - tolerance &&
+  point.y > rect.top + tolerance &&
+  point.y < rect.bottom - tolerance;
+
+const segmentIntersectsRect = (a: Vec2, b: Vec2, rect: ObstacleRect): boolean => {
+  if (nearlyEqual(a.y, b.y)) {
+    const y = a.y;
+    if (y < rect.top - EPSILON || y > rect.bottom + EPSILON) {
+      return false;
+    }
+    const minX = Math.min(a.x, b.x);
+    const maxX = Math.max(a.x, b.x);
+    const overlapStart = Math.max(minX, rect.left);
+    const overlapEnd = Math.min(maxX, rect.right);
+    return overlapEnd - overlapStart > EPSILON;
+  }
+
+  if (nearlyEqual(a.x, b.x)) {
+    const x = a.x;
+    if (x < rect.left - EPSILON || x > rect.right + EPSILON) {
+      return false;
+    }
+    const minY = Math.min(a.y, b.y);
+    const maxY = Math.max(a.y, b.y);
+    const overlapStart = Math.max(minY, rect.top);
+    const overlapEnd = Math.min(maxY, rect.bottom);
+    return overlapEnd - overlapStart > EPSILON;
+  }
+
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  let t0 = 0;
+  let t1 = 1;
+
+  const clip = (p: number, q: number) => {
+    if (Math.abs(p) < EPSILON) {
+      return q > 0;
+    }
+    const r = q / p;
+    if (p < 0) {
+      if (r > t1) {
+        return false;
+      }
+      if (r > t0) {
+        t0 = r;
+      }
+    } else {
+      if (r < t0) {
+        return false;
+      }
+      if (r < t1) {
+        t1 = r;
+      }
+    }
+    return true;
+  };
+
+  if (
+    clip(-dx, a.x - rect.left) &&
+    clip(dx, rect.right - a.x) &&
+    clip(-dy, a.y - rect.top) &&
+    clip(dy, rect.bottom - a.y)
+  ) {
+    return t0 < t1 - EPSILON && t0 <= 1 + EPSILON && t1 >= -EPSILON;
+  }
+
+  return false;
+};
+
+const axisSegmentCrossesRect = (a: Vec2, b: Vec2, rect: ObstacleRect): boolean => {
+  if (nearlyEqual(a.x, b.x)) {
+    const x = a.x;
+    if (x < rect.left - EPSILON || x > rect.right + EPSILON) {
+      return false;
+    }
+    const minY = Math.min(a.y, b.y);
+    const maxY = Math.max(a.y, b.y);
+    const overlapStart = Math.max(minY, rect.top);
+    const overlapEnd = Math.min(maxY, rect.bottom);
+    return overlapEnd - overlapStart > EPSILON;
+  }
+
+  if (nearlyEqual(a.y, b.y)) {
+    const y = a.y;
+    if (y < rect.top - EPSILON || y > rect.bottom + EPSILON) {
+      return false;
+    }
+    const minX = Math.min(a.x, b.x);
+    const maxX = Math.max(a.x, b.x);
+    const overlapStart = Math.max(minX, rect.left);
+    const overlapEnd = Math.min(maxX, rect.right);
+    return overlapEnd - overlapStart > EPSILON;
+  }
+
+  return segmentIntersectsRect(a, b, rect);
+};
+
+const segmentIntersectsAnyRect = (a: Vec2, b: Vec2, obstacles: ObstacleRect[]) =>
+  obstacles.some((rect) => segmentIntersectsRect(a, b, rect));
+
 const createDefaultOrthogonalWaypoints = (start: Vec2, end: Vec2): Vec2[] => {
   const dx = Math.abs(end.x - start.x);
   const dy = Math.abs(end.y - start.y);
@@ -478,6 +604,344 @@ const sanitizePoints = (points: Vec2[]): Vec2[] =>
     return !nearlyEqual(prev.x, point.x) || !nearlyEqual(prev.y, point.y);
   });
 
+const pointsEqual = (a: Vec2, b: Vec2) => nearlyEqual(a.x, b.x) && nearlyEqual(a.y, b.y);
+
+const pointKey = (point: Vec2) => `${point.x.toFixed(3)}:${point.y.toFixed(3)}`;
+
+const axisSegmentCrossesAnyRect = (a: Vec2, b: Vec2, obstacles: ObstacleRect[]) =>
+  obstacles.some((rect) => axisSegmentCrossesRect(a, b, rect));
+
+interface RoutingNode {
+  point: Vec2;
+  edges: Array<{ key: string; cost: number }>;
+}
+
+const findOrthogonalRoute = (start: Vec2, end: Vec2, obstacles: ObstacleRect[]): Vec2[] | null => {
+  const pad = NODE_AVOIDANCE_PADDING;
+  const offset = NODE_AVOIDANCE_DETOUR;
+
+  const xCoords = new Set<number>();
+  const yCoords = new Set<number>();
+
+  const addX = (value: number) => {
+    if (Number.isFinite(value)) {
+      xCoords.add(roundToStep(value, ROUNDING_STEP));
+    }
+  };
+
+  const addY = (value: number) => {
+    if (Number.isFinite(value)) {
+      yCoords.add(roundToStep(value, ROUNDING_STEP));
+    }
+  };
+
+  const addPointOffsets = (point: Vec2) => {
+    addX(point.x);
+    addX(point.x + pad);
+    addX(point.x - pad);
+    addX(point.x + pad + offset);
+    addX(point.x - pad - offset);
+    addY(point.y);
+    addY(point.y + pad);
+    addY(point.y - pad);
+    addY(point.y + pad + offset);
+    addY(point.y - pad - offset);
+  };
+
+  addPointOffsets(start);
+  addPointOffsets(end);
+
+  for (const rect of obstacles) {
+    addX(rect.left);
+    addX(rect.right);
+    addY(rect.top);
+    addY(rect.bottom);
+
+    addX(rect.left - pad);
+    addX(rect.left - pad - offset);
+    addX(rect.right + pad);
+    addX(rect.right + pad + offset);
+
+    addY(rect.top - pad);
+    addY(rect.top - pad - offset);
+    addY(rect.bottom + pad);
+    addY(rect.bottom + pad + offset);
+  }
+
+  const xs = Array.from(xCoords).sort((a, b) => a - b);
+  const ys = Array.from(yCoords).sort((a, b) => a - b);
+
+  const nodes = new Map<string, RoutingNode>();
+  const expandedObstacles = obstacles.map((rect) => ({
+    left: rect.left - pad,
+    right: rect.right + pad,
+    top: rect.top - pad,
+    bottom: rect.bottom + pad
+  }));
+
+  const startPoint = roundPoint(start);
+  const endPoint = roundPoint(end);
+  const startKey = pointKey(startPoint);
+  const endKey = pointKey(endPoint);
+
+  const ensureNode = (point: Vec2) => {
+    const rounded = roundPoint(point);
+    const key = pointKey(rounded);
+    if (!nodes.has(key)) {
+      nodes.set(key, { point: rounded, edges: [] });
+    }
+    return key;
+  };
+
+  const isBlockedPoint = (point: Vec2) =>
+    obstacles.some((rect) => rectContainsPoint(rect, point));
+
+  for (const x of xs) {
+    for (const y of ys) {
+      const candidate = roundPoint({ x, y });
+      if (!Number.isFinite(candidate.x) || !Number.isFinite(candidate.y)) {
+        continue;
+      }
+      if (isBlockedPoint(candidate) && !pointsEqual(candidate, startPoint) && !pointsEqual(candidate, endPoint)) {
+        continue;
+      }
+      ensureNode(candidate);
+    }
+  }
+
+  ensureNode(startPoint);
+  ensureNode(endPoint);
+
+  const connect = (aKey: string, bKey: string) => {
+    if (aKey === bKey) {
+      return;
+    }
+    const aNode = nodes.get(aKey);
+    const bNode = nodes.get(bKey);
+    if (!aNode || !bNode) {
+      return;
+    }
+    const cost = Math.abs(aNode.point.x - bNode.point.x) + Math.abs(aNode.point.y - bNode.point.y);
+    if (cost < EPSILON) {
+      return;
+    }
+    if (!aNode.edges.some((edge) => edge.key === bKey)) {
+      aNode.edges.push({ key: bKey, cost });
+    }
+    if (!bNode.edges.some((edge) => edge.key === aKey)) {
+      bNode.edges.push({ key: aKey, cost });
+    }
+  };
+
+  for (const x of xs) {
+    let previousKey: string | null = null;
+    for (const y of ys) {
+      const candidate = roundPoint({ x, y });
+      const key = pointKey(candidate);
+      if (!nodes.has(key)) {
+        continue;
+      }
+      if (previousKey) {
+        const previousNode = nodes.get(previousKey);
+        const currentNode = nodes.get(key);
+        if (previousNode && currentNode && !axisSegmentCrossesAnyRect(previousNode.point, currentNode.point, expandedObstacles)) {
+          connect(previousKey, key);
+        }
+      }
+      previousKey = key;
+    }
+  }
+
+  for (const y of ys) {
+    let previousKey: string | null = null;
+    for (const x of xs) {
+      const candidate = roundPoint({ x, y });
+      const key = pointKey(candidate);
+      if (!nodes.has(key)) {
+        continue;
+      }
+      if (previousKey) {
+        const previousNode = nodes.get(previousKey);
+        const currentNode = nodes.get(key);
+        if (previousNode && currentNode && !axisSegmentCrossesAnyRect(previousNode.point, currentNode.point, expandedObstacles)) {
+          connect(previousKey, key);
+        }
+      }
+      previousKey = key;
+    }
+  }
+
+  if (!nodes.has(startKey) || !nodes.has(endKey)) {
+    return null;
+  }
+
+  const releaseDistance = pad + offset;
+  const releaseOffsets: Array<{ x: number; y: number }> = [
+    { x: 0, y: releaseDistance },
+    { x: 0, y: -releaseDistance },
+    { x: releaseDistance, y: 0 },
+    { x: -releaseDistance, y: 0 }
+  ];
+
+  const isInsideExpanded = (point: Vec2) =>
+    expandedObstacles.some((rect) => rectContainsPoint(rect, point));
+
+  const connectRelease = (originPoint: Vec2, originKey: string) => {
+    for (const offsetVector of releaseOffsets) {
+      const candidate = roundPoint({
+        x: originPoint.x + offsetVector.x,
+        y: originPoint.y + offsetVector.y
+      });
+      if (pointsEqual(candidate, originPoint)) {
+        continue;
+      }
+      if (isBlockedPoint(candidate)) {
+        continue;
+      }
+      if (isInsideExpanded(candidate)) {
+        continue;
+      }
+      if (segmentIntersectsAnyRect(originPoint, candidate, obstacles)) {
+        continue;
+      }
+      const candidateKey = ensureNode(candidate);
+      const originNode = nodes.get(originKey);
+      const candidateNode = nodes.get(candidateKey);
+      if (!originNode || !candidateNode) {
+        continue;
+      }
+      const cost =
+        Math.abs(originNode.point.x - candidateNode.point.x) +
+        Math.abs(originNode.point.y - candidateNode.point.y);
+      if (cost < EPSILON) {
+        continue;
+      }
+      if (!originNode.edges.some((edge) => edge.key === candidateKey)) {
+        originNode.edges.push({ key: candidateKey, cost });
+      }
+      if (!candidateNode.edges.some((edge) => edge.key === originKey)) {
+        candidateNode.edges.push({ key: originKey, cost });
+      }
+    }
+  };
+
+  connectRelease(startPoint, startKey);
+  connectRelease(endPoint, endKey);
+
+  const distances = new Map<string, number>();
+  const previous = new Map<string, string | null>();
+  const visited = new Set<string>();
+  const queue: Array<{ key: string; cost: number }> = [];
+
+  distances.set(startKey, 0);
+  queue.push({ key: startKey, cost: 0 });
+
+  while (queue.length) {
+    queue.sort((a, b) => a.cost - b.cost);
+    const current = queue.shift();
+    if (!current) {
+      break;
+    }
+    if (visited.has(current.key)) {
+      continue;
+    }
+    visited.add(current.key);
+
+    if (current.key === endKey) {
+      break;
+    }
+
+    const node = nodes.get(current.key);
+    if (!node) {
+      continue;
+    }
+
+    for (const edge of node.edges) {
+      if (visited.has(edge.key)) {
+        continue;
+      }
+      const nextCost = (distances.get(current.key) ?? 0) + edge.cost;
+      if (nextCost + EPSILON < (distances.get(edge.key) ?? Number.POSITIVE_INFINITY)) {
+        distances.set(edge.key, nextCost);
+        previous.set(edge.key, current.key);
+        queue.push({ key: edge.key, cost: nextCost });
+      }
+    }
+  }
+
+  if (!distances.has(endKey)) {
+    return null;
+  }
+
+  const result: Vec2[] = [];
+  let currentKey: string | null = endKey;
+  while (currentKey) {
+    const node = nodes.get(currentKey);
+    if (!node) {
+      break;
+    }
+    result.push(roundPoint(node.point));
+    if (currentKey === startKey) {
+      break;
+    }
+    currentKey = previous.get(currentKey) ?? null;
+  }
+
+  if (!result.length || !pointsEqual(result[result.length - 1], startPoint)) {
+    return null;
+  }
+
+  result.reverse();
+  return result;
+};
+
+interface AvoidanceAdjustments {
+  startAdjusted: boolean;
+  endAdjusted: boolean;
+}
+
+const adjustPolylineForObstacles = (
+  points: Vec2[],
+  obstacles: ObstacleRect[],
+  adjustments?: AvoidanceAdjustments
+): Vec2[] => {
+  if (points.length < 2 || !obstacles.length) {
+    return points.map((point) => clonePoint(point));
+  }
+
+  const adjusted: Vec2[] = [roundPoint(points[0])];
+
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const start = roundPoint(points[index]);
+    const end = roundPoint(points[index + 1]);
+
+    if (!segmentIntersectsAnyRect(start, end, obstacles)) {
+      pushPointIfNeeded(adjusted, end);
+      continue;
+    }
+
+    if (adjustments) {
+      if (index === 0) {
+        adjustments.startAdjusted = true;
+      }
+      if (index === points.length - 2) {
+        adjustments.endAdjusted = true;
+      }
+    }
+
+    const route = findOrthogonalRoute(start, end, obstacles);
+    if (!route) {
+      pushPointIfNeeded(adjusted, end);
+      continue;
+    }
+    for (let routeIndex = 1; routeIndex < route.length; routeIndex += 1) {
+      pushPointIfNeeded(adjusted, route[routeIndex]);
+    }
+  }
+
+  return sanitizePoints(adjusted);
+};
+
 const cloneEndpointPosition = (
   endpoint: ConnectorModel['source'],
   node: NodeModel | undefined
@@ -496,7 +960,8 @@ const cloneEndpointPosition = (
 export const getConnectorPath = (
   connector: ConnectorModel,
   sourceNode?: NodeModel,
-  targetNode?: NodeModel
+  targetNode?: NodeModel,
+  nodes?: NodeModel[]
 ): ConnectorPath => {
   const baseWaypoints = connector.points?.map((point) => clonePoint(point)) ?? [];
   const start = cloneEndpointPosition(connector.source, sourceNode);
@@ -513,6 +978,12 @@ export const getConnectorPath = (
       ? createPortStubPoint(end, connector.target.port, clearance)
       : null;
 
+  const avoidNodesEnabled = connector.style.avoidNodes !== false;
+  const avoidanceAdjustments: AvoidanceAdjustments = {
+    startAdjusted: false,
+    endAdjusted: false
+  };
+
   let waypoints: Vec2[] = [];
   let points: Vec2[] = [];
 
@@ -524,30 +995,13 @@ export const getConnectorPath = (
       : createDefaultOrthogonalWaypoints(routeStart, routeEnd);
     waypoints = tidyOrthogonalWaypoints(routeStart, base, routeEnd);
 
-    if (startStub) {
-      if (!waypoints.length) {
-        waypoints = [startStub];
-      } else if (nearlyEqual(waypoints[0].x, startStub.x) && nearlyEqual(waypoints[0].y, startStub.y)) {
-        waypoints[0] = startStub;
-      } else {
-        waypoints = [startStub, ...waypoints];
-      }
-    }
-
-    if (endStub) {
-      if (!waypoints.length) {
-        waypoints = [endStub];
-      } else {
-        const last = waypoints[waypoints.length - 1];
-        if (nearlyEqual(last.x, endStub.x) && nearlyEqual(last.y, endStub.y)) {
-          waypoints[waypoints.length - 1] = endStub;
-        } else {
-          waypoints = [...waypoints, endStub];
-        }
-      }
-    }
-
-    const rawPoints = [start, ...waypoints, end];
+    const rawPoints = [
+      start,
+      ...(startStub ? [startStub] : []),
+      ...waypoints,
+      ...(endStub ? [endStub] : []),
+      end
+    ];
     const orthogonal = ensureOrthogonalSegments(rawPoints);
     const roundedPoints = orthogonal.map((point) => roundPoint(point));
     points = sanitizePoints(roundedPoints);
@@ -556,6 +1010,124 @@ export const getConnectorPath = (
     waypoints = [];
     const straightPoints = [start, end].map((point) => roundPoint(point));
     points = sanitizePoints(straightPoints);
+  }
+
+  if (avoidNodesEnabled && nodes && nodes.length) {
+    const exclude = new Set<string>();
+    if (sourceNode) {
+      exclude.add(sourceNode.id);
+    }
+    if (targetNode) {
+      exclude.add(targetNode.id);
+    }
+    const obstacles = nodes
+      .filter((node) => !exclude.has(node.id))
+      .map((node) => expandNodeObstacle(node, 0));
+    if (obstacles.length) {
+      const avoided = adjustPolylineForObstacles(points, obstacles, avoidanceAdjustments);
+      if (avoided.length >= 2) {
+        points = avoided;
+        if (isAttachedConnectorEndpoint(connector.source) && sourceNode && points.length > 1) {
+          const first = points[0];
+          const second = points[1];
+          const port = connector.source.port;
+          const axis = PORT_AXIS[port];
+          const direction = PORT_DIRECTION[port];
+          const enforceOrientation = !avoidNodesEnabled || !avoidanceAdjustments.startAdjusted;
+          if (axis === 'horizontal') {
+            const dx = second.x - first.x;
+            const sign = Math.sign(dx || direction);
+            if (!enforceOrientation) {
+              const length = Math.hypot(second.x - first.x, second.y - first.y);
+              assertInvariant(length > EPSILON, 'Connector segment must extend away from the port.');
+            } else if (!nearlyEqual(first.y, second.y) || sign !== direction) {
+              const step = dx !== 0 ? Math.min(Math.abs(dx), NODE_AVOIDANCE_DETOUR) : NODE_AVOIDANCE_DETOUR;
+              const inserted = roundPoint({ x: first.x + direction * step, y: first.y });
+              if (!nearlyEqual(inserted.x, second.x) || !nearlyEqual(inserted.y, second.y)) {
+                points = [first, inserted, ...points.slice(1)];
+                if (points.length > 2) {
+                  points[2] = roundPoint({ x: inserted.x, y: points[2].y });
+                }
+              } else {
+                points[1] = inserted;
+              }
+            }
+          } else {
+            const dy = second.y - first.y;
+            const sign = Math.sign(dy || direction);
+            if (!enforceOrientation) {
+              const length = Math.hypot(second.x - first.x, second.y - first.y);
+              assertInvariant(length > EPSILON, 'Connector segment must extend away from the port.');
+            } else if (!nearlyEqual(first.x, second.x) || sign !== direction) {
+              const step = dy !== 0 ? Math.min(Math.abs(dy), NODE_AVOIDANCE_DETOUR) : NODE_AVOIDANCE_DETOUR;
+              const inserted = roundPoint({ x: first.x, y: first.y + direction * step });
+              if (!nearlyEqual(inserted.x, second.x) || !nearlyEqual(inserted.y, second.y)) {
+                points = [first, inserted, ...points.slice(1)];
+                if (points.length > 2) {
+                  points[2] = roundPoint({ x: points[2].x, y: inserted.y });
+                }
+              } else {
+                points[1] = inserted;
+              }
+            }
+          }
+        }
+
+        if (isAttachedConnectorEndpoint(connector.target) && targetNode && points.length > 1) {
+          const lastIndex = points.length - 1;
+          const last = points[lastIndex];
+          const prev = points[lastIndex - 1];
+          const port = connector.target.port;
+          const axis = PORT_AXIS[port];
+          const direction = -PORT_DIRECTION[port];
+          const enforceOrientation = !avoidNodesEnabled || !avoidanceAdjustments.endAdjusted;
+          if (axis === 'horizontal') {
+            const dx = last.x - prev.x;
+            const sign = Math.sign(dx || direction);
+            if (!enforceOrientation) {
+              const length = Math.hypot(last.x - prev.x, last.y - prev.y);
+              assertInvariant(length > EPSILON, 'Connector segment must approach the port.');
+            } else if (!nearlyEqual(last.y, prev.y) || sign !== direction) {
+              const step = dx !== 0 ? Math.min(Math.abs(dx), NODE_AVOIDANCE_DETOUR) : NODE_AVOIDANCE_DETOUR;
+              const inserted = roundPoint({ x: last.x - direction * step, y: last.y });
+              if (!nearlyEqual(inserted.x, prev.x) || !nearlyEqual(inserted.y, prev.y)) {
+                points = [...points.slice(0, lastIndex), inserted, last];
+                if (lastIndex - 1 >= 0) {
+                  const adjustIndex = lastIndex - 1;
+                  const current = points[adjustIndex];
+                  points[adjustIndex] = roundPoint({ x: current.x, y: inserted.y });
+                }
+              } else {
+                points[lastIndex - 1] = inserted;
+              }
+            }
+          } else {
+            const dy = last.y - prev.y;
+            const sign = Math.sign(dy || direction);
+            if (!enforceOrientation) {
+              const length = Math.hypot(last.x - prev.x, last.y - prev.y);
+              assertInvariant(length > EPSILON, 'Connector segment must approach the port.');
+            } else if (!nearlyEqual(last.x, prev.x) || sign !== direction) {
+              const step = dy !== 0 ? Math.min(Math.abs(dy), NODE_AVOIDANCE_DETOUR) : NODE_AVOIDANCE_DETOUR;
+              const inserted = roundPoint({ x: last.x, y: last.y - direction * step });
+              if (!nearlyEqual(inserted.x, prev.x) || !nearlyEqual(inserted.y, prev.y)) {
+                points = [...points.slice(0, lastIndex), inserted, last];
+                if (lastIndex - 1 >= 0) {
+                  const adjustIndex = lastIndex - 1;
+                  const current = points[adjustIndex];
+                  points[adjustIndex] = roundPoint({ x: inserted.x, y: current.y });
+                }
+              } else {
+                points[lastIndex - 1] = inserted;
+              }
+            }
+          }
+        }
+
+        points = sanitizePoints(points);
+        waypoints = points.slice(1, points.length - 1).map((point) => ({ ...point }));
+      }
+    }
   }
 
   if (connector.mode === 'elbow') {
@@ -574,30 +1146,41 @@ export const getConnectorPath = (
       const first = points[0];
       const second = points[1];
       const axis = PORT_AXIS[connector.source.port];
+      const enforceOrientation = !avoidNodesEnabled || !avoidanceAdjustments.startAdjusted;
       if (axis === 'vertical') {
-        assertInvariant(
-          Math.abs(second.x - first.x) < EPSILON,
-          'Connector must leave vertical ports vertically.'
-        );
-        const delta = second.y - first.y;
-        assertInvariant(Math.abs(delta) > EPSILON, 'Connector segment must extend away from the port.');
-        const direction = Math.sign(delta);
-        assertInvariant(
-          direction === PORT_DIRECTION[connector.source.port],
-          'Connector segment direction must respect source port orientation.'
-        );
+        if (enforceOrientation) {
+          assertInvariant(
+            Math.abs(second.x - first.x) < EPSILON,
+            'Connector must leave vertical ports vertically.'
+          );
+          const delta = second.y - first.y;
+          assertInvariant(Math.abs(delta) > EPSILON, 'Connector segment must extend away from the port.');
+          const direction = Math.sign(delta);
+          assertInvariant(
+            direction === PORT_DIRECTION[connector.source.port],
+            'Connector segment direction must respect source port orientation.'
+          );
+        } else {
+          const length = Math.hypot(second.x - first.x, second.y - first.y);
+          assertInvariant(length > EPSILON, 'Connector segment must extend away from the port.');
+        }
       } else {
-        assertInvariant(
-          Math.abs(second.y - first.y) < EPSILON,
-          'Connector must leave horizontal ports horizontally.'
-        );
-        const delta = second.x - first.x;
-        assertInvariant(Math.abs(delta) > EPSILON, 'Connector segment must extend away from the port.');
-        const direction = Math.sign(delta);
-        assertInvariant(
-          direction === PORT_DIRECTION[connector.source.port],
-          'Connector segment direction must respect source port orientation.'
-        );
+        if (enforceOrientation) {
+          assertInvariant(
+            Math.abs(second.y - first.y) < EPSILON,
+            'Connector must leave horizontal ports horizontally.'
+          );
+          const delta = second.x - first.x;
+          assertInvariant(Math.abs(delta) > EPSILON, 'Connector segment must extend away from the port.');
+          const direction = Math.sign(delta);
+          assertInvariant(
+            direction === PORT_DIRECTION[connector.source.port],
+            'Connector segment direction must respect source port orientation.'
+          );
+        } else {
+          const length = Math.hypot(second.x - first.x, second.y - first.y);
+          assertInvariant(length > EPSILON, 'Connector segment must extend away from the port.');
+        }
       }
     }
 
@@ -605,34 +1188,56 @@ export const getConnectorPath = (
       const last = points[points.length - 1];
       const prev = points[points.length - 2];
       const axis = PORT_AXIS[connector.target.port];
+      const enforceOrientation = !avoidNodesEnabled || !avoidanceAdjustments.endAdjusted;
       if (axis === 'vertical') {
-        assertInvariant(
-          Math.abs(last.x - prev.x) < EPSILON,
-          'Connector must enter vertical ports vertically.'
-        );
-        const delta = last.y - prev.y;
-        assertInvariant(Math.abs(delta) > EPSILON, 'Connector segment must approach the port.');
-        const direction = Math.sign(delta);
-        assertInvariant(
-          direction === -PORT_DIRECTION[connector.target.port],
-          'Connector segment direction must respect target port orientation.'
-        );
+        if (enforceOrientation) {
+          assertInvariant(
+            Math.abs(last.x - prev.x) < EPSILON,
+            'Connector must enter vertical ports vertically.'
+          );
+          const delta = last.y - prev.y;
+          assertInvariant(Math.abs(delta) > EPSILON, 'Connector segment must approach the port.');
+          const direction = Math.sign(delta);
+          assertInvariant(
+            direction === -PORT_DIRECTION[connector.target.port],
+            'Connector segment direction must respect target port orientation.'
+          );
+        } else {
+          const length = Math.hypot(last.x - prev.x, last.y - prev.y);
+          assertInvariant(length > EPSILON, 'Connector segment must approach the port.');
+        }
       } else {
-        assertInvariant(
-          Math.abs(last.y - prev.y) < EPSILON,
-          'Connector must enter horizontal ports horizontally.'
-        );
-        const delta = last.x - prev.x;
-        assertInvariant(Math.abs(delta) > EPSILON, 'Connector segment must approach the port.');
-        const direction = Math.sign(delta);
-        assertInvariant(
-          direction === -PORT_DIRECTION[connector.target.port],
-          'Connector segment direction must respect target port orientation.'
-        );
+        if (enforceOrientation) {
+          assertInvariant(
+            Math.abs(last.y - prev.y) < EPSILON,
+            'Connector must enter horizontal ports horizontally.'
+          );
+          const delta = last.x - prev.x;
+          assertInvariant(Math.abs(delta) > EPSILON, 'Connector segment must approach the port.');
+          const direction = Math.sign(delta);
+          assertInvariant(
+            direction === -PORT_DIRECTION[connector.target.port],
+            'Connector segment direction must respect target port orientation.'
+          );
+        } else {
+          const length = Math.hypot(last.x - prev.x, last.y - prev.y);
+          assertInvariant(length > EPSILON, 'Connector segment must approach the port.');
+        }
       }
     }
   } else {
-    assertInvariant(points.length <= 2, 'Straight connectors must not include extra waypoints.');
+    if (avoidNodesEnabled && points.length > 2) {
+      for (let index = 0; index < points.length - 1; index += 1) {
+        const current = points[index];
+        const nextPoint = points[index + 1];
+        assertInvariant(
+          nearlyEqual(current.x, nextPoint.x) || nearlyEqual(current.y, nextPoint.y),
+          'Adjusted straight connector segments must remain orthogonal.'
+        );
+      }
+    } else {
+      assertInvariant(points.length <= 2, 'Straight connectors must not include extra waypoints.');
+    }
   }
 
   return {

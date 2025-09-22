@@ -486,7 +486,7 @@ const CanvasComponent = (
     }
     const sourceNode = resolveEndpointNode(selectedConnector.source);
     const targetNode = resolveEndpointNode(selectedConnector.target);
-    const geometry = getConnectorPath(selectedConnector, sourceNode, targetNode);
+    const geometry = getConnectorPath(selectedConnector, sourceNode, targetNode, nodes);
     if (!geometry.points.length) {
       return null;
     }
@@ -501,7 +501,7 @@ const CanvasComponent = (
     }
     const sourceNode = resolveEndpointNode(selectedConnector.source);
     const targetNode = resolveEndpointNode(selectedConnector.target);
-    const geometry = getConnectorPath(selectedConnector, sourceNode, targetNode);
+    const geometry = getConnectorPath(selectedConnector, sourceNode, targetNode, nodes);
     if (!geometry.points.length) {
       return null;
     }
@@ -732,7 +732,7 @@ const CanvasComponent = (
     (connector: ConnectorModel) => {
       const sourceNode = resolveEndpointNode(connector.source);
       const targetNode = resolveEndpointNode(connector.target);
-      const geometry = getConnectorPath(connector, sourceNode, targetNode);
+      const geometry = getConnectorPath(connector, sourceNode, targetNode, nodes);
       if (connector.mode === 'elbow') {
         const waypoints = tidyOrthogonalWaypoints(geometry.start, geometry.waypoints, geometry.end);
         updateConnector(connector.id, { points: waypoints });
@@ -1104,7 +1104,7 @@ const CanvasComponent = (
       }
       const sourceNode = resolveEndpointNode(connector.source);
       const targetNode = resolveEndpointNode(connector.target);
-      const geometry = getConnectorPath(connector, sourceNode, targetNode);
+      const geometry = getConnectorPath(connector, sourceNode, targetNode, nodes);
       if (geometry.points.length < 2) {
         return;
       }
@@ -1776,7 +1776,7 @@ const CanvasComponent = (
 
     const sourceNode = resolveEndpointNode(connector.source);
     const targetNode = resolveEndpointNode(connector.target);
-    const geometry = getConnectorPath(connector, sourceNode, targetNode);
+    const geometry = getConnectorPath(connector, sourceNode, targetNode, nodes);
     if (geometry.points.length < 2) {
       return;
     }
@@ -1878,7 +1878,7 @@ const CanvasComponent = (
       return;
     }
 
-    const geometry = getConnectorPath(connector, sourceNode, targetNode);
+    const geometry = getConnectorPath(connector, sourceNode, targetNode, nodes);
     if (!geometry.points[pointIndex + 1]) {
       return;
     }
@@ -2365,7 +2365,7 @@ const CanvasComponent = (
     const createPreview = (model: ConnectorModel) => {
       const sourceNode = resolveEndpointNode(model.source);
       const targetNode = resolveEndpointNode(model.target);
-      const geometry = getConnectorPath(model, sourceNode, targetNode);
+      const geometry = getConnectorPath(model, sourceNode, targetNode, nodes);
       const radius = model.mode === 'elbow' ? model.style.cornerRadius ?? 12 : 0;
       const path = buildRoundedConnectorPath(geometry.points, radius);
       if (!path) {
@@ -2488,6 +2488,7 @@ const CanvasComponent = (
               connector={connector}
               source={resolveEndpointNode(connector.source)}
               target={resolveEndpointNode(connector.target)}
+              nodes={nodes}
               selected={selectedConnectorIds.includes(connector.id)}
               labelEditing={editingConnectorId === connector.id}
               commitSignal={connectorCommitSignal}
