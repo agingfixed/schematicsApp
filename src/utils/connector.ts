@@ -205,6 +205,107 @@ const createPortStubPoint = (anchor: Vec2, port: CardinalConnectorPort, clearanc
   return { x: anchor.x + direction * clearance, y: anchor.y };
 };
 
+const STUB_AXIS_TOLERANCE = ROUNDING_STEP + 0.01;
+const STUB_LENGTH_TOLERANCE = PORT_STUB_LENGTH_TOLERANCE + ROUNDING_STEP + EPSILON;
+
+const matchesStubSegment = (
+  from: Vec2,
+  to: Vec2,
+  axis: SegmentAxis,
+  direction: -1 | 1,
+  desiredLength: number
+): boolean => {
+  if (desiredLength <= EPSILON) {
+    return false;
+  }
+
+  if (axis === 'horizontal') {
+    const dy = Math.abs(to.y - from.y);
+    if (dy > STUB_AXIS_TOLERANCE) {
+      return false;
+    }
+    const dx = to.x - from.x;
+    const sign = Math.sign(dx || direction);
+    if (sign !== direction) {
+      return false;
+    }
+    const length = Math.abs(dx);
+    return Math.abs(length - desiredLength) <= STUB_LENGTH_TOLERANCE;
+  }
+
+  const dx = Math.abs(to.x - from.x);
+  if (dx > STUB_AXIS_TOLERANCE) {
+    return false;
+  }
+  const dy = to.y - from.y;
+  const sign = Math.sign(dy || direction);
+  if (sign !== direction) {
+    return false;
+  }
+  const length = Math.abs(dy);
+  return Math.abs(length - desiredLength) <= STUB_LENGTH_TOLERANCE;
+};
+
+export const stripConnectorStubs = (
+  connector: ConnectorModel,
+  start: Vec2,
+  waypoints: Vec2[],
+  end: Vec2
+): Vec2[] => {
+  if (!waypoints.length) {
+    return [];
+  }
+
+  const strokeWidth = connector.style.strokeWidth ?? 2;
+  const preferAvoidance = connector.mode !== 'straight' && connector.style.avoidNodes !== false;
+  const baseClearance = Math.max(strokeWidth + 4, 12);
+  const clearance = preferAvoidance
+    ? Math.max(baseClearance, CONNECTOR_NODE_AVOIDANCE_CLEARANCE)
+    : baseClearance;
+  const cornerRadius =
+    connector.mode === 'elbow' ? Math.max(0, connector.style.cornerRadius ?? 12) : 0;
+  const arrowScale = Math.max(0, connector.style.arrowSize ?? 1);
+  const startArrowShape = connector.style.startArrow?.shape ?? 'none';
+  const endArrowShape = connector.style.endArrow?.shape ?? 'none';
+  const startArrowLength = startArrowShape !== 'none' ? arrowScale * ARROW_BASE_LENGTH : 0;
+  const endArrowLength = endArrowShape !== 'none' ? arrowScale * ARROW_BASE_LENGTH : 0;
+  const stubMargin = Math.max(PORT_STUB_EXTRA_MARGIN, strokeWidth + 2);
+  const baseStubLength = Math.max(clearance, MIN_PORT_STUB_LENGTH);
+
+  const sourceAttachment = isAttachedConnectorEndpoint(connector.source) ? connector.source : null;
+  const targetAttachment = isAttachedConnectorEndpoint(connector.target) ? connector.target : null;
+
+  const desiredStartStubLength = sourceAttachment
+    ? Math.max(baseStubLength, startArrowLength + cornerRadius + stubMargin)
+    : baseStubLength;
+  const desiredEndStubLength = targetAttachment
+    ? Math.max(baseStubLength, endArrowLength + cornerRadius + stubMargin)
+    : baseStubLength;
+
+  const trimmed = waypoints.map((point) => clonePoint(point));
+
+  if (sourceAttachment && trimmed.length) {
+    const first = trimmed[0];
+    const axis = PORT_AXIS[sourceAttachment.port];
+    const direction = PORT_DIRECTION[sourceAttachment.port];
+    if (matchesStubSegment(start, first, axis, direction, desiredStartStubLength)) {
+      trimmed.shift();
+    }
+  }
+
+  if (targetAttachment && trimmed.length) {
+    const lastIndex = trimmed.length - 1;
+    const last = trimmed[lastIndex];
+    const axis = PORT_AXIS[targetAttachment.port];
+    const direction = (-PORT_DIRECTION[targetAttachment.port]) as -1 | 1;
+    if (matchesStubSegment(last, end, axis, direction, desiredEndStubLength)) {
+      trimmed.pop();
+    }
+  }
+
+  return trimmed;
+};
+
 export interface ConnectorPath {
   start: Vec2;
   end: Vec2;
@@ -1025,9 +1126,10 @@ export const getConnectorPath = (
   targetNode?: NodeModel,
   nodes?: NodeModel[]
 ): ConnectorPath => {
-  const baseWaypoints = connector.points?.map((point) => clonePoint(point)) ?? [];
+  let baseWaypoints = connector.points?.map((point) => clonePoint(point)) ?? [];
   const start = cloneEndpointPosition(connector.source, sourceNode);
   const end = cloneEndpointPosition(connector.target, targetNode);
+  baseWaypoints = stripConnectorStubs(connector, start, baseWaypoints, end);
 
   const strokeWidth = connector.style.strokeWidth ?? 2;
   const preferAvoidance = connector.mode !== 'straight' && connector.style.avoidNodes !== false;
@@ -1386,7 +1488,7 @@ export const getConnectorPath = (
     }
   }
 
-  waypoints = points.slice(1, points.length - 1).map((point) => ({ ...point }));
+  waypoints = stripConnectorStubs(connector, start, points.slice(1, points.length - 1), end);
 
   return {
     start,
