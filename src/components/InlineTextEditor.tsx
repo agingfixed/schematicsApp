@@ -18,6 +18,7 @@ interface InlineTextEditorProps {
   entryPoint: CaretPoint | null;
   onCommit: (value: string) => void;
   onCancel: () => void;
+  shouldIgnoreBlur?: () => boolean;
 }
 
 export interface InlineTextEditorHandle {
@@ -27,7 +28,16 @@ export interface InlineTextEditorHandle {
 }
 
 const InlineTextEditorComponent = (
-  { node, bounds, isEditing, scale, entryPoint, onCommit, onCancel }: InlineTextEditorProps,
+  {
+    node,
+    bounds,
+    isEditing,
+    scale,
+    entryPoint,
+    onCommit,
+    onCancel,
+    shouldIgnoreBlur
+  }: InlineTextEditorProps,
   ref: ForwardedRef<InlineTextEditorHandle>
 ) => {
   const editorRef = useRef<HTMLDivElement>(null);
@@ -142,6 +152,9 @@ const InlineTextEditorComponent = (
 
   const handleBlur = () => {
     if (isComposingRef.current || cancelledRef.current) {
+      return;
+    }
+    if (shouldIgnoreBlur?.()) {
       return;
     }
     commitValue();

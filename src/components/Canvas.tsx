@@ -86,16 +86,13 @@ const FIT_PADDING = 160;
 const DOUBLE_CLICK_DELAY = 320;
 const DEFAULT_CONNECTOR_LABEL_POSITION = 0.5;
 const DEFAULT_CONNECTOR_LABEL_OFFSET = 18;
-const MAX_CONNECTOR_LABEL_OFFSET = 120;
+const MAX_CONNECTOR_LABEL_OFFSET = 60;
 const DEFAULT_CONNECTOR_LABEL_STYLE = {
   fontSize: 14,
   fontWeight: 600 as const,
   color: '#f8fafc',
   background: 'rgba(15,23,42,0.85)'
 };
-const CONNECTOR_LABEL_SNAP_POINTS = [0.25, 0.5, 0.75];
-const CONNECTOR_LABEL_SNAP_DISTANCE = 32;
-const CONNECTOR_LABEL_SNAP_RATIO = 0.25;
 const PORT_VISIBILITY_DISTANCE = 72;
 const PORT_SNAP_DISTANCE = 12;
 const POINT_TOLERANCE = 0.5;
@@ -329,6 +326,7 @@ const CanvasComponent = (
   } | null>(null);
   const connectorLabelDragRef = useRef<ConnectorLabelDragState | null>(null);
   const connectorLabelToolbarInteractionRef = useRef(false);
+  const selectionToolbarInteractionRef = useRef(false);
   const connectorLabelEntryPointRef = useRef<CaretPoint | null>(null);
   const clearFloatingMenuPlacement = useFloatingMenuStore((state) => state.clearSharedPlacement);
   const hadFloatingMenuRef = useRef(false);
@@ -340,6 +338,15 @@ const CanvasComponent = (
 
   const setConnectorLabelToolbarInteracting = useCallback((active: boolean) => {
     connectorLabelToolbarInteractionRef.current = active;
+  }, []);
+
+  const isSelectionToolbarInteracting = useCallback(
+    () => selectionToolbarInteractionRef.current,
+    []
+  );
+
+  const setSelectionToolbarInteracting = useCallback((active: boolean) => {
+    selectionToolbarInteractionRef.current = active;
   }, []);
 
   const hasConnectorBetween = useCallback(
@@ -1186,27 +1193,14 @@ const CanvasComponent = (
       const segmentOffset = measure.segments[closest.index] ?? 0;
       let position = (segmentOffset + Math.min(localLength, segmentLength)) / totalLength;
       position = Math.max(0, Math.min(1, position));
-      let snappedPosition = position;
-      const ratioTolerance = Math.min(
-        CONNECTOR_LABEL_SNAP_RATIO,
-        CONNECTOR_LABEL_SNAP_DISTANCE / totalLength
-      );
-      let bestSnapDistance = Number.POSITIVE_INFINITY;
-      for (const snapPoint of CONNECTOR_LABEL_SNAP_POINTS) {
-        const distance = Math.abs(position - snapPoint);
-        if (distance <= ratioTolerance && distance < bestSnapDistance) {
-          snappedPosition = snapPoint;
-          bestSnapDistance = distance;
-        }
-      }
       const normal = getNormalAtRatio(geometry.points, closest.index);
       const offsetRaw =
         (worldPoint.x - closest.point.x) * normal.x + (worldPoint.y - closest.point.y) * normal.y;
       const offset = clampConnectorLabelOffset(offsetRaw);
-      labelDrag.lastPosition = snappedPosition;
+      labelDrag.lastPosition = position;
       labelDrag.lastOffset = offset;
       labelDrag.moved = true;
-      updateConnector(connector.id, { labelPosition: snappedPosition, labelOffset: offset });
+      updateConnector(connector.id, { labelPosition: position, labelOffset: offset });
       return;
     }
 
@@ -2794,6 +2788,7 @@ const CanvasComponent = (
           pointerPosition={lastPointerPosition}
           isTextEditing={Boolean(editingNodeId && editingNodeId === selectedNode.id)}
           textEditorRef={inlineEditorRef}
+          onPointerInteractionChange={setSelectionToolbarInteracting}
         />
       )}
       {editorNode && (
@@ -2806,6 +2801,7 @@ const CanvasComponent = (
           entryPoint={editingEntryPoint}
           onCommit={handleTextCommit}
           onCancel={handleTextCancel}
+          shouldIgnoreBlur={isSelectionToolbarInteracting}
         />
       )}
     </div>

@@ -34,7 +34,7 @@ interface DiagramConnectorProps {
 
 const DEFAULT_LABEL_POSITION = 0.5;
 const DEFAULT_LABEL_OFFSET = 18;
-const MAX_LABEL_OFFSET = 120;
+const MAX_LABEL_OFFSET = 60;
 
 const clampLabel = (value: string) => value.trim();
 
@@ -422,7 +422,6 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
 
   const handleLabelPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (labelEditing) {
-      event.preventDefault();
       event.stopPropagation();
       return;
     }
