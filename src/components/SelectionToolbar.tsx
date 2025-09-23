@@ -45,6 +45,15 @@ const ensureProtocol = (value: string) => {
   return `https://${trimmed}`;
 };
 
+export const SelectionToolbar: React.FC<SelectionToolbarProps> = (props) => {
+  const { isVisible, anchor } = props;
+  if (!isVisible || !anchor) {
+    return null;
+  }
+
+  return <SelectionToolbarContent {...props} anchor={anchor} />;
+};
+
 const isValidHttpUrl = (value: string) => {
   if (!value) {
     return true;
@@ -70,7 +79,11 @@ export interface SelectionToolbarProps {
   onPointerInteractionChange?: (active: boolean) => void;
 }
 
-export const SelectionToolbar: React.FC<SelectionToolbarProps> = ({
+type SelectionToolbarContentProps = Omit<SelectionToolbarProps, 'anchor'> & {
+  anchor: NonNullable<SelectionToolbarProps['anchor']>;
+};
+
+const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
   node,
   nodeIds,
   anchor,
@@ -424,10 +437,6 @@ export const SelectionToolbar: React.FC<SelectionToolbarProps> = ({
     pointerPosition,
     placementOptions
   ]);
-
-  if (!isVisible || !anchor) {
-    return null;
-  }
 
   const handleToggleBold = () => {
     if (isTextEditing) {
