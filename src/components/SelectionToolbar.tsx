@@ -11,6 +11,7 @@ import { useFrozenFloatingPlacement } from '../hooks/useFrozenFloatingPlacement'
 import {
   applyAlignmentToSelection,
   applyFontSizeToSelection,
+  applyLinkFormattingToSelection,
   applyTextColorToSelection,
   extractPlainText,
   removeLinkFromSelection,
@@ -476,14 +477,14 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
     if (!isTextEditing) {
       return;
     }
-    if (textSelectionState.hasSelection) {
+    if (textSelectionState.hasSelection || textLinkOpen) {
       return;
     }
     setTextLinkOpen(false);
     setTextLinkError(null);
     setTextLinkDraft('');
     setTextLinkVisibleDraft('');
-  }, [isTextEditing, textSelectionState.hasSelection]);
+  }, [isTextEditing, textLinkOpen, textSelectionState.hasSelection]);
 
   useEffect(() => {
     if (!isTextEditing) {
@@ -668,7 +669,10 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
       if (!replaceSelectionWithText(editor, visibleText)) {
         return false;
       }
-      return wrapSelectionWithLink(editor, normalized);
+      if (!wrapSelectionWithLink(editor, normalized)) {
+        return false;
+      }
+      return applyLinkFormattingToSelection(editor);
     });
     if (!applied) {
       setTextLinkError('Select text to link');
@@ -1070,124 +1074,83 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
           </>
         ) : (
           <>
-            {isTextNode ? (
-              <div className="selection-toolbar__group selection-toolbar__group--text">
-                <label className="selection-toolbar__swatch" title="Text color">
-                  <span className="selection-toolbar__swatch-indicator">Text</span>
-                  <input
-                    type="color"
-                    value={displayedTextColor}
-                    onChange={(event) => handleTextColorChange(event.target.value)}
-                    onPointerDown={handleTextColorPointerDown}
-                  />
-                </label>
-                <div className="selection-toolbar__size-control">
-                  <button
-                    type="button"
-                    onClick={() => adjustFontSize(-1)}
-                    className="selection-toolbar__button"
-                    title="Decrease size"
-                  >
-                    −
-                  </button>
-                  <input
-                    type="number"
-                    className="selection-toolbar__input"
-                    value={fontSizeValue}
-                    min={FONT_SIZE_MIN}
-                    max={FONT_SIZE_MAX}
-                    onChange={(event) => setFontSizeValue(event.target.value)}
-                    onBlur={handleFontSizeBlur}
-                    onKeyDown={handleFontSizeKeyDown}
-                    aria-label="Font size"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => adjustFontSize(1)}
-                    className="selection-toolbar__button"
-                    title="Increase size"
-                  >
-                    +
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="selection-toolbar__group">
-                <div className="selection-toolbar__swatch" title={fillTitle}>
-                  <span className="selection-toolbar__swatch-indicator">Fill</span>
-                  <button
-                    type="button"
-                    ref={fillButtonRef}
-                    className={`selection-toolbar__color-button ${fillOpen ? 'is-active' : ''}`}
-                    onClick={() => {
-                      setFillOpen((prev) => !prev);
-                    }}
-                    aria-haspopup="dialog"
-                    aria-expanded={fillOpen}
-                    aria-label="Edit fill color"
-                  >
-                    <span
-                      className="selection-toolbar__color-preview"
-                      style={{ ['--selection-fill-preview' as const]: fillPreview }}
-                    />
-                  </button>
-                  {fillOpen && (
-                    <div className="selection-toolbar__color-popover" ref={fillPopoverRef}>
-                      <ColorPicker color={fillColor} alpha={fillOpacity} onChange={handleFillChange} />
-                    </div>
-                  )}
-                </div>
-                <label className="selection-toolbar__swatch" title="Stroke color">
-                  <span className="selection-toolbar__swatch-indicator">Stroke</span>
-                  <input type="color" value={node.stroke.color} onChange={handleStrokeColorChange} />
-                </label>
-                <div className="selection-toolbar__size-control">
-                  <button
-                    type="button"
-                    onClick={() => adjustStrokeWidth(-1)}
-                    disabled={strokeWidthDisabled}
-                    className="selection-toolbar__button"
-                    title="Thinner stroke"
-                  >
-                    −
-                  </button>
-                  <input
-                    type="number"
-                    className="selection-toolbar__input"
-                    value={strokeWidthValue}
-                    min={STROKE_MIN}
-                    max={STROKE_MAX}
-                    onChange={(event) => setStrokeWidthValue(event.target.value)}
-                    onBlur={handleStrokeWidthBlur}
-                    onKeyDown={handleStrokeWidthKeyDown}
-                    disabled={strokeWidthDisabled}
-                    aria-label="Stroke width"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => adjustStrokeWidth(1)}
-                    disabled={strokeWidthDisabled}
-                    className="selection-toolbar__button"
-                    title="Thicker stroke"
-                  >
-                    +
-                  </button>
-                </div>
-              </div>
-            )}
             {!isTextNode && (
-              <div className="selection-toolbar__group">
-                <label className="selection-toolbar__shape" title="Change shape">
-                  <span>Shape</span>
-                  <select value={node.shape} onChange={handleShapeChange}>
-                    {shapeOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
+              <>
+                <div className="selection-toolbar__group">
+                  <div className="selection-toolbar__swatch" title={fillTitle}>
+                    <span className="selection-toolbar__swatch-indicator">Fill</span>
+                    <button
+                      type="button"
+                      ref={fillButtonRef}
+                      className={`selection-toolbar__color-button ${fillOpen ? 'is-active' : ''}`}
+                      onClick={() => {
+                        setFillOpen((prev) => !prev);
+                      }}
+                      aria-haspopup="dialog"
+                      aria-expanded={fillOpen}
+                      aria-label="Edit fill color"
+                    >
+                      <span
+                        className="selection-toolbar__color-preview"
+                        style={{ ['--selection-fill-preview' as const]: fillPreview }}
+                      />
+                    </button>
+                    {fillOpen && (
+                      <div className="selection-toolbar__color-popover" ref={fillPopoverRef}>
+                        <ColorPicker color={fillColor} alpha={fillOpacity} onChange={handleFillChange} />
+                      </div>
+                    )}
+                  </div>
+                  <label className="selection-toolbar__swatch" title="Stroke color">
+                    <span className="selection-toolbar__swatch-indicator">Stroke</span>
+                    <input type="color" value={node.stroke.color} onChange={handleStrokeColorChange} />
+                  </label>
+                  <div className="selection-toolbar__size-control">
+                    <button
+                      type="button"
+                      onClick={() => adjustStrokeWidth(-1)}
+                      disabled={strokeWidthDisabled}
+                      className="selection-toolbar__button"
+                      title="Thinner stroke"
+                    >
+                      −
+                    </button>
+                    <input
+                      type="number"
+                      className="selection-toolbar__input"
+                      value={strokeWidthValue}
+                      min={STROKE_MIN}
+                      max={STROKE_MAX}
+                      onChange={(event) => setStrokeWidthValue(event.target.value)}
+                      onBlur={handleStrokeWidthBlur}
+                      onKeyDown={handleStrokeWidthKeyDown}
+                      disabled={strokeWidthDisabled}
+                      aria-label="Stroke width"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => adjustStrokeWidth(1)}
+                      disabled={strokeWidthDisabled}
+                      className="selection-toolbar__button"
+                      title="Thicker stroke"
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+                <div className="selection-toolbar__group">
+                  <label className="selection-toolbar__shape" title="Change shape">
+                    <span>Shape</span>
+                    <select value={node.shape} onChange={handleShapeChange}>
+                      {shapeOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+              </>
             )}
           </>
         )}
