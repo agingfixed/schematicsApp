@@ -70,7 +70,7 @@
   border-radius: 14px;
   padding: 10px 14px;
   min-height: 24px;
-  pointer-events: none;
+  pointer-events: auto;
   user-select: none;
   white-space: pre-wrap;
   word-break: break-word;
@@ -78,6 +78,25 @@
   width: 100%;
   height: 100%;
   transition: background 0.2s ease, opacity 0.2s ease;
+}
+
+.diagram-node__label a {
+  color: #38bdf8;
+  text-decoration: underline;
+}
+
+.diagram-node__label a:hover {
+  color: #bae6fd;
+}
+
+.diagram-node__label ul,
+.diagram-node__label ol {
+  margin: 0 0 0.5em;
+  padding-left: 1.4em;
+}
+
+.diagram-node__label li {
+  margin: 0.1em 0;
 }
 
 .diagram-node__label.is-editing {
@@ -116,6 +135,10 @@
   fill: rgba(37, 99, 235, 0.35);
   stroke: rgba(147, 197, 253, 0.95);
   filter: drop-shadow(0 4px 12px rgba(59, 130, 246, 0.4));
+}
+
+.diagram-node--text .diagram-node__shadow {
+  display: none;
 }
 
 .diagram-node__connector-handle:active {

@@ -15,6 +15,7 @@ import {
   CardinalConnectorPort,
   ConnectorEndpoint,
   ConnectorModel,
+  NodeKind,
   NodeModel,
   Tool,
   Vec2,
@@ -113,6 +114,18 @@ const PENDING_CONNECTOR_STYLE: ConnectorModel['style'] = {
   arrowSize: 1,
   cornerRadius: 12
 };
+
+const NODE_CREATION_TOOLS: ReadonlyArray<NodeKind> = [
+  'rectangle',
+  'circle',
+  'ellipse',
+  'triangle',
+  'diamond',
+  'text'
+] as const;
+
+const isNodeCreationTool = (tool: Tool): tool is NodeKind =>
+  NODE_CREATION_TOOLS.includes(tool as NodeKind);
 
 const clampConnectorLabelOffset = (value: number) =>
   Math.max(-MAX_CONNECTOR_LABEL_DISTANCE, Math.min(MAX_CONNECTOR_LABEL_DISTANCE, value));
@@ -1053,10 +1066,9 @@ const CanvasComponent = (
       x: worldPoint.x - width / 2,
       y: worldPoint.y - height / 2
     };
-    addNode(
-      tool as Extract<Tool, 'rectangle' | 'circle' | 'ellipse' | 'triangle' | 'diamond'>,
-      position
-    );
+    if (isNodeCreationTool(tool)) {
+      addNode(tool, position);
+    }
   };
 
   const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -2897,16 +2909,10 @@ const createTransformToFit = (
 };
 
 const getDefaultSizeForTool = (tool: Tool) => {
-  switch (tool) {
-    case 'rectangle':
-    case 'circle':
-    case 'ellipse':
-    case 'triangle':
-    case 'diamond':
-      return getDefaultNodeSize(tool);
-    default:
-      return { width: GRID_SIZE * 4, height: GRID_SIZE * 4 };
+  if (isNodeCreationTool(tool)) {
+    return getDefaultNodeSize(tool);
   }
+  return { width: GRID_SIZE * 4, height: GRID_SIZE * 4 };
 };
 
 export const Canvas = forwardRef(CanvasComponent);
