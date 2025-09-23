@@ -9,7 +9,7 @@
   cursor: text;
   pointer-events: auto;
   user-select: text;
-  -webkit-user-modify: read-write-plaintext-only;
+  -webkit-user-modify: read-write;
 }
 
 .inline-text-editor:focus {

@@ -7,9 +7,8 @@ import React, {
   useRef
 } from 'react';
 import { NodeModel } from '../types/scene';
+import { CaretPoint, placeCaretAtPoint } from '../utils/text';
 import '../styles/inline-text-editor.css';
-
-type CaretPoint = { x: number; y: number };
 
 interface InlineTextEditorProps {
   node: NodeModel;
@@ -24,46 +23,8 @@ interface InlineTextEditorProps {
 export interface InlineTextEditorHandle {
   commit: () => void;
   cancel: () => void;
+  getElement: () => HTMLDivElement | null;
 }
-
-type DocumentWithCaret = Document & {
-  caretRangeFromPoint?: (x: number, y: number) => Range | null;
-  caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null;
-};
-
-const placeCaretAtPoint = (element: HTMLElement, point: CaretPoint | null) => {
-  const selection = window.getSelection();
-  if (!selection) {
-    return;
-  }
-
-  selection.removeAllRanges();
-
-  let range: Range | null = null;
-  if (point) {
-    const doc = document as DocumentWithCaret;
-    if (typeof doc.caretRangeFromPoint === 'function') {
-      range = doc.caretRangeFromPoint(point.x, point.y) ?? null;
-    } else if (typeof doc.caretPositionFromPoint === 'function') {
-      const position = doc.caretPositionFromPoint(point.x, point.y);
-      if (position && position.offsetNode) {
-        range = document.createRange();
-        range.setStart(position.offsetNode, position.offset);
-        range.collapse(true);
-      }
-    }
-  }
-
-  if (range && element.contains(range.startContainer)) {
-    selection.addRange(range);
-    return;
-  }
-
-  const fallback = document.createRange();
-  fallback.selectNodeContents(element);
-  fallback.collapse(false);
-  selection.addRange(fallback);
-};
 
 const InlineTextEditorComponent = (
   { node, bounds, isEditing, scale, entryPoint, onCommit, onCancel }: InlineTextEditorProps,
@@ -79,7 +40,7 @@ const InlineTextEditorComponent = (
     if (!element) {
       return valueRef.current;
     }
-    return element.innerText.replace(/\r/g, '');
+    return element.innerHTML;
   }, []);
 
   const commitValue = useCallback(() => {
@@ -105,7 +66,8 @@ const InlineTextEditorComponent = (
         if (isEditing) {
           cancelEditing();
         }
-      }
+      },
+      getElement: () => editorRef.current
     }),
     [commitValue, cancelEditing, isEditing]
   );
@@ -124,7 +86,7 @@ const InlineTextEditorComponent = (
     cancelledRef.current = false;
     isComposingRef.current = false;
     valueRef.current = node.text;
-    element.innerText = node.text;
+    element.innerHTML = node.text;
 
     const frame = requestAnimationFrame(() => {
       element.focus({ preventScroll: true });
@@ -153,7 +115,7 @@ const InlineTextEditorComponent = (
     lineHeight: 1.3,
     color: '#e2e8f0',
     textAlign: node.textAlign,
-    whiteSpace: 'pre-wrap',
+    whiteSpace: 'normal',
     wordBreak: 'break-word',
     overflow: 'hidden',
     background: 'transparent',

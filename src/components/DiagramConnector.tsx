@@ -7,6 +7,7 @@ import {
   getPointAtRatio,
   getPolylineMidpoint
 } from '../utils/connector';
+import { CaretPoint, placeCaretAtPoint } from '../utils/text';
 
 interface DiagramConnectorProps {
   connector: ConnectorModel;
@@ -15,6 +16,7 @@ interface DiagramConnectorProps {
   nodes: NodeModel[];
   selected: boolean;
   labelEditing: boolean;
+  labelEditEntryPoint?: CaretPoint | null;
   commitSignal: number;
   cancelSignal: number;
   onPointerDown: (event: React.PointerEvent<SVGElement>) => void;
@@ -25,7 +27,7 @@ interface DiagramConnectorProps {
   ) => void;
   onCommitLabel: (value: string) => void;
   onCancelLabelEdit: () => void;
-  onRequestLabelEdit: () => void;
+  onRequestLabelEdit: (point?: CaretPoint) => void;
   onLabelPointerDown: (event: React.PointerEvent<Element>) => void;
   shouldIgnoreLabelBlur?: () => boolean;
 }
@@ -126,6 +128,7 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
   nodes,
   selected,
   labelEditing,
+  labelEditEntryPoint,
   commitSignal,
   cancelSignal,
   onPointerDown,
@@ -166,14 +169,19 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
       element.textContent = draft;
       const frame = requestAnimationFrame(() => {
         element.focus({ preventScroll: true });
-        const selection = window.getSelection();
-        if (!selection) {
-          return;
+        if (labelEditEntryPoint) {
+          placeCaretAtPoint(element, labelEditEntryPoint);
+        } else {
+          const selection = window.getSelection();
+          if (!selection) {
+            return;
+          }
+          const range = document.createRange();
+          range.selectNodeContents(element);
+          range.collapse(false);
+          selection.removeAllRanges();
+          selection.addRange(range);
         }
-        const range = document.createRange();
-        range.selectNodeContents(element);
-        selection.removeAllRanges();
-        selection.addRange(range);
       });
       hasFocusedRef.current = true;
       return () => cancelAnimationFrame(frame);
@@ -181,7 +189,7 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
     if (element.textContent !== draft) {
       element.textContent = draft;
     }
-  }, [labelEditing, draft]);
+  }, [labelEditing, draft, labelEditEntryPoint]);
 
   const geometry = useMemo(
     () => getConnectorPath(connector, source, target, nodes),
@@ -444,7 +452,7 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
 
   const handleLabelDoubleClick = (event: React.MouseEvent<HTMLDivElement>) => {
     event.stopPropagation();
-    onRequestLabelEdit();
+    onRequestLabelEdit({ x: event.clientX, y: event.clientY });
   };
 
   const startHovered = hoveredEndpoint === 'start';
