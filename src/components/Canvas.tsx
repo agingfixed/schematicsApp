@@ -85,8 +85,8 @@ const ZOOM_FACTOR = 1.1;
 const FIT_PADDING = 160;
 const DOUBLE_CLICK_DELAY = 320;
 const DEFAULT_CONNECTOR_LABEL_POSITION = 0.5;
-const DEFAULT_CONNECTOR_LABEL_OFFSET = 18;
-const MAX_CONNECTOR_LABEL_OFFSET = 60;
+const DEFAULT_CONNECTOR_LABEL_DISTANCE = 18;
+const MAX_CONNECTOR_LABEL_DISTANCE = 60;
 const DEFAULT_CONNECTOR_LABEL_STYLE = {
   fontSize: 14,
   fontWeight: 600 as const,
@@ -115,7 +115,10 @@ const PENDING_CONNECTOR_STYLE: ConnectorModel['style'] = {
 };
 
 const clampConnectorLabelOffset = (value: number) =>
-  Math.max(-MAX_CONNECTOR_LABEL_OFFSET, Math.min(MAX_CONNECTOR_LABEL_OFFSET, value));
+  Math.max(-MAX_CONNECTOR_LABEL_DISTANCE, Math.min(MAX_CONNECTOR_LABEL_DISTANCE, value));
+
+const clampConnectorLabelRadius = (value: number) =>
+  Math.max(0, Math.min(MAX_CONNECTOR_LABEL_DISTANCE, Math.abs(value)));
 
 const pointsRoughlyEqual = (a: Vec2, b: Vec2) =>
   Math.abs(a.x - b.x) <= POINT_TOLERANCE && Math.abs(a.y - b.y) <= POINT_TOLERANCE;
@@ -203,10 +206,14 @@ interface ConnectorLabelDragState {
   pointerId: number;
   connectorId: string;
   originalPosition: number;
-  originalOffset: number;
+  originalOffsetValue: number;
+  originalRadius: number;
+  originalAngle: number;
   lastPosition: number;
-  lastOffset: number;
+  lastRadius: number;
+  lastAngle: number;
   moved: boolean;
+  hadAngle: boolean;
 }
 
 type ResizeHandle = 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w' | 'nw';
@@ -548,15 +555,25 @@ const CanvasComponent = (
       return null;
     }
     const position = selectedConnector.labelPosition ?? DEFAULT_CONNECTOR_LABEL_POSITION;
-    const offset = clampConnectorLabelOffset(
-      selectedConnector.labelOffset ?? DEFAULT_CONNECTOR_LABEL_OFFSET
-    );
+    const rawOffset = selectedConnector.labelOffset ?? DEFAULT_CONNECTOR_LABEL_DISTANCE;
+    const hasCustomAngle = typeof selectedConnector.labelAngle === 'number';
+    const offset = hasCustomAngle
+      ? clampConnectorLabelRadius(rawOffset)
+      : clampConnectorLabelOffset(rawOffset);
+    const angle = hasCustomAngle ? selectedConnector.labelAngle ?? 0 : undefined;
     const { point, segmentIndex } = getPointAtRatio(geometry.points, position);
-    const normal = getNormalAtRatio(geometry.points, segmentIndex);
-    const labelCenter = {
-      x: point.x + normal.x * offset,
-      y: point.y + normal.y * offset
-    };
+    const labelCenter = hasCustomAngle && typeof angle === 'number'
+      ? {
+          x: point.x + Math.cos(angle) * offset,
+          y: point.y + Math.sin(angle) * offset
+        }
+      : (() => {
+          const normal = getNormalAtRatio(geometry.points, segmentIndex);
+          return {
+            x: point.x + normal.x * offset,
+            y: point.y + normal.y * offset
+          };
+        })();
     const screenPoint = worldToScreen(labelCenter, transform);
     return { x: screenPoint.x, y: screenPoint.y };
   }, [selectedConnector, resolveEndpointNode, transform]);
@@ -1193,14 +1210,29 @@ const CanvasComponent = (
       const segmentOffset = measure.segments[closest.index] ?? 0;
       let position = (segmentOffset + Math.min(localLength, segmentLength)) / totalLength;
       position = Math.max(0, Math.min(1, position));
-      const normal = getNormalAtRatio(geometry.points, closest.index);
-      const offsetRaw =
-        (worldPoint.x - closest.point.x) * normal.x + (worldPoint.y - closest.point.y) * normal.y;
-      const offset = clampConnectorLabelOffset(offsetRaw);
+      const delta = {
+        x: worldPoint.x - closest.point.x,
+        y: worldPoint.y - closest.point.y
+      };
+      const radius = clampConnectorLabelRadius(Math.hypot(delta.x, delta.y));
+      let angle: number;
+      if (radius < 1e-6) {
+        angle = labelDrag.lastAngle ?? labelDrag.originalAngle;
+      } else {
+        angle = Math.atan2(delta.y, delta.x);
+      }
+      if (!Number.isFinite(angle)) {
+        angle = labelDrag.lastAngle ?? labelDrag.originalAngle;
+      }
       labelDrag.lastPosition = position;
-      labelDrag.lastOffset = offset;
+      labelDrag.lastRadius = radius;
+      labelDrag.lastAngle = angle;
       labelDrag.moved = true;
-      updateConnector(connector.id, { labelPosition: position, labelOffset: offset });
+      updateConnector(connector.id, {
+        labelPosition: position,
+        labelOffset: radius,
+        labelAngle: angle
+      });
       return;
     }
 
@@ -1507,10 +1539,17 @@ const CanvasComponent = (
     if (!handled && connectorLabelDragRef.current?.pointerId === event.pointerId) {
       const drag = connectorLabelDragRef.current;
       connectorLabelDragRef.current = null;
-      updateConnector(drag.connectorId, {
-        labelPosition: drag.moved ? drag.lastPosition : drag.originalPosition,
-        labelOffset: drag.moved ? drag.lastOffset : drag.originalOffset
-      });
+      const nextPosition = drag.moved ? drag.lastPosition : drag.originalPosition;
+      const nextRadius = drag.moved ? drag.lastRadius : drag.originalRadius;
+      const nextAngle = drag.moved ? drag.lastAngle : drag.originalAngle;
+      const patch: Partial<ConnectorModel> = {
+        labelPosition: nextPosition,
+        labelOffset: drag.moved ? nextRadius : drag.originalOffsetValue
+      };
+      if (drag.moved || drag.hadAngle) {
+        patch.labelAngle = nextAngle;
+      }
+      updateConnector(drag.connectorId, patch);
       endTransaction();
       releasePointerCapture(event.pointerId);
       handled = drag.moved;
@@ -2104,17 +2143,42 @@ const CanvasComponent = (
 
     beginTransaction();
     const originalPosition = connector.labelPosition ?? DEFAULT_CONNECTOR_LABEL_POSITION;
-    const originalOffset = clampConnectorLabelOffset(
-      connector.labelOffset ?? DEFAULT_CONNECTOR_LABEL_OFFSET
-    );
+    const rawOffset = connector.labelOffset ?? DEFAULT_CONNECTOR_LABEL_DISTANCE;
+    const hadAngle = typeof connector.labelAngle === 'number';
+    const originalRadius = clampConnectorLabelRadius(rawOffset);
+    const baseAngle = (() => {
+      if (hadAngle) {
+        return connector.labelAngle ?? 0;
+      }
+      const sourceNode = resolveEndpointNode(connector.source);
+      const targetNode = resolveEndpointNode(connector.target);
+      const geometry = getConnectorPath(connector, sourceNode, targetNode, nodes);
+      if (!geometry.points.length) {
+        return -Math.PI / 2;
+      }
+      const { point, segmentIndex } = getPointAtRatio(geometry.points, originalPosition);
+      const normal = getNormalAtRatio(geometry.points, segmentIndex);
+      const direction = rawOffset < 0 ? -1 : 1;
+      const dx = normal.x * direction;
+      const dy = normal.y * direction;
+      const length = Math.hypot(dx, dy);
+      if (length < 1e-6) {
+        return -Math.PI / 2;
+      }
+      return Math.atan2(dy, dx);
+    })();
     connectorLabelDragRef.current = {
       pointerId: event.pointerId,
       connectorId: connector.id,
       originalPosition,
-      originalOffset,
+      originalOffsetValue: rawOffset,
+      originalRadius,
+      originalAngle: baseAngle,
       lastPosition: originalPosition,
-      lastOffset: originalOffset,
-      moved: false
+      lastRadius: originalRadius,
+      lastAngle: baseAngle,
+      moved: false,
+      hadAngle
     };
     containerRef.current?.setPointerCapture(event.pointerId);
   };
