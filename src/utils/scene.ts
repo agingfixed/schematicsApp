@@ -7,6 +7,7 @@ import {
   Vec2
 } from '../types/scene';
 import { cloneConnectorEndpoint } from './connector';
+import { ensureHtmlContent } from './text';
 
 export const GRID_SIZE = 32;
 
@@ -53,7 +54,7 @@ export const createNodeModel = (shape: NodeKind, position: Vec2, text?: string):
     shape,
     position: { ...position },
     size: { ...size },
-    text: text ?? defaultLabel(shape),
+    text: ensureHtmlContent(text ?? defaultLabel(shape)),
     textAlign: 'center',
     fontSize: 18,
     fontWeight: 600,

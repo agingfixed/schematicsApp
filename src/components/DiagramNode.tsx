@@ -153,9 +153,8 @@ export const DiagramNode: React.FC<DiagramNodeProps> = ({
             fontSize: node.fontSize,
             fontWeight: node.fontWeight
           }}
-        >
-          {node.text}
-        </div>
+          dangerouslySetInnerHTML={{ __html: node.text }}
+        />
       </foreignObject>
       {selected && node.link?.url && (
         <foreignObject

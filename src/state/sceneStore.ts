@@ -23,6 +23,7 @@ import {
   getNodeById,
   getSceneBounds
 } from '../utils/scene';
+import { ensureHtmlContent } from '../utils/text';
 import { cloneConnectorEndpoint, getConnectorPath } from '../utils/connector';
 
 const HISTORY_LIMIT = 64;
@@ -162,7 +163,7 @@ const createInitialScene = (): SceneContent => {
   };
 };
 
-const normalizeNodeText = (value: string) => (value.trim().length ? value : 'Untitled');
+const normalizeNodeText = (value: string) => ensureHtmlContent(value, 'Untitled');
 
 const initialState: SceneStoreState = {
   scene: createInitialScene(),

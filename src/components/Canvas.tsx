@@ -76,6 +76,7 @@ import { ConnectorTextToolbar } from './ConnectorTextToolbar';
 import { InlineTextEditor, InlineTextEditorHandle } from './InlineTextEditor';
 import { useCommands } from '../state/commands';
 import { useFloatingMenuStore } from '../state/menuStore';
+import { CaretPoint } from '../utils/text';
 import '../styles/canvas.css';
 
 const MIN_SCALE = 0.2;
@@ -320,9 +321,15 @@ const CanvasComponent = (
   } | null>(null);
   const lastClickRef = useRef<{ nodeId: string; time: number } | null>(null);
   const lastConnectorClickRef = useRef<{ connectorId: string; time: number } | null>(null);
-  const pendingConnectorEditRef = useRef<{ connectorId: string; pointerId: number } | null>(null);
+  const pendingConnectorEditRef = useRef<{
+    connectorId: string;
+    pointerId: number;
+    clientX: number;
+    clientY: number;
+  } | null>(null);
   const connectorLabelDragRef = useRef<ConnectorLabelDragState | null>(null);
   const connectorLabelToolbarInteractionRef = useRef(false);
+  const connectorLabelEntryPointRef = useRef<CaretPoint | null>(null);
   const clearFloatingMenuPlacement = useFloatingMenuStore((state) => state.clearSharedPlacement);
   const hadFloatingMenuRef = useRef(false);
 
@@ -714,6 +721,7 @@ const CanvasComponent = (
       updateConnector(connectorId, { label: value.trim().length ? value : undefined });
       setEditingConnectorId((current) => (current === connectorId ? null : current));
       setConnectorLabelToolbarInteracting(false);
+      connectorLabelEntryPointRef.current = null;
     },
     [setConnectorLabelToolbarInteracting, updateConnector]
   );
@@ -721,10 +729,12 @@ const CanvasComponent = (
   const handleConnectorLabelCancel = useCallback(() => {
     setConnectorLabelToolbarInteracting(false);
     setEditingConnectorId(null);
+    connectorLabelEntryPointRef.current = null;
   }, [setConnectorLabelToolbarInteracting]);
 
   const handleConnectorRequestLabelEdit = useCallback(
-    (connectorId: string) => {
+    (connectorId: string, entryPoint?: CaretPoint) => {
+      connectorLabelEntryPointRef.current = entryPoint ?? null;
       if (editingConnectorId === connectorId) {
         return;
       }
@@ -829,6 +839,12 @@ const CanvasComponent = (
       setConnectorCommitSignal((value) => value + 1);
     }
   }, [editingConnectorId, tool]);
+
+  useEffect(() => {
+    if (!editingConnectorId) {
+      connectorLabelEntryPointRef.current = null;
+    }
+  }, [editingConnectorId]);
 
   useLayoutEffect(() => {
     if (!containerRef.current) {
@@ -1435,7 +1451,7 @@ const CanvasComponent = (
       pendingTextEditRef.current = null;
     }
 
-    let connectorEditRequest: string | null = null;
+    let connectorEditRequest: { connectorId: string; entryPoint: CaretPoint | null } | null = null;
     const pendingConnector = pendingConnectorEditRef.current;
     if (pendingConnector && pendingConnector.pointerId === event.pointerId) {
       const connectorDrag = connectorDragStateRef.current;
@@ -1445,7 +1461,10 @@ const CanvasComponent = (
       const movedLabel =
         labelDrag && labelDrag.pointerId === event.pointerId ? labelDrag.moved : false;
       if (!movedConnector && !movedLabel && tool === 'select') {
-        connectorEditRequest = pendingConnector.connectorId;
+        connectorEditRequest = {
+          connectorId: pendingConnector.connectorId,
+          entryPoint: { x: pendingConnector.clientX, y: pendingConnector.clientY }
+        };
       }
       pendingConnectorEditRef.current = null;
     }
@@ -1523,9 +1542,12 @@ const CanvasComponent = (
     }
 
     if (!handled && connectorEditRequest) {
-      setSelection({ nodeIds: [], connectorIds: [connectorEditRequest] });
+      setSelection({ nodeIds: [], connectorIds: [connectorEditRequest.connectorId] });
       setConnectorLabelToolbarInteracting(false);
-      setEditingConnectorId(connectorEditRequest);
+      handleConnectorRequestLabelEdit(
+        connectorEditRequest.connectorId,
+        connectorEditRequest.entryPoint ?? undefined
+      );
       handled = true;
     }
 
@@ -1840,7 +1862,12 @@ const CanvasComponent = (
       lastClick.connectorId === connector.id &&
       now - lastClick.time < DOUBLE_CLICK_DELAY
     ) {
-      pendingConnectorEditRef.current = { connectorId: connector.id, pointerId: event.pointerId };
+      pendingConnectorEditRef.current = {
+        connectorId: connector.id,
+        pointerId: event.pointerId,
+        clientX: event.clientX,
+        clientY: event.clientY
+      };
       lastConnectorClickRef.current = null;
       return;
     }
@@ -2058,7 +2085,12 @@ const CanvasComponent = (
       !event.ctrlKey;
 
     if (allowEdit && (wasSingleSelected || isQuickRepeat)) {
-      pendingConnectorEditRef.current = { connectorId: connector.id, pointerId: event.pointerId };
+      pendingConnectorEditRef.current = {
+        connectorId: connector.id,
+        pointerId: event.pointerId,
+        clientX: event.clientX,
+        clientY: event.clientY
+      };
     } else {
       pendingConnectorEditRef.current = null;
     }
@@ -2605,6 +2637,9 @@ const CanvasComponent = (
               nodes={nodes}
               selected={selectedConnectorIds.includes(connector.id)}
               labelEditing={editingConnectorId === connector.id}
+              labelEditEntryPoint={
+                editingConnectorId === connector.id ? connectorLabelEntryPointRef.current : null
+              }
               commitSignal={connectorCommitSignal}
               cancelSignal={connectorCancelSignal}
               onPointerDown={(event) => handleConnectorPointerDown(event, connector)}
@@ -2616,7 +2651,7 @@ const CanvasComponent = (
               }
               onCommitLabel={(value) => handleConnectorLabelCommit(connector.id, value)}
               onCancelLabelEdit={handleConnectorLabelCancel}
-              onRequestLabelEdit={() => handleConnectorRequestLabelEdit(connector.id)}
+              onRequestLabelEdit={(point) => handleConnectorRequestLabelEdit(connector.id, point)}
               onLabelPointerDown={(event) => handleConnectorLabelPointerDown(event, connector)}
               shouldIgnoreLabelBlur={isConnectorLabelToolbarInteracting}
             />
@@ -2757,6 +2792,8 @@ const CanvasComponent = (
           isVisible={tool === 'select' && !isPanning}
           focusLinkSignal={linkFocusSignal}
           pointerPosition={lastPointerPosition}
+          isTextEditing={Boolean(editingNodeId && editingNodeId === selectedNode.id)}
+          textEditorRef={inlineEditorRef}
         />
       )}
       {editorNode && (
