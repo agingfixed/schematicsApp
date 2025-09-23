@@ -223,6 +223,27 @@ export const applyAlignmentToSelection = (editor: HTMLElement, align: TextAlign)
   return execFormattingCommand(editor, command);
 };
 
+export const replaceSelectionWithText = (editor: HTMLElement, text: string): boolean => {
+  if (!text) {
+    return false;
+  }
+  return withEditorSelection(editor, (selection, range) => {
+    if (selection.isCollapsed) {
+      return false;
+    }
+    range.deleteContents();
+    const textNode = document.createTextNode(text);
+    range.insertNode(textNode);
+    const newRange = document.createRange();
+    newRange.setStart(textNode, 0);
+    newRange.setEnd(textNode, textNode.length);
+    selection.removeAllRanges();
+    selection.addRange(newRange);
+    editor.dispatchEvent(new Event('input', { bubbles: true }));
+    return true;
+  });
+};
+
 export const wrapSelectionWithLink = (editor: HTMLElement, url: string): boolean =>
   withEditorSelection(editor, (selection) => {
     if (selection.isCollapsed) {
