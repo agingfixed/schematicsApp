@@ -465,7 +465,10 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
     .join(' ');
 
   const handleLabelDoubleClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    event.preventDefault();
     event.stopPropagation();
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
     onRequestLabelEdit({ x: event.clientX, y: event.clientY });
   };
 
@@ -640,6 +643,7 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
               contentEditable={labelEditing}
               suppressContentEditableWarning
               spellCheck={false}
+              translate="no"
               style={{
                 fontSize: labelFontSize,
                 fontWeight: labelFontWeight,

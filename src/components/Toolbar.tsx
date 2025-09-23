@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { type ReactNode } from 'react';
 import { CanvasHandle } from './Canvas';
 import {
   selectCanRedo,
@@ -16,14 +16,26 @@ interface ToolbarProps {
   canvasRef: React.RefObject<CanvasHandle>;
 }
 
-const toolButtons: Array<{ id: Tool; label: string; icon: string; shortcut?: string }> = [
-  { id: 'select', label: 'Select', icon: '🖱️', shortcut: 'V' },
-  { id: 'pan', label: 'Pan', icon: '✋', shortcut: 'Space' },
-  { id: 'rectangle', label: 'Rectangle', icon: '▭', shortcut: 'R' },
-  { id: 'rounded-rectangle', label: 'Terminator', icon: '⬒', shortcut: 'T' },
-  { id: 'ellipse', label: 'Ellipse', icon: '⬭', shortcut: 'O' },
-  { id: 'diamond', label: 'Decision', icon: '◇', shortcut: 'D' },
-  { id: 'connector', label: 'Connector', icon: '↦', shortcut: 'L' }
+const SelectCursorIcon: React.FC = () => (
+  <svg className="toolbar__cursor-icon" viewBox="0 0 24 24" aria-hidden>
+    <polygon
+      points="6 3 6 18 10.6 13.4 13.6 21 15.6 20.1 12.5 13.1 18 13.1"
+      fill="#1d4ed8"
+      stroke="#f8fafc"
+      strokeWidth={1.8}
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
+const toolButtons: Array<{ id: Tool; label: string; icon: ReactNode; shortcut?: string; tooltip: string }> = [
+  { id: 'select', label: 'Select', icon: <SelectCursorIcon />, shortcut: 'V', tooltip: 'Select' },
+  { id: 'pan', label: 'Pan', icon: '✋', shortcut: 'Space', tooltip: 'Pan' },
+  { id: 'rectangle', label: 'Rectangle', icon: '▭', shortcut: 'R', tooltip: 'Rectangle' },
+  { id: 'rounded-rectangle', label: 'Terminator', icon: '⬒', shortcut: 'T', tooltip: 'Terminator' },
+  { id: 'ellipse', label: 'Ellipse', icon: '⬭', shortcut: 'O', tooltip: 'Ellipse' },
+  { id: 'diamond', label: 'Decision', icon: '◇', shortcut: 'D', tooltip: 'Decision' },
+  { id: 'connector', label: 'Connector', icon: '↦', shortcut: 'L', tooltip: 'Connector' }
 ];
 
 export const Toolbar: React.FC<ToolbarProps> = ({ canvasRef }) => {
@@ -75,7 +87,8 @@ export const Toolbar: React.FC<ToolbarProps> = ({ canvasRef }) => {
             className={`toolbar__button ${tool === button.id ? 'is-active' : ''}`}
             aria-pressed={tool === button.id}
             onClick={() => setTool(button.id)}
-            title={`${button.label}${button.shortcut ? ` (${button.shortcut})` : ''}`}
+            aria-label={`${button.label} tool${button.shortcut ? ` (${button.shortcut})` : ''}`}
+            data-tooltip={button.tooltip}
           >
             <span className="toolbar__icon" aria-hidden>
               {button.icon}
@@ -84,27 +97,71 @@ export const Toolbar: React.FC<ToolbarProps> = ({ canvasRef }) => {
         ))}
       </div>
       <div className="toolbar__group">
-        <button type="button" className="toolbar__button" onClick={() => undo()} disabled={!canUndo} title="Undo (⌘Z)">
+        <button
+          type="button"
+          className="toolbar__button"
+          onClick={() => undo()}
+          disabled={!canUndo}
+          aria-label="Undo"
+          data-tooltip="Undo"
+        >
           ⎌
         </button>
-        <button type="button" className="toolbar__button" onClick={() => redo()} disabled={!canRedo} title="Redo (⇧⌘Z)">
+        <button
+          type="button"
+          className="toolbar__button"
+          onClick={() => redo()}
+          disabled={!canRedo}
+          aria-label="Redo"
+          data-tooltip="Redo"
+        >
           ↻
         </button>
       </div>
       <div className="toolbar__group">
-        <button type="button" className="toolbar__button" onClick={() => handleZoom('fit')} title="Zoom to Fit">
+        <button
+          type="button"
+          className="toolbar__button"
+          onClick={() => handleZoom('fit')}
+          aria-label="Zoom to fit"
+          data-tooltip="Fit view"
+        >
           Fit
         </button>
-        <button type="button" className="toolbar__button" onClick={() => handleZoom('selection')} title="Zoom to Selection">
+        <button
+          type="button"
+          className="toolbar__button"
+          onClick={() => handleZoom('selection')}
+          aria-label="Zoom to selection"
+          data-tooltip="Fit selection"
+        >
           Sel
         </button>
-        <button type="button" className="toolbar__button" onClick={() => handleZoom('hundred')} title="100%">
+        <button
+          type="button"
+          className="toolbar__button"
+          onClick={() => handleZoom('hundred')}
+          aria-label="Reset zoom"
+          data-tooltip="100% zoom"
+        >
           100%
         </button>
-        <button type="button" className="toolbar__button" onClick={() => handleZoom('out')} title="Zoom Out">
+        <button
+          type="button"
+          className="toolbar__button"
+          onClick={() => handleZoom('out')}
+          aria-label="Zoom out"
+          data-tooltip="Zoom out"
+        >
           −
         </button>
-        <button type="button" className="toolbar__button" onClick={() => handleZoom('in')} title="Zoom In">
+        <button
+          type="button"
+          className="toolbar__button"
+          onClick={() => handleZoom('in')}
+          aria-label="Zoom in"
+          data-tooltip="Zoom in"
+        >
           +
         </button>
         <div className="toolbar__status">{Math.round(transform.scale * 100)}%</div>
@@ -114,7 +171,9 @@ export const Toolbar: React.FC<ToolbarProps> = ({ canvasRef }) => {
           type="button"
           className={`toolbar__button ${gridVisible ? 'is-active' : ''}`}
           onClick={toggleGrid}
-          title="Toggle Grid"
+          aria-pressed={gridVisible}
+          aria-label="Toggle grid"
+          data-tooltip="Grid on/off"
         >
           Grid
         </button>
@@ -122,7 +181,9 @@ export const Toolbar: React.FC<ToolbarProps> = ({ canvasRef }) => {
           type="button"
           className={`toolbar__button ${snapSettings.enabled ? 'is-active' : ''}`}
           onClick={toggleSnap}
-          title="Toggle Smart Snap"
+          aria-pressed={snapSettings.enabled}
+          aria-label="Toggle smart snap"
+          data-tooltip="Smart snap"
         >
           Snap
         </button>
@@ -130,7 +191,9 @@ export const Toolbar: React.FC<ToolbarProps> = ({ canvasRef }) => {
           type="button"
           className={`toolbar__button ${showMiniMap ? 'is-active' : ''}`}
           onClick={() => setShowMiniMap(!showMiniMap)}
-          title="Toggle Mini Map"
+          aria-pressed={showMiniMap}
+          aria-label="Toggle mini map"
+          data-tooltip="Mini map"
         >
           Map
         </button>
