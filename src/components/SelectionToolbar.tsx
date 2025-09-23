@@ -99,7 +99,6 @@ export interface SelectionToolbarProps {
   anchor: { x: number; y: number; width: number; height: number } | null;
   viewportSize: { width: number; height: number };
   isVisible: boolean;
-  focusLinkSignal: number;
   pointerPosition: { x: number; y: number } | null;
   isTextEditing: boolean;
   textEditorRef: React.RefObject<InlineTextEditorHandle | null> | null;
@@ -116,7 +115,6 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
   anchor,
   viewportSize,
   isVisible,
-  focusLinkSignal,
   pointerPosition,
   isTextEditing,
   textEditorRef,
@@ -128,10 +126,6 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
   const toolbarRef = useRef<HTMLDivElement>(null);
   const fillButtonRef = useRef<HTMLButtonElement>(null);
   const fillPopoverRef = useRef<HTMLDivElement>(null);
-  const linkButtonRef = useRef<HTMLButtonElement>(null);
-  const linkInputRef = useRef<HTMLInputElement>(null);
-  const linkPopoverRef = useRef<HTMLDivElement>(null);
-  const previousFocusSignalRef = useRef(focusLinkSignal);
   const fillInteractionRef = useRef(false);
   const pointerInteractionCleanupRef = useRef<(() => void) | null>(null);
   const textLinkButtonRef = useRef<HTMLButtonElement>(null);
@@ -143,9 +137,6 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
   const [textFontSizeValue, setTextFontSizeValue] = useState(node.fontSize.toString());
   const [strokeWidthValue, setStrokeWidthValue] = useState(node.stroke.width.toString());
   const [fillOpen, setFillOpen] = useState(false);
-  const [linkOpen, setLinkOpen] = useState(false);
-  const [linkDraft, setLinkDraft] = useState(node.link?.url ?? '');
-  const [linkError, setLinkError] = useState<string | null>(null);
   const [textSelectionState, setTextSelectionState] = useState({
     fontSize: node.fontSize,
     isBold: node.fontWeight >= 700,
@@ -154,6 +145,7 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
     isStrikethrough: false,
     textAlign: node.textAlign,
     color: node.textColor,
+    hasSelection: false,
     hasLink: false,
     linkUrl: ''
   });
@@ -207,7 +199,8 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
   const underlineActive = isTextEditing ? textSelectionState.isUnderline : false;
   const strikethroughActive = isTextEditing ? textSelectionState.isStrikethrough : false;
   const activeAlign = isTextEditing ? textSelectionState.textAlign : node.textAlign;
-  const selectionHasLink = isTextEditing ? textSelectionState.hasLink : false;
+  const hasTextSelection = isTextEditing ? textSelectionState.hasSelection : false;
+  const selectionHasLink = hasTextSelection && textSelectionState.hasLink;
   const displayedFontSizeValue = isTextEditing ? textFontSizeValue : fontSizeValue;
   const fontSizeDisabled = isTextEditing ? !editorElement : textDisabled;
   const displayedTextColor = isTextEditing ? textColorValue : node.textColor;
@@ -258,6 +251,7 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
         isStrikethrough: false,
         textAlign: node.textAlign,
         color: node.textColor,
+        hasSelection: false,
         hasLink: false,
         linkUrl: ''
       });
@@ -275,6 +269,7 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
         isStrikethrough: false,
         textAlign: node.textAlign,
         color: node.textColor,
+        hasSelection: false,
         hasLink: false,
         linkUrl: ''
       });
@@ -307,12 +302,14 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
     const strikethrough = textDecoration.includes('line-through');
     const colorHex = cssColorToHex(computed.color) ?? node.textColor;
     const align = normalizeTextAlign(computed.textAlign);
-    const linkElement =
-      (element.closest('a') as HTMLAnchorElement | null) ??
-      ((range.commonAncestorContainer instanceof Element
-        ? range.commonAncestorContainer.closest('a')
-        : null) as HTMLAnchorElement | null);
-    const hasLink = Boolean(linkElement && editor.contains(linkElement));
+    const hasSelection = !selection.isCollapsed;
+    const linkElement = hasSelection
+      ? (element.closest('a') as HTMLAnchorElement | null) ??
+        ((range.commonAncestorContainer instanceof Element
+          ? range.commonAncestorContainer.closest('a')
+          : null) as HTMLAnchorElement | null)
+      : null;
+    const hasLink = Boolean(hasSelection && linkElement && editor.contains(linkElement));
     const linkUrl = hasLink && linkElement ? linkElement.getAttribute('href') ?? '' : '';
     setTextSelectionState({
       fontSize,
@@ -322,6 +319,7 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
       isStrikethrough: strikethrough,
       textAlign: align,
       color: colorHex,
+      hasSelection,
       hasLink,
       linkUrl
     });
@@ -403,6 +401,7 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
         isStrikethrough: false,
         textAlign: node.textAlign,
         color: node.textColor,
+        hasSelection: false,
         hasLink: false,
         linkUrl: ''
       });
@@ -445,13 +444,6 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
   }, [fillOpen, finishFillInteraction]);
 
   useEffect(() => {
-    if (linkOpen) {
-      setLinkDraft(node.link?.url ?? '');
-      setLinkError(null);
-    }
-  }, [linkOpen, node.link?.url]);
-
-  useEffect(() => {
     if (textLinkOpen) {
       setTextLinkDraft(textSelectionState.linkUrl ?? '');
       setTextLinkError(null);
@@ -472,8 +464,6 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
   useEffect(() => {
     if (!isVisible) {
       setFillOpen(false);
-      setLinkOpen(false);
-      setLinkError(null);
       setTextLinkOpen(false);
       setTextLinkError(null);
       finishFillInteraction();
@@ -484,31 +474,21 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
   useEffect(() => {
     if (isTextEditing) {
       setFillOpen(false);
-      setLinkOpen(false);
     }
     setTextLinkOpen(false);
     setTextLinkError(null);
   }, [isTextEditing]);
 
   useEffect(() => {
-    if (focusLinkSignal !== previousFocusSignalRef.current) {
-      previousFocusSignalRef.current = focusLinkSignal;
-      if (isVisible) {
-        setLinkOpen(true);
-      }
-    }
-  }, [focusLinkSignal, isVisible]);
-
-  useEffect(() => {
-    if (!linkOpen) {
+    if (!isTextEditing) {
       return;
     }
-    const frame = requestAnimationFrame(() => {
-      linkInputRef.current?.focus();
-      linkInputRef.current?.select();
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [linkOpen]);
+    if (textSelectionState.hasSelection) {
+      return;
+    }
+    setTextLinkOpen(false);
+    setTextLinkError(null);
+  }, [isTextEditing, textSelectionState.hasSelection]);
 
   useEffect(() => {
     if (!isTextEditing) {
@@ -530,26 +510,6 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
       }
     };
   }, [getEditorElement, isTextEditing, updateTextSelectionFromEditor]);
-
-  useEffect(() => {
-    if (!linkOpen) {
-      return;
-    }
-    const handlePointerDown = (event: MouseEvent) => {
-      const target = event.target as Node;
-      if (
-        linkPopoverRef.current &&
-        !linkPopoverRef.current.contains(target) &&
-        linkButtonRef.current &&
-        !linkButtonRef.current.contains(target)
-      ) {
-        setLinkOpen(false);
-        setLinkError(null);
-      }
-    };
-    document.addEventListener('mousedown', handlePointerDown);
-    return () => document.removeEventListener('mousedown', handlePointerDown);
-  }, [linkOpen]);
 
   useEffect(() => {
     if (!textLinkOpen) {
@@ -680,7 +640,7 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
   };
 
   const handleTextLinkButtonClick = () => {
-    if (!isTextEditing) {
+    if (!isTextEditing || !textSelectionState.hasSelection) {
       return;
     }
     setTextLinkError(null);
@@ -698,7 +658,7 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
       return;
     }
     const normalized = ensureProtocol(textLinkDraft);
-    if (!normalized) {
+    if (!normalized || !isValidHttpUrl(normalized)) {
       setTextLinkError('Enter a valid URL');
       return;
     }
@@ -825,59 +785,6 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
 
   const handleStrokeColorChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     commands.applyStyles(nodeIds, { strokeColor: event.target.value });
-  };
-
-  const handleLinkApply = () => {
-    const normalized = ensureProtocol(linkDraft);
-    if (!normalized) {
-      commands.setLink(node.id, null);
-      setLinkOpen(false);
-      setLinkError(null);
-      return;
-    }
-
-    if (!isValidHttpUrl(normalized)) {
-      setLinkError('Enter a valid http(s) URL');
-      return;
-    }
-
-    commands.setLink(node.id, normalized);
-    setLinkError(null);
-    setLinkOpen(false);
-  };
-
-  const handleLinkRemove = () => {
-    commands.setLink(node.id, null);
-    setLinkDraft('');
-    setLinkError(null);
-    setLinkOpen(false);
-  };
-
-  const handleLinkKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      handleLinkApply();
-    }
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      setLinkOpen(false);
-      setLinkError(null);
-    }
-  };
-
-  const handleLinkBlur = (event: React.FocusEvent<HTMLInputElement>) => {
-    const nextTarget = event.relatedTarget as HTMLElement | null;
-    if (nextTarget && linkPopoverRef.current?.contains(nextTarget)) {
-      return;
-    }
-    handleLinkApply();
-  };
-
-  const handleOpenLink = () => {
-    if (!node.link?.url) {
-      return;
-    }
-    window.open(node.link.url, '_blank', 'noopener');
   };
 
   const strokeWidthDisabled = !node.stroke.color;
@@ -1082,48 +989,50 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
               >
                 1.
               </button>
-              <div className="selection-toolbar__group selection-toolbar__group--link">
-                <button
-                  type="button"
-                  ref={textLinkButtonRef}
-                  className={`selection-toolbar__button ${
-                    textLinkOpen || selectionHasLink ? 'is-active' : ''
-                  }`}
-                  onClick={handleTextLinkButtonClick}
-                  onPointerDown={handleTextControlPointerDown}
-                  disabled={textColorDisabled}
-                  title="Link (Cmd/Ctrl+K)"
-                >
-                  🔗
-                </button>
-                {textLinkOpen && (
-                  <div className="selection-toolbar__text-link-popover" ref={textLinkPopoverRef}>
-                    <input
-                      ref={textLinkInputRef}
-                      type="url"
-                      value={textLinkDraft}
-                      placeholder="https://example.com"
-                      onChange={(event) => setTextLinkDraft(event.target.value)}
-                      onKeyDown={handleTextLinkKeyDown}
-                    />
-                    <div className="selection-toolbar__link-actions">
-                      <button type="button" onClick={handleTextLinkApply}>
-                        Apply
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleTextLinkRemove}
-                        disabled={!selectionHasLink && !textLinkDraft.trim()}
-                      >
-                        Remove
-                      </button>
+              {hasTextSelection && (
+                <div className="selection-toolbar__group selection-toolbar__group--link">
+                  <button
+                    type="button"
+                    ref={textLinkButtonRef}
+                    className={`selection-toolbar__button ${
+                      textLinkOpen || selectionHasLink ? 'is-active' : ''
+                    }`}
+                    onClick={handleTextLinkButtonClick}
+                    onPointerDown={handleTextControlPointerDown}
+                    disabled={textColorDisabled}
+                    title="Link (Cmd/Ctrl+K)"
+                  >
+                    🔗
+                  </button>
+                  {textLinkOpen && (
+                    <div className="selection-toolbar__text-link-popover" ref={textLinkPopoverRef}>
+                      <input
+                        ref={textLinkInputRef}
+                        type="url"
+                        value={textLinkDraft}
+                        placeholder="https://example.com"
+                        onChange={(event) => setTextLinkDraft(event.target.value)}
+                        onKeyDown={handleTextLinkKeyDown}
+                      />
+                      <div className="selection-toolbar__link-actions">
+                        <button type="button" onClick={handleTextLinkApply}>
+                          Apply
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleTextLinkRemove}
+                          disabled={!selectionHasLink && !textLinkDraft.trim()}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                      {textLinkError && (
+                        <div className="selection-toolbar__link-error">{textLinkError}</div>
+                      )}
                     </div>
-                    {textLinkError && (
-                      <div className="selection-toolbar__link-error">{textLinkError}</div>
-                    )}
-                  </div>
-                )}
-              </div>
+                  )}
+                </div>
+              )}
             </div>
           </>
         ) : (
@@ -1179,7 +1088,6 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
                     className={`selection-toolbar__color-button ${fillOpen ? 'is-active' : ''}`}
                     onClick={() => {
                       setFillOpen((prev) => !prev);
-                      setLinkOpen(false);
                     }}
                     aria-haspopup="dialog"
                     aria-expanded={fillOpen}
@@ -1248,52 +1156,9 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
                 </label>
               </div>
             )}
-            <div className="selection-toolbar__group selection-toolbar__group--link">
-              <button
-                type="button"
-                ref={linkButtonRef}
-                className={`selection-toolbar__button ${linkOpen ? 'is-active' : ''}`}
-                onClick={() => setLinkOpen((prev) => !prev)}
-                title="Link (Cmd/Ctrl+K)"
-              >
-                🔗
-              </button>
-              {node.link?.url && (
-                <button
-                  type="button"
-                  className="selection-toolbar__button"
-                  onClick={handleOpenLink}
-                  title="Open link"
-                >
-                  Open
-                </button>
-              )}
-            </div>
           </>
         )}
       </div>
-      {!isTextEditing && linkOpen && (
-        <div className="selection-toolbar__link-popover" ref={linkPopoverRef}>
-          <input
-            ref={linkInputRef}
-            type="url"
-            value={linkDraft}
-            placeholder="https://example.com"
-            onChange={(event) => setLinkDraft(event.target.value)}
-            onKeyDown={handleLinkKeyDown}
-            onBlur={handleLinkBlur}
-          />
-          <div className="selection-toolbar__link-actions">
-            <button type="button" onClick={handleLinkApply}>
-              Apply
-            </button>
-            <button type="button" onClick={handleLinkRemove} disabled={!node.link?.url && !linkDraft.trim()}>
-              Remove
-            </button>
-          </div>
-          {linkError && <div className="selection-toolbar__link-error">{linkError}</div>}
-        </div>
-      )}
     </div>
   );
 };

@@ -110,7 +110,8 @@ const InlineTextEditorComponent = (
     return null;
   }
 
-  const paddingY = 10 * scale;
+  const paddingTop = 8 * scale;
+  const paddingBottom = 10 * scale;
   const paddingX = 14 * scale;
 
   const style: React.CSSProperties = {
@@ -119,7 +120,7 @@ const InlineTextEditorComponent = (
     top: bounds.y,
     width: bounds.width,
     height: bounds.height,
-    padding: `${paddingY}px ${paddingX}px`,
+    padding: `${paddingTop}px ${paddingX}px ${paddingBottom}px`,
     fontSize: node.fontSize * scale,
     fontWeight: node.fontWeight,
     lineHeight: 1.3,

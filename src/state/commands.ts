@@ -6,14 +6,12 @@ interface Commands {
   applyStyles: (nodeIds: string[], patch: NodeStylePatch) => void;
   setText: (nodeId: string, text: string) => void;
   setShape: (nodeIds: string[], shape: NodeKind) => void;
-  setLink: (nodeId: string, url: string | null) => void;
 }
 
 export const useCommands = (): Commands => {
   const applyNodeStyles = useSceneStore((state) => state.applyNodeStyles);
   const setNodeText = useSceneStore((state) => state.setNodeText);
   const setNodeShape = useSceneStore((state) => state.setNodeShape);
-  const setNodeLink = useSceneStore((state) => state.setNodeLink);
 
   const applyStyles = useCallback(
     (nodeIds: string[], patch: NodeStylePatch) => {
@@ -36,17 +34,9 @@ export const useCommands = (): Commands => {
     [setNodeShape]
   );
 
-  const setLink = useCallback(
-    (nodeId: string, url: string | null) => {
-      setNodeLink(nodeId, url);
-    },
-    [setNodeLink]
-  );
-
   return {
     applyStyles,
     setText,
-    setShape,
-    setLink
+    setShape
   };
 };
