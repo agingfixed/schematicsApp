@@ -11,6 +11,7 @@ import { useFrozenFloatingPlacement } from '../hooks/useFrozenFloatingPlacement'
 import {
   applyAlignmentToSelection,
   applyFontSizeToSelection,
+  applyLinkFormattingToSelection,
   applyTextColorToSelection,
   extractPlainText,
   removeLinkFromSelection,
@@ -157,10 +158,12 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
   const fillPopoverRef = useRef<HTMLDivElement>(null);
   const fillInteractionRef = useRef(false);
   const pointerInteractionCleanupRef = useRef<(() => void) | null>(null);
+  const pointerActiveRef = useRef(false);
   const textLinkButtonRef = useRef<HTMLButtonElement>(null);
   const textLinkPopoverRef = useRef<HTMLDivElement>(null);
   const textLinkVisibleInputRef = useRef<HTMLInputElement>(null);
   const textLinkUrlInputRef = useRef<HTMLInputElement>(null);
+  const textLinkOpenRef = useRef(false);
   const savedSelectionRef = useRef<Range | null>(null);
 
   const [fontSizeValue, setFontSizeValue] = useState(node.fontSize.toString());
@@ -360,6 +363,99 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
     selection.addRange(range);
   }, [isTextEditing]);
 
+  const getLinkableRange = useCallback((): Range | null => {
+    if (!isTextEditing) {
+      return null;
+    }
+    const editor = getEditorElement();
+    if (!editor) {
+      return null;
+    }
+    const activeSelection = window.getSelection();
+    if (activeSelection && activeSelection.rangeCount > 0) {
+      const currentRange = activeSelection.getRangeAt(0);
+      if (!activeSelection.isCollapsed && editor.contains(currentRange.commonAncestorContainer)) {
+        return currentRange;
+      }
+    }
+    const saved = savedSelectionRef.current;
+    if (!saved || saved.collapsed) {
+      return null;
+    }
+    const startElement =
+      saved.startContainer instanceof Element
+        ? saved.startContainer
+        : saved.startContainer.parentElement;
+    const endElement =
+      saved.endContainer instanceof Element
+        ? saved.endContainer
+        : saved.endContainer.parentElement;
+    if (!startElement || !endElement) {
+      return null;
+    }
+    if (!editor.contains(startElement) || !editor.contains(endElement)) {
+      return null;
+    }
+    return saved;
+  }, [getEditorElement, isTextEditing]);
+
+  const getLinkSelectionSnapshot = useCallback(() => {
+    const range = getLinkableRange();
+    if (!range) {
+      return null;
+    }
+    const editor = getEditorElement();
+    if (!editor) {
+      return null;
+    }
+    const fallbackText = range
+      .toString()
+      .replace(/\s*\n\s*/g, ' ')
+      .trim();
+    const selectedText = textSelectionState.hasSelection
+      ? textSelectionState.selectedText || fallbackText
+      : fallbackText;
+    if (!selectedText) {
+      return null;
+    }
+    const resolveElement = (node: Node): HTMLElement | null => {
+      if (node instanceof HTMLElement) {
+        return node;
+      }
+      if (node instanceof Text) {
+        return node.parentElement;
+      }
+      return null;
+    };
+    const candidates: Array<HTMLElement | null> = [
+      resolveElement(range.startContainer),
+      resolveElement(range.endContainer),
+      resolveElement(range.commonAncestorContainer)
+    ];
+    let linkElement: HTMLAnchorElement | null = null;
+    for (const candidate of candidates) {
+      if (!candidate) {
+        continue;
+      }
+      const anchor = candidate.closest('a');
+      if (anchor && editor.contains(anchor)) {
+        linkElement = anchor as HTMLAnchorElement;
+        break;
+      }
+    }
+    const linkUrlFromDom = linkElement?.getAttribute('href') ?? '';
+    const linkUrl =
+      linkUrlFromDom ||
+      (textSelectionState.hasSelection && textSelectionState.hasLink
+        ? textSelectionState.linkUrl
+        : '');
+    return {
+      range,
+      selectedText,
+      linkUrl
+    };
+  }, [getEditorElement, getLinkableRange, textSelectionState.hasLink, textSelectionState.hasSelection, textSelectionState.linkUrl, textSelectionState.selectedText]);
+
   const handleFillChange = useCallback(
     (nextColor: RGBColor, alpha: number, options?: { commit?: boolean }) => {
       startFillInteraction();
@@ -451,6 +547,13 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
   }, [textLinkOpen]);
 
   useEffect(() => {
+    textLinkOpenRef.current = textLinkOpen;
+    if (onPointerInteractionChange) {
+      onPointerInteractionChange(pointerActiveRef.current || textLinkOpen);
+    }
+  }, [onPointerInteractionChange, textLinkOpen]);
+
+  useEffect(() => {
     if (!isVisible) {
       setFillOpen(false);
       setTextLinkOpen(false);
@@ -476,14 +579,14 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
     if (!isTextEditing) {
       return;
     }
-    if (textSelectionState.hasSelection) {
+    if (textSelectionState.hasSelection || textLinkOpen) {
       return;
     }
     setTextLinkOpen(false);
     setTextLinkError(null);
     setTextLinkDraft('');
     setTextLinkVisibleDraft('');
-  }, [isTextEditing, textSelectionState.hasSelection]);
+  }, [isTextEditing, textLinkOpen, textSelectionState.hasSelection]);
 
   useEffect(() => {
     if (!isTextEditing) {
@@ -635,15 +738,26 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
   };
 
   const handleTextLinkButtonClick = () => {
-    if (!isTextEditing || !textSelectionState.hasSelection) {
+    if (!isTextEditing) {
       return;
     }
+    if (textLinkOpen) {
+      setTextLinkOpen(false);
+      setTextLinkError(null);
+      return;
+    }
+    const snapshot = getLinkSelectionSnapshot();
+    if (!snapshot) {
+      return;
+    }
+    savedSelectionRef.current = snapshot.range.cloneRange();
+    restoreSelection();
     setTextLinkError(null);
     setTextLinkOpen((prev) => {
       const next = !prev;
       if (next) {
-        setTextLinkDraft(textSelectionState.linkUrl ?? '');
-        setTextLinkVisibleDraft(textSelectionState.selectedText || '');
+        setTextLinkDraft(snapshot.linkUrl ?? '');
+        setTextLinkVisibleDraft(snapshot.selectedText);
       }
       return next;
     });
@@ -668,7 +782,10 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
       if (!replaceSelectionWithText(editor, visibleText)) {
         return false;
       }
-      return wrapSelectionWithLink(editor, normalized);
+      if (!wrapSelectionWithLink(editor, normalized)) {
+        return false;
+      }
+      return applyLinkFormattingToSelection(editor);
     });
     if (!applied) {
       setTextLinkError('Select text to link');
@@ -802,13 +919,16 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
     if (!onPointerInteractionChange) {
       return;
     }
-    onPointerInteractionChange(true);
     if (pointerInteractionCleanupRef.current) {
       pointerInteractionCleanupRef.current();
       pointerInteractionCleanupRef.current = null;
+      pointerActiveRef.current = false;
     }
+    pointerActiveRef.current = true;
+    onPointerInteractionChange(true);
     const handlePointerUp = () => {
-      onPointerInteractionChange(false);
+      pointerActiveRef.current = false;
+      onPointerInteractionChange(textLinkOpenRef.current);
       document.removeEventListener('pointerup', handlePointerUp, true);
       document.removeEventListener('pointercancel', handlePointerUp, true);
       pointerInteractionCleanupRef.current = null;
@@ -818,6 +938,7 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
     pointerInteractionCleanupRef.current = () => {
       document.removeEventListener('pointerup', handlePointerUp, true);
       document.removeEventListener('pointercancel', handlePointerUp, true);
+      pointerActiveRef.current = false;
     };
   }, [onPointerInteractionChange]);
 
@@ -1070,124 +1191,83 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
           </>
         ) : (
           <>
-            {isTextNode ? (
-              <div className="selection-toolbar__group selection-toolbar__group--text">
-                <label className="selection-toolbar__swatch" title="Text color">
-                  <span className="selection-toolbar__swatch-indicator">Text</span>
-                  <input
-                    type="color"
-                    value={displayedTextColor}
-                    onChange={(event) => handleTextColorChange(event.target.value)}
-                    onPointerDown={handleTextColorPointerDown}
-                  />
-                </label>
-                <div className="selection-toolbar__size-control">
-                  <button
-                    type="button"
-                    onClick={() => adjustFontSize(-1)}
-                    className="selection-toolbar__button"
-                    title="Decrease size"
-                  >
-                    −
-                  </button>
-                  <input
-                    type="number"
-                    className="selection-toolbar__input"
-                    value={fontSizeValue}
-                    min={FONT_SIZE_MIN}
-                    max={FONT_SIZE_MAX}
-                    onChange={(event) => setFontSizeValue(event.target.value)}
-                    onBlur={handleFontSizeBlur}
-                    onKeyDown={handleFontSizeKeyDown}
-                    aria-label="Font size"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => adjustFontSize(1)}
-                    className="selection-toolbar__button"
-                    title="Increase size"
-                  >
-                    +
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="selection-toolbar__group">
-                <div className="selection-toolbar__swatch" title={fillTitle}>
-                  <span className="selection-toolbar__swatch-indicator">Fill</span>
-                  <button
-                    type="button"
-                    ref={fillButtonRef}
-                    className={`selection-toolbar__color-button ${fillOpen ? 'is-active' : ''}`}
-                    onClick={() => {
-                      setFillOpen((prev) => !prev);
-                    }}
-                    aria-haspopup="dialog"
-                    aria-expanded={fillOpen}
-                    aria-label="Edit fill color"
-                  >
-                    <span
-                      className="selection-toolbar__color-preview"
-                      style={{ ['--selection-fill-preview' as const]: fillPreview }}
-                    />
-                  </button>
-                  {fillOpen && (
-                    <div className="selection-toolbar__color-popover" ref={fillPopoverRef}>
-                      <ColorPicker color={fillColor} alpha={fillOpacity} onChange={handleFillChange} />
-                    </div>
-                  )}
-                </div>
-                <label className="selection-toolbar__swatch" title="Stroke color">
-                  <span className="selection-toolbar__swatch-indicator">Stroke</span>
-                  <input type="color" value={node.stroke.color} onChange={handleStrokeColorChange} />
-                </label>
-                <div className="selection-toolbar__size-control">
-                  <button
-                    type="button"
-                    onClick={() => adjustStrokeWidth(-1)}
-                    disabled={strokeWidthDisabled}
-                    className="selection-toolbar__button"
-                    title="Thinner stroke"
-                  >
-                    −
-                  </button>
-                  <input
-                    type="number"
-                    className="selection-toolbar__input"
-                    value={strokeWidthValue}
-                    min={STROKE_MIN}
-                    max={STROKE_MAX}
-                    onChange={(event) => setStrokeWidthValue(event.target.value)}
-                    onBlur={handleStrokeWidthBlur}
-                    onKeyDown={handleStrokeWidthKeyDown}
-                    disabled={strokeWidthDisabled}
-                    aria-label="Stroke width"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => adjustStrokeWidth(1)}
-                    disabled={strokeWidthDisabled}
-                    className="selection-toolbar__button"
-                    title="Thicker stroke"
-                  >
-                    +
-                  </button>
-                </div>
-              </div>
-            )}
             {!isTextNode && (
-              <div className="selection-toolbar__group">
-                <label className="selection-toolbar__shape" title="Change shape">
-                  <span>Shape</span>
-                  <select value={node.shape} onChange={handleShapeChange}>
-                    {shapeOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
+              <>
+                <div className="selection-toolbar__group">
+                  <div className="selection-toolbar__swatch" title={fillTitle}>
+                    <span className="selection-toolbar__swatch-indicator">Fill</span>
+                    <button
+                      type="button"
+                      ref={fillButtonRef}
+                      className={`selection-toolbar__color-button ${fillOpen ? 'is-active' : ''}`}
+                      onClick={() => {
+                        setFillOpen((prev) => !prev);
+                      }}
+                      aria-haspopup="dialog"
+                      aria-expanded={fillOpen}
+                      aria-label="Edit fill color"
+                    >
+                      <span
+                        className="selection-toolbar__color-preview"
+                        style={{ ['--selection-fill-preview' as const]: fillPreview }}
+                      />
+                    </button>
+                    {fillOpen && (
+                      <div className="selection-toolbar__color-popover" ref={fillPopoverRef}>
+                        <ColorPicker color={fillColor} alpha={fillOpacity} onChange={handleFillChange} />
+                      </div>
+                    )}
+                  </div>
+                  <label className="selection-toolbar__swatch" title="Stroke color">
+                    <span className="selection-toolbar__swatch-indicator">Stroke</span>
+                    <input type="color" value={node.stroke.color} onChange={handleStrokeColorChange} />
+                  </label>
+                  <div className="selection-toolbar__size-control">
+                    <button
+                      type="button"
+                      onClick={() => adjustStrokeWidth(-1)}
+                      disabled={strokeWidthDisabled}
+                      className="selection-toolbar__button"
+                      title="Thinner stroke"
+                    >
+                      −
+                    </button>
+                    <input
+                      type="number"
+                      className="selection-toolbar__input"
+                      value={strokeWidthValue}
+                      min={STROKE_MIN}
+                      max={STROKE_MAX}
+                      onChange={(event) => setStrokeWidthValue(event.target.value)}
+                      onBlur={handleStrokeWidthBlur}
+                      onKeyDown={handleStrokeWidthKeyDown}
+                      disabled={strokeWidthDisabled}
+                      aria-label="Stroke width"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => adjustStrokeWidth(1)}
+                      disabled={strokeWidthDisabled}
+                      className="selection-toolbar__button"
+                      title="Thicker stroke"
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+                <div className="selection-toolbar__group">
+                  <label className="selection-toolbar__shape" title="Change shape">
+                    <span>Shape</span>
+                    <select value={node.shape} onChange={handleShapeChange}>
+                      {shapeOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+              </>
             )}
           </>
         )}
