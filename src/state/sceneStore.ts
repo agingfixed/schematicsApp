@@ -117,10 +117,10 @@ const defaultConnectorLabelStyle: ConnectorLabelStyle = {
 };
 
 const createInitialScene = (): SceneContent => {
-  const start = createNodeModel('ellipse', { x: -380, y: -140 }, 'Start');
+  const start = createNodeModel('circle', { x: -380, y: -140 }, 'Start');
   const collect = createNodeModel('rectangle', { x: -40, y: -180 }, 'Collect Input');
   const decision = createNodeModel('diamond', { x: 320, y: -200 }, 'Valid?');
-  const done = createNodeModel('rounded-rectangle', { x: 700, y: -160 }, 'Archive');
+  const done = createNodeModel('ellipse', { x: 700, y: -160 }, 'Archive');
 
   const connectors: ConnectorModel[] = [
     {
@@ -700,11 +700,7 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
         }
 
         node.shape = shape;
-        if (shape === 'rounded-rectangle') {
-          node.cornerRadius = node.cornerRadius ?? 24;
-        } else if (shape !== 'rectangle') {
-          node.cornerRadius = undefined;
-        }
+        node.cornerRadius = undefined;
         changed = true;
       });
 

@@ -19,9 +19,10 @@ const STROKE_MAX = 20;
 const TOOLBAR_GAP = 12;
 
 const shapeOptions: Array<{ value: NodeKind; label: string }> = [
-  { value: 'rectangle', label: 'Rect' },
-  { value: 'rounded-rectangle', label: 'Round' },
+  { value: 'circle', label: 'Circle' },
   { value: 'ellipse', label: 'Ellipse' },
+  { value: 'rectangle', label: 'Rectangle' },
+  { value: 'triangle', label: 'Triangle' },
   { value: 'diamond', label: 'Diamond' }
 ];
 

@@ -1,4 +1,4 @@
-export type NodeShape = 'rectangle' | 'rounded-rectangle' | 'ellipse' | 'diamond';
+export type NodeShape = 'rectangle' | 'circle' | 'ellipse' | 'triangle' | 'diamond';
 export type NodeKind = NodeShape;
 
 export interface Vec2 {
@@ -114,8 +114,9 @@ export type Tool =
   | 'select'
   | 'pan'
   | 'rectangle'
-  | 'rounded-rectangle'
+  | 'circle'
   | 'ellipse'
+  | 'triangle'
   | 'diamond'
   | 'connector';
 

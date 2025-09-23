@@ -31,7 +31,6 @@ const renderShape = (
   }
 ) => {
   const { width, height } = node.size;
-  const cornerRadius = node.cornerRadius ?? 24;
   const common = {
     fill,
     fillOpacity,
@@ -44,11 +43,20 @@ const renderShape = (
   switch (node.shape) {
     case 'rectangle':
       return <rect width={width} height={height} rx={8} {...common} />;
-    case 'rounded-rectangle':
-      return <rect width={width} height={height} rx={cornerRadius} {...common} />;
+    case 'circle': {
+      const radius = Math.min(width, height) / 2;
+      return <circle cx={width / 2} cy={height / 2} r={radius} {...common} />;
+    }
     case 'ellipse':
       return (
         <ellipse cx={width / 2} cy={height / 2} rx={width / 2} ry={height / 2} {...common} />
+      );
+    case 'triangle':
+      return (
+        <polygon
+          points={`${width / 2},0 ${width},${height} 0,${height}`}
+          {...common}
+        />
       );
     case 'diamond':
       return (

@@ -9,18 +9,30 @@
   padding: calc(12px * var(--menu-scale)) calc(16px * var(--menu-scale));
   display: flex;
   flex-direction: column;
-  gap: calc(10px * var(--menu-scale));
-  min-width: calc(260px * var(--menu-scale));
+  gap: calc(12px * var(--menu-scale));
   box-shadow: 0 24px 48px rgba(2, 6, 23, 0.5);
   color: #e2e8f0;
   pointer-events: auto;
   will-change: transform;
+  min-width: calc(320px * var(--menu-scale));
+  max-width: calc(720px * var(--menu-scale));
 }
 
 .connector-toolbar__content {
-  display: grid;
+  display: flex;
+  align-items: stretch;
   gap: calc(12px * var(--menu-scale));
-  grid-template-columns: repeat(auto-fit, minmax(calc(200px * var(--menu-scale)), 1fr));
+  overflow-x: auto;
+  padding-bottom: calc(2px * var(--menu-scale));
+}
+
+.connector-toolbar__content::-webkit-scrollbar {
+  height: calc(6px * var(--menu-scale));
+}
+
+.connector-toolbar__content::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.3);
+  border-radius: calc(999px * var(--menu-scale));
 }
 
 .connector-toolbar__panel {
@@ -31,7 +43,12 @@
   display: flex;
   flex-direction: column;
   gap: calc(10px * var(--menu-scale));
-  min-width: 0;
+  min-width: calc(200px * var(--menu-scale));
+  flex: 0 0 auto;
+}
+
+.connector-toolbar__panel--arrows {
+  min-width: calc(280px * var(--menu-scale));
 }
 
 .connector-toolbar__panel-title {
@@ -43,9 +60,9 @@
 }
 
 .connector-toolbar__columns {
-  display: grid;
+  display: flex;
   gap: calc(12px * var(--menu-scale));
-  grid-template-columns: repeat(auto-fit, minmax(calc(160px * var(--menu-scale)), 1fr));
+  align-items: stretch;
 }
 
 .connector-toolbar__column {
@@ -146,11 +163,12 @@
 
 .connector-toolbar__actions {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: calc(8px * var(--menu-scale));
   justify-content: flex-end;
 }
 
 .connector-toolbar__actions .connector-toolbar__button {
-  flex: 1 1 calc(96px * var(--menu-scale));
+  flex: 0 0 auto;
+  min-width: calc(88px * var(--menu-scale));
 }

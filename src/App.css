@@ -45,6 +45,60 @@
   transition: background 0.2s ease, transform 0.12s ease, color 0.2s ease;
 }
 
+.toolbar__select {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  height: calc(36px * var(--menu-scale));
+  border-radius: calc(10px * var(--menu-scale));
+  padding: 0 calc(12px * var(--menu-scale));
+  background: rgba(15, 23, 42, 0.35);
+  color: #f1f5f9;
+  font-size: calc(14px * var(--menu-scale));
+  cursor: pointer;
+  transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.toolbar__select.is-active {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.35), rgba(14, 165, 233, 0.35));
+  box-shadow: 0 6px 20px rgba(59, 130, 246, 0.25);
+}
+
+.toolbar__select::after {
+  content: '▾';
+  font-size: calc(12px * var(--menu-scale));
+  margin-left: calc(8px * var(--menu-scale));
+  color: inherit;
+  pointer-events: none;
+}
+
+.toolbar__select select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  padding: 0;
+  padding-right: calc(18px * var(--menu-scale));
+  cursor: pointer;
+  min-width: calc(120px * var(--menu-scale));
+}
+
+.toolbar__select select:focus-visible {
+  outline: none;
+}
+
+.toolbar__select:focus-within {
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.45),
+    0 6px 20px rgba(59, 130, 246, 0.25);
+}
+
+.toolbar__select select option {
+  color: #0f172a;
+}
+
 .toolbar__button[data-tooltip]::after {
   content: attr(data-tooltip);
   position: absolute;
@@ -133,6 +187,18 @@
   font-weight: 500;
   padding: 0 calc(12px * var(--menu-scale));
   color: rgba(226, 232, 240, 0.8);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .workspace {

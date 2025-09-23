@@ -130,16 +130,66 @@ const getDiamondAnchor = (center: Vec2, halfWidth: number, halfHeight: number, t
   };
 };
 
+const getTriangleAnchor = (center: Vec2, halfWidth: number, halfHeight: number, toward: Vec2): Vec2 => {
+  const to = { x: toward.x - center.x, y: toward.y - center.y };
+
+  if (Math.abs(to.x) < EPSILON && Math.abs(to.y) < EPSILON) {
+    return { ...center };
+  }
+
+  const vertices: Vec2[] = [
+    { x: 0, y: -halfHeight },
+    { x: halfWidth, y: halfHeight },
+    { x: -halfWidth, y: halfHeight }
+  ];
+
+  const cross = (a: Vec2, b: Vec2) => a.x * b.y - a.y * b.x;
+
+  let bestDistance = Number.POSITIVE_INFINITY;
+  let bestPoint: Vec2 | null = null;
+
+  for (let index = 0; index < vertices.length; index += 1) {
+    const current = vertices[index];
+    const next = vertices[(index + 1) % vertices.length];
+    const edge = { x: next.x - current.x, y: next.y - current.y };
+    const denom = cross(to, edge);
+
+    if (Math.abs(denom) < EPSILON) {
+      continue;
+    }
+
+    const distanceAlongRay = cross(current, edge) / denom;
+    const edgePosition = cross(current, to) / denom;
+
+    if (distanceAlongRay < 0 || edgePosition < 0 || edgePosition > 1) {
+      continue;
+    }
+
+    if (distanceAlongRay < bestDistance) {
+      bestDistance = distanceAlongRay;
+      bestPoint = {
+        x: center.x + to.x * distanceAlongRay,
+        y: center.y + to.y * distanceAlongRay
+      };
+    }
+  }
+
+  return bestPoint ?? { ...center };
+};
+
 export const getConnectorAnchor = (node: NodeModel, toward: Vec2): Vec2 => {
   const center = getNodeCenter(node);
   const halfWidth = node.size.width / 2;
   const halfHeight = node.size.height / 2;
 
   switch (node.shape) {
+    case 'circle':
     case 'ellipse':
       return getEllipseAnchor(center, halfWidth, halfHeight, toward);
     case 'diamond':
       return getDiamondAnchor(center, halfWidth, halfHeight, toward);
+    case 'triangle':
+      return getTriangleAnchor(center, halfWidth, halfHeight, toward);
     default:
       return getRectangleAnchor(center, halfWidth, halfHeight, toward);
   }

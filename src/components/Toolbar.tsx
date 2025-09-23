@@ -28,13 +28,28 @@ const SelectCursorIcon: React.FC = () => (
   </svg>
 );
 
-const toolButtons: Array<{ id: Tool; label: string; icon: ReactNode; shortcut?: string; tooltip: string }> = [
+const nodeToolOptions = [
+  { value: 'circle', label: 'Circle' },
+  { value: 'ellipse', label: 'Ellipse' },
+  { value: 'rectangle', label: 'Rectangle' },
+  { value: 'triangle', label: 'Triangle' },
+  { value: 'diamond', label: 'Diamond' }
+] as const;
+
+type NodeTool = (typeof nodeToolOptions)[number]['value'];
+
+const isNodeTool = (value: Tool): value is NodeTool =>
+  nodeToolOptions.some((option) => option.value === value);
+
+const toolButtons: Array<{
+  id: Exclude<Tool, NodeTool>;
+  label: string;
+  icon: ReactNode;
+  shortcut?: string;
+  tooltip: string;
+}> = [
   { id: 'select', label: 'Select', icon: <SelectCursorIcon />, shortcut: 'V', tooltip: 'Select' },
   { id: 'pan', label: 'Pan', icon: '✋', shortcut: 'Space', tooltip: 'Pan' },
-  { id: 'rectangle', label: 'Rectangle', icon: '▭', shortcut: 'R', tooltip: 'Rectangle' },
-  { id: 'rounded-rectangle', label: 'Terminator', icon: '⬒', shortcut: 'T', tooltip: 'Terminator' },
-  { id: 'ellipse', label: 'Ellipse', icon: '⬭', shortcut: 'O', tooltip: 'Ellipse' },
-  { id: 'diamond', label: 'Decision', icon: '◇', shortcut: 'D', tooltip: 'Decision' },
   { id: 'connector', label: 'Connector', icon: '↦', shortcut: 'L', tooltip: 'Connector' }
 ];
 
@@ -52,6 +67,14 @@ export const Toolbar: React.FC<ToolbarProps> = ({ canvasRef }) => {
   const showMiniMap = useSceneStore(selectShowMiniMap);
   const setShowMiniMap = useSceneStore((state) => state.setShowMiniMap);
   const transform = useSceneStore(selectTransform);
+
+  const handleNodeToolChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const nextValue = event.target.value as NodeTool | '';
+    if (!nextValue) {
+      return;
+    }
+    setTool(nextValue);
+  };
 
   const handleZoom = (type: 'in' | 'out' | 'fit' | 'selection' | 'hundred') => {
     const canvas = canvasRef.current;
@@ -80,21 +103,61 @@ export const Toolbar: React.FC<ToolbarProps> = ({ canvasRef }) => {
   return (
     <div className="toolbar">
       <div className="toolbar__group">
-        {toolButtons.map((button) => (
-          <button
-            key={button.id}
-            type="button"
-            className={`toolbar__button ${tool === button.id ? 'is-active' : ''}`}
-            aria-pressed={tool === button.id}
-            onClick={() => setTool(button.id)}
-            aria-label={`${button.label} tool${button.shortcut ? ` (${button.shortcut})` : ''}`}
-            data-tooltip={button.tooltip}
-          >
-            <span className="toolbar__icon" aria-hidden>
-              {button.icon}
-            </span>
-          </button>
-        ))}
+        {toolButtons.map((button) => {
+          if (button.id === 'connector') {
+            const nodeToolValue = isNodeTool(tool) ? tool : '';
+            return (
+              <React.Fragment key={button.id}>
+                <div className={`toolbar__select ${nodeToolValue ? 'is-active' : ''}`}>
+                  <label className="sr-only" htmlFor="toolbar-node-select">
+                    Add node
+                  </label>
+                  <select
+                    id="toolbar-node-select"
+                    value={nodeToolValue}
+                    onChange={handleNodeToolChange}
+                    aria-label="Add node"
+                  >
+                    <option value="">Add node…</option>
+                    {nodeToolOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <button
+                  type="button"
+                  className={`toolbar__button ${tool === button.id ? 'is-active' : ''}`}
+                  aria-pressed={tool === button.id}
+                  onClick={() => setTool(button.id)}
+                  aria-label={`${button.label} tool${button.shortcut ? ` (${button.shortcut})` : ''}`}
+                  data-tooltip={button.tooltip}
+                >
+                  <span className="toolbar__icon" aria-hidden>
+                    {button.icon}
+                  </span>
+                </button>
+              </React.Fragment>
+            );
+          }
+
+          return (
+            <button
+              key={button.id}
+              type="button"
+              className={`toolbar__button ${tool === button.id ? 'is-active' : ''}`}
+              aria-pressed={tool === button.id}
+              onClick={() => setTool(button.id)}
+              aria-label={`${button.label} tool${button.shortcut ? ` (${button.shortcut})` : ''}`}
+              data-tooltip={button.tooltip}
+            >
+              <span className="toolbar__icon" aria-hidden>
+                {button.icon}
+              </span>
+            </button>
+          );
+        })}
       </div>
       <div className="toolbar__group">
         <button
