@@ -95,6 +95,7 @@ export interface ConnectorModel {
   label?: string;
   labelPosition?: number;
   labelOffset?: number;
+  labelAngle?: number;
   style: ConnectorStyle;
   labelStyle?: ConnectorLabelStyle;
 }

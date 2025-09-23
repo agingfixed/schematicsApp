@@ -4,8 +4,7 @@ import {
   buildRoundedConnectorPath,
   getConnectorPath,
   getNormalAtRatio,
-  getPointAtRatio,
-  getPolylineMidpoint
+  getPointAtRatio
 } from '../utils/connector';
 import { CaretPoint, placeCaretAtPoint } from '../utils/text';
 
@@ -33,13 +32,16 @@ interface DiagramConnectorProps {
 }
 
 const DEFAULT_LABEL_POSITION = 0.5;
-const DEFAULT_LABEL_OFFSET = 18;
-const MAX_LABEL_OFFSET = 60;
+const DEFAULT_LABEL_DISTANCE = 18;
+const MAX_LABEL_DISTANCE = 60;
 
 const clampLabel = (value: string) => value.trim();
 
 const clampLabelOffset = (value: number) =>
-  Math.max(-MAX_LABEL_OFFSET, Math.min(MAX_LABEL_OFFSET, value));
+  Math.max(-MAX_LABEL_DISTANCE, Math.min(MAX_LABEL_DISTANCE, value));
+
+const clampLabelRadius = (value: number) =>
+  Math.max(0, Math.min(MAX_LABEL_DISTANCE, Math.abs(value)));
 
 const arrowPathForShape = (shape: ArrowShape, orientation: 'start' | 'end'): string | null => {
   switch (shape) {
@@ -223,20 +225,33 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
     }
   }, [selected]);
 
-  const midpoint = useMemo(() => getPolylineMidpoint(geometry.points), [geometry]);
-
   const labelPosition = connector.labelPosition ?? DEFAULT_LABEL_POSITION;
-  const labelOffset = clampLabelOffset(connector.labelOffset ?? DEFAULT_LABEL_OFFSET);
+  const rawLabelOffset = connector.labelOffset ?? DEFAULT_LABEL_DISTANCE;
+  const labelRadius = clampLabelRadius(rawLabelOffset);
+  const labelOffset = clampLabelOffset(rawLabelOffset);
+  const hasCustomAngle = typeof connector.labelAngle === 'number';
+  const labelAngle = hasCustomAngle ? connector.labelAngle ?? 0 : undefined;
 
   const labelPlacement = useMemo(() => {
     const { point, segmentIndex } = getPointAtRatio(geometry.points, labelPosition);
+    if (hasCustomAngle && typeof labelAngle === 'number') {
+      const center = {
+        x: point.x + Math.cos(labelAngle) * labelRadius,
+        y: point.y + Math.sin(labelAngle) * labelRadius
+      };
+      const delta = { x: center.x - point.x, y: center.y - point.y };
+      const length = Math.hypot(delta.x, delta.y);
+      const normal =
+        length > 1e-6 ? { x: delta.x / length, y: delta.y / length } : getNormalAtRatio(geometry.points, segmentIndex);
+      return { anchor: point, center, normal, segmentIndex };
+    }
     const normal = getNormalAtRatio(geometry.points, segmentIndex);
     const center = {
       x: point.x + normal.x * labelOffset,
       y: point.y + normal.y * labelOffset
     };
     return { anchor: point, center, normal, segmentIndex };
-  }, [geometry, labelPosition, labelOffset, midpoint]);
+  }, [geometry, labelPosition, labelRadius, labelOffset, labelAngle, hasCustomAngle]);
 
   const arrowStroke = connector.style.stroke;
   const endpointColor = connector.style.stroke;
