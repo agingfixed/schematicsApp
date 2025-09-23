@@ -171,9 +171,9 @@ export const DiagramNode: React.FC<DiagramNodeProps> = ({
       )}
       <foreignObject
         x={12}
-        y={12}
+        y={8}
         width={Math.max(24, node.size.width - 24)}
-        height={Math.max(24, node.size.height - 24)}
+        height={Math.max(24, node.size.height - 20)}
       >
         <div
           className={labelClassName}
@@ -182,16 +182,6 @@ export const DiagramNode: React.FC<DiagramNodeProps> = ({
           dangerouslySetInnerHTML={{ __html: node.text }}
         />
       </foreignObject>
-      {selected && node.link?.url && (
-        <foreignObject
-          x={node.size.width - 84}
-          y={Math.max(6, node.size.height - 36)}
-          width={72}
-          height={24}
-        >
-          <div className="diagram-node__link-chip">🔗 Link</div>
-        </foreignObject>
-      )}
     </g>
   );
 };
