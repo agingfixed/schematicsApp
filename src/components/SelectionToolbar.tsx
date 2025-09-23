@@ -66,6 +66,7 @@ export interface SelectionToolbarProps {
   pointerPosition: { x: number; y: number } | null;
   isTextEditing: boolean;
   textEditorRef: React.RefObject<InlineTextEditorHandle | null> | null;
+  onPointerInteractionChange?: (active: boolean) => void;
 }
 
 export const SelectionToolbar: React.FC<SelectionToolbarProps> = ({
@@ -77,7 +78,8 @@ export const SelectionToolbar: React.FC<SelectionToolbarProps> = ({
   focusLinkSignal,
   pointerPosition,
   isTextEditing,
-  textEditorRef
+  textEditorRef,
+  onPointerInteractionChange
 }) => {
   const commands = useCommands();
   const beginTransaction = useSceneStore((state) => state.beginTransaction);
@@ -90,6 +92,7 @@ export const SelectionToolbar: React.FC<SelectionToolbarProps> = ({
   const linkPopoverRef = useRef<HTMLDivElement>(null);
   const previousFocusSignalRef = useRef(focusLinkSignal);
   const fillInteractionRef = useRef(false);
+  const pointerInteractionCleanupRef = useRef<(() => void) | null>(null);
 
   const [fontSizeValue, setFontSizeValue] = useState(node.fontSize.toString());
   const [textFontSizeValue, setTextFontSizeValue] = useState(node.fontSize.toString());
@@ -249,6 +252,25 @@ export const SelectionToolbar: React.FC<SelectionToolbarProps> = ({
 
   useEffect(() => () => finishFillInteraction(), [finishFillInteraction]);
 
+  useEffect(
+    () => () => {
+      if (pointerInteractionCleanupRef.current) {
+        pointerInteractionCleanupRef.current();
+        pointerInteractionCleanupRef.current = null;
+      }
+      onPointerInteractionChange?.(false);
+    },
+    [onPointerInteractionChange]
+  );
+
+  useEffect(() => {
+    if (!isTextEditing && pointerInteractionCleanupRef.current) {
+      pointerInteractionCleanupRef.current();
+      pointerInteractionCleanupRef.current = null;
+      onPointerInteractionChange?.(false);
+    }
+  }, [isTextEditing, onPointerInteractionChange]);
+
   useEffect(() => {
     if (!fillOpen) {
       finishFillInteraction();
@@ -268,8 +290,9 @@ export const SelectionToolbar: React.FC<SelectionToolbarProps> = ({
       setLinkOpen(false);
       setLinkError(null);
       finishFillInteraction();
+      onPointerInteractionChange?.(false);
     }
-  }, [isVisible, finishFillInteraction]);
+  }, [isVisible, finishFillInteraction, onPointerInteractionChange]);
 
   useEffect(() => {
     if (isTextEditing) {
@@ -565,6 +588,38 @@ export const SelectionToolbar: React.FC<SelectionToolbarProps> = ({
 
   const strokeWidthDisabled = !node.stroke.color;
 
+  const handlePointerDownCapture = useCallback(() => {
+    if (!onPointerInteractionChange) {
+      return;
+    }
+    onPointerInteractionChange(true);
+    if (pointerInteractionCleanupRef.current) {
+      pointerInteractionCleanupRef.current();
+      pointerInteractionCleanupRef.current = null;
+    }
+    const handlePointerUp = () => {
+      onPointerInteractionChange(false);
+      document.removeEventListener('pointerup', handlePointerUp, true);
+      document.removeEventListener('pointercancel', handlePointerUp, true);
+      pointerInteractionCleanupRef.current = null;
+    };
+    document.addEventListener('pointerup', handlePointerUp, true);
+    document.addEventListener('pointercancel', handlePointerUp, true);
+    pointerInteractionCleanupRef.current = () => {
+      document.removeEventListener('pointerup', handlePointerUp, true);
+      document.removeEventListener('pointercancel', handlePointerUp, true);
+    };
+  }, [onPointerInteractionChange]);
+
+  const handleTextControlPointerDown = useCallback(
+    (event: React.PointerEvent<Element>) => {
+      if (isTextEditing) {
+        event.preventDefault();
+      }
+    },
+    [isTextEditing]
+  );
+
   return (
     <div
       ref={toolbarRef}
@@ -573,6 +628,7 @@ export const SelectionToolbar: React.FC<SelectionToolbarProps> = ({
       data-placement={!menuState.isFree ? orientation : undefined}
       data-free={menuState.isFree || undefined}
       data-dragging={isDragging || undefined}
+      onPointerDownCapture={handlePointerDownCapture}
     >
       <FloatingMenuChrome
         title={isTextEditing ? 'Text' : 'Selection'}
@@ -586,72 +642,77 @@ export const SelectionToolbar: React.FC<SelectionToolbarProps> = ({
         onKeyboardMove={moveMenuBy}
       />
       <div className="selection-toolbar__content">
-        <div className="selection-toolbar__group">
-          <button
-            type="button"
-            className={`selection-toolbar__button ${boldActive ? 'is-active' : ''}`}
-            onClick={handleToggleBold}
-            disabled={fontSizeDisabled}
-            title="Bold (Cmd/Ctrl+B)"
-          >
-            <span className="selection-toolbar__icon">B</span>
-          </button>
-        <div className="selection-toolbar__segmented" role="group" aria-label="Text alignment">
-          {alignOptions.map((option) => (
+        {isTextEditing ? (
+          <div className="selection-toolbar__group">
             <button
-              key={option.value}
               type="button"
-              className={`selection-toolbar__button ${
-                node.textAlign === option.value ? 'is-active' : ''
-              }`}
-              onClick={() => handleAlign(option.value)}
-              disabled={textDisabled}
-              title={`${option.label} (Cmd/Ctrl+Shift+${option.icon})`}
+              className={`selection-toolbar__button ${boldActive ? 'is-active' : ''}`}
+              onClick={handleToggleBold}
+              onPointerDown={handleTextControlPointerDown}
+              disabled={fontSizeDisabled}
+              title="Bold (Cmd/Ctrl+B)"
             >
-              <span className="selection-toolbar__icon" aria-hidden>
-                {option.icon}
-              </span>
+              <span className="selection-toolbar__icon">B</span>
             </button>
-          ))}
-        </div>
-        <div className="selection-toolbar__size-control">
-          <button
-            type="button"
-            onClick={() => adjustFontSize(-1)}
-            disabled={fontSizeDisabled}
-            className="selection-toolbar__button"
-            title="Decrease size (Cmd/Ctrl+-)"
-          >
-            −
-          </button>
-          <input
-            type="number"
-            className="selection-toolbar__input"
-            value={displayedFontSizeValue}
-            min={FONT_SIZE_MIN}
-            max={FONT_SIZE_MAX}
-            onChange={(event) =>
-              isTextEditing
-                ? setTextFontSizeValue(event.target.value)
-                : setFontSizeValue(event.target.value)
-            }
-            onBlur={handleFontSizeBlur}
-            onKeyDown={handleFontSizeKeyDown}
-            disabled={fontSizeDisabled}
-            aria-label="Font size"
-          />
-          <button
-            type="button"
-            onClick={() => adjustFontSize(1)}
-            disabled={fontSizeDisabled}
-            className="selection-toolbar__button"
-            title="Increase size (Cmd/Ctrl+=)"
-          >
-            +
-          </button>
-        </div>
-        </div>
-        {!isTextEditing && (
+            <div className="selection-toolbar__segmented" role="group" aria-label="Text alignment">
+              {alignOptions.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  className={`selection-toolbar__button ${
+                    node.textAlign === option.value ? 'is-active' : ''
+                  }`}
+                  onClick={() => handleAlign(option.value)}
+                  onPointerDown={handleTextControlPointerDown}
+                  disabled={textDisabled}
+                  title={`${option.label} (Cmd/Ctrl+Shift+${option.icon})`}
+                >
+                  <span className="selection-toolbar__icon" aria-hidden>
+                    {option.icon}
+                  </span>
+                </button>
+              ))}
+            </div>
+            <div className="selection-toolbar__size-control">
+              <button
+                type="button"
+                onClick={() => adjustFontSize(-1)}
+                onPointerDown={handleTextControlPointerDown}
+                disabled={fontSizeDisabled}
+                className="selection-toolbar__button"
+                title="Decrease size (Cmd/Ctrl+-)"
+              >
+                −
+              </button>
+              <input
+                type="number"
+                className="selection-toolbar__input"
+                value={displayedFontSizeValue}
+                min={FONT_SIZE_MIN}
+                max={FONT_SIZE_MAX}
+                onChange={(event) =>
+                  isTextEditing
+                    ? setTextFontSizeValue(event.target.value)
+                    : setFontSizeValue(event.target.value)
+                }
+                onBlur={handleFontSizeBlur}
+                onKeyDown={handleFontSizeKeyDown}
+                disabled={fontSizeDisabled}
+                aria-label="Font size"
+              />
+              <button
+                type="button"
+                onClick={() => adjustFontSize(1)}
+                onPointerDown={handleTextControlPointerDown}
+                disabled={fontSizeDisabled}
+                className="selection-toolbar__button"
+                title="Increase size (Cmd/Ctrl+=)"
+              >
+                +
+              </button>
+            </div>
+          </div>
+        ) : (
           <>
             <div className="selection-toolbar__group">
               <div className="selection-toolbar__swatch" title={fillTitle}>
