@@ -295,6 +295,18 @@
   z-index: 47;
 }
 
+.selection-toolbar__text-link-field {
+  display: flex;
+  flex-direction: column;
+  gap: calc(4px * var(--menu-scale));
+}
+
+.selection-toolbar__text-link-field span {
+  font-size: calc(12px * var(--menu-scale));
+  font-weight: 600;
+  color: rgba(226, 232, 240, 0.85);
+}
+
 .selection-toolbar__text-link-popover input {
   width: 100%;
   padding: calc(8px * var(--menu-scale)) calc(10px * var(--menu-scale));
