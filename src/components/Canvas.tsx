@@ -1438,9 +1438,13 @@ const CanvasComponent = (
     let connectorEditRequest: string | null = null;
     const pendingConnector = pendingConnectorEditRef.current;
     if (pendingConnector && pendingConnector.pointerId === event.pointerId) {
-      const drag = connectorDragStateRef.current;
-      const moved = drag && drag.pointerId === event.pointerId ? drag.moved : false;
-      if (!moved && tool === 'select') {
+      const connectorDrag = connectorDragStateRef.current;
+      const labelDrag = connectorLabelDragRef.current;
+      const movedConnector =
+        connectorDrag && connectorDrag.pointerId === event.pointerId ? connectorDrag.moved : false;
+      const movedLabel =
+        labelDrag && labelDrag.pointerId === event.pointerId ? labelDrag.moved : false;
+      if (!movedConnector && !movedLabel && tool === 'select') {
         connectorEditRequest = pendingConnector.connectorId;
       }
       pendingConnectorEditRef.current = null;
@@ -1496,7 +1500,7 @@ const CanvasComponent = (
       });
       endTransaction();
       releasePointerCapture(event.pointerId);
-      handled = true;
+      handled = drag.moved;
     }
 
     if (!handled && connectionPointerRef.current === event.pointerId) {
@@ -2039,6 +2043,32 @@ const CanvasComponent = (
     }
 
     pendingTextEditRef.current = null;
+    const now = performance.now();
+    const lastClick = lastConnectorClickRef.current;
+    const wasSelected = selectedConnectorIds.includes(connector.id);
+    const wasSingleSelected =
+      selectedConnectorIds.length === 1 && selectedConnectorIds[0] === connector.id;
+    const isQuickRepeat =
+      !!lastClick && lastClick.connectorId === connector.id && now - lastClick.time < DOUBLE_CLICK_DELAY;
+    const allowEdit =
+      tool === 'select' &&
+      !event.shiftKey &&
+      !event.altKey &&
+      !event.metaKey &&
+      !event.ctrlKey;
+
+    if (allowEdit && (wasSingleSelected || isQuickRepeat)) {
+      pendingConnectorEditRef.current = { connectorId: connector.id, pointerId: event.pointerId };
+    } else {
+      pendingConnectorEditRef.current = null;
+    }
+
+    if (allowEdit) {
+      lastConnectorClickRef.current = { connectorId: connector.id, time: now };
+    } else {
+      lastConnectorClickRef.current = null;
+    }
+
     commitEditingIfNeeded();
     event.stopPropagation();
 

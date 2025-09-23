@@ -97,6 +97,7 @@ export interface SmartSelectionResult {
 }
 
 const EPSILON = 0.0001;
+const MAX_SNAP_NEIGHBORS = 3;
 
 const widthOf = (bounds: Bounds) => bounds.maxX - bounds.minX;
 const heightOf = (bounds: Bounds) => bounds.maxY - bounds.minY;
@@ -230,44 +231,77 @@ const resolveAxis = (
     return sticky;
   }
 
+  const movingCenterX = centerXOf(movingRect);
+  const movingCenterY = centerYOf(movingRect);
+  const prioritized = [...otherRects].sort((a, b) => {
+    const distanceA = Math.hypot(a.center.x - movingCenterX, a.center.y - movingCenterY);
+    const distanceB = Math.hypot(b.center.x - movingCenterX, b.center.y - movingCenterY);
+    return distanceA - distanceB;
+  });
+
   let best: SnapMatch | undefined;
+  let bestRank = Number.POSITIVE_INFINITY;
+  let bestAbsDelta = Number.POSITIVE_INFINITY;
 
-  otherRects.forEach((neighbor) => {
-    const candidates =
-      axis === 'x'
-        ? createVerticalCandidates(movingRect, neighbor)
-        : createHorizontalCandidates(movingRect, neighbor);
+  const considerNeighbors = (neighbors: RectInfo[], baseRank: number) => {
+    neighbors.forEach((neighbor, index) => {
+      const rank = baseRank + index;
+      const candidates =
+        axis === 'x'
+          ? createVerticalCandidates(movingRect, neighbor)
+          : createHorizontalCandidates(movingRect, neighbor);
 
-    candidates.forEach((candidate) => {
-      if (centerOnly && candidate.type !== 'center') {
-        return;
-      }
-      const absDelta = Math.abs(candidate.delta);
-      if (absDelta > tolerance + EPSILON) {
-        return;
-      }
-
-      if (!best) {
-        best = candidate;
-        return;
-      }
-
-      const bestAbs = Math.abs(best.delta);
-      if (absDelta + EPSILON < bestAbs) {
-        best = candidate;
-        return;
-      }
-      if (Math.abs(absDelta - bestAbs) <= EPSILON) {
-        if (candidate.type === 'center' && best.type !== 'center') {
-          best = candidate;
+      candidates.forEach((candidate) => {
+        if (centerOnly && candidate.type !== 'center') {
           return;
         }
-        if (candidate.type === best.type && absDelta < bestAbs) {
-          best = candidate;
+        const absDelta = Math.abs(candidate.delta);
+        if (absDelta > tolerance + EPSILON) {
+          return;
         }
-      }
+
+        if (!best) {
+          best = candidate;
+          bestRank = rank;
+          bestAbsDelta = absDelta;
+          return;
+        }
+
+        if (rank < bestRank) {
+          best = candidate;
+          bestRank = rank;
+          bestAbsDelta = absDelta;
+          return;
+        }
+
+        if (rank === bestRank) {
+          if (absDelta + EPSILON < bestAbsDelta) {
+            best = candidate;
+            bestAbsDelta = absDelta;
+            return;
+          }
+          if (Math.abs(absDelta - bestAbsDelta) <= EPSILON) {
+            if (candidate.type === 'center' && best.type !== 'center') {
+              best = candidate;
+              bestAbsDelta = absDelta;
+              return;
+            }
+            if (candidate.type === best.type && absDelta < bestAbsDelta) {
+              best = candidate;
+              bestAbsDelta = absDelta;
+            }
+          }
+        }
+      });
     });
-  });
+  };
+
+  const primaryNeighbors = prioritized.slice(0, MAX_SNAP_NEIGHBORS);
+  considerNeighbors(primaryNeighbors, 0);
+
+  if (!best && prioritized.length > MAX_SNAP_NEIGHBORS) {
+    considerNeighbors(prioritized.slice(MAX_SNAP_NEIGHBORS), MAX_SNAP_NEIGHBORS);
+  }
 
   return best;
 };
