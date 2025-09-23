@@ -78,8 +78,7 @@ export const ConnectorTextToolbar: React.FC<ConnectorTextToolbarProps> = ({
     handlePointerMove: handleDragPointerMove,
     handlePointerUp: handleDragPointerUp,
     handlePointerCancel: handleDragPointerCancel,
-    moveBy: moveMenuBy,
-    resetToAnchor
+    moveBy: moveMenuBy
   } = useFloatingMenuDrag({
     menuType: 'connector-label-toolbar',
     menuRef: toolbarRef,
@@ -180,7 +179,6 @@ export const ConnectorTextToolbar: React.FC<ConnectorTextToolbarProps> = ({
         onPointerMove={handleDragPointerMove}
         onPointerUp={handleDragPointerUp}
         onPointerCancel={handleDragPointerCancel}
-        onReset={resetToAnchor}
         onKeyboardMove={moveMenuBy}
       />
       <div className="connector-toolbar__section">

@@ -1053,7 +1053,10 @@ const CanvasComponent = (
       x: worldPoint.x - width / 2,
       y: worldPoint.y - height / 2
     };
-    addNode(tool as Extract<Tool, 'rectangle' | 'rounded-rectangle' | 'ellipse' | 'diamond'>, position);
+    addNode(
+      tool as Extract<Tool, 'rectangle' | 'circle' | 'ellipse' | 'triangle' | 'diamond'>,
+      position
+    );
   };
 
   const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -2896,8 +2899,9 @@ const createTransformToFit = (
 const getDefaultSizeForTool = (tool: Tool) => {
   switch (tool) {
     case 'rectangle':
-    case 'rounded-rectangle':
+    case 'circle':
     case 'ellipse':
+    case 'triangle':
     case 'diamond':
       return getDefaultNodeSize(tool);
     default:

@@ -19,9 +19,10 @@ const STROKE_MAX = 20;
 const TOOLBAR_GAP = 12;
 
 const shapeOptions: Array<{ value: NodeKind; label: string }> = [
-  { value: 'rectangle', label: 'Rect' },
-  { value: 'rounded-rectangle', label: 'Round' },
+  { value: 'circle', label: 'Circle' },
   { value: 'ellipse', label: 'Ellipse' },
+  { value: 'rectangle', label: 'Rectangle' },
+  { value: 'triangle', label: 'Triangle' },
   { value: 'diamond', label: 'Diamond' }
 ];
 
@@ -42,6 +43,15 @@ const ensureProtocol = (value: string) => {
     return trimmed;
   }
   return `https://${trimmed}`;
+};
+
+export const SelectionToolbar: React.FC<SelectionToolbarProps> = (props) => {
+  const { isVisible, anchor } = props;
+  if (!isVisible || !anchor) {
+    return null;
+  }
+
+  return <SelectionToolbarContent {...props} anchor={anchor} />;
 };
 
 const isValidHttpUrl = (value: string) => {
@@ -69,7 +79,11 @@ export interface SelectionToolbarProps {
   onPointerInteractionChange?: (active: boolean) => void;
 }
 
-export const SelectionToolbar: React.FC<SelectionToolbarProps> = ({
+type SelectionToolbarContentProps = Omit<SelectionToolbarProps, 'anchor'> & {
+  anchor: NonNullable<SelectionToolbarProps['anchor']>;
+};
+
+const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
   node,
   nodeIds,
   anchor,
@@ -114,8 +128,7 @@ export const SelectionToolbar: React.FC<SelectionToolbarProps> = ({
     handlePointerMove: handleDragPointerMove,
     handlePointerUp: handleDragPointerUp,
     handlePointerCancel: handleDragPointerCancel,
-    moveBy: moveMenuBy,
-    resetToAnchor
+    moveBy: moveMenuBy
   } = useFloatingMenuDrag({
     menuType: 'selection-toolbar',
     menuRef: toolbarRef,
@@ -425,10 +438,6 @@ export const SelectionToolbar: React.FC<SelectionToolbarProps> = ({
     placementOptions
   ]);
 
-  if (!isVisible || !anchor) {
-    return null;
-  }
-
   const handleToggleBold = () => {
     if (isTextEditing) {
       const editor = getEditorElement();
@@ -638,7 +647,6 @@ export const SelectionToolbar: React.FC<SelectionToolbarProps> = ({
         onPointerMove={handleDragPointerMove}
         onPointerUp={handleDragPointerUp}
         onPointerCancel={handleDragPointerCancel}
-        onReset={resetToAnchor}
         onKeyboardMove={moveMenuBy}
       />
       <div className="selection-toolbar__content">

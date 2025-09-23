@@ -20,15 +20,19 @@ const defaultNodeAppearance: Record<
     stroke: '#3b82f6',
     strokeWidth: 2
   },
-  'rounded-rectangle': {
+  circle: {
     fill: '#1f2937',
     stroke: '#22d3ee',
-    strokeWidth: 2,
-    cornerRadius: 16
+    strokeWidth: 2
   },
   ellipse: {
     fill: '#1f2937',
-    stroke: '#f472b6',
+    stroke: '#a855f7',
+    strokeWidth: 2
+  },
+  triangle: {
+    fill: '#1f2937',
+    stroke: '#f97316',
     strokeWidth: 2
   },
   diamond: {
@@ -40,46 +44,43 @@ const defaultNodeAppearance: Record<
 
 const defaultNodeSizes: Record<NodeKind, { width: number; height: number }> = {
   rectangle: { width: 220, height: 120 },
-  'rounded-rectangle': { width: 220, height: 120 },
-  ellipse: { width: 200, height: 200 },
+  circle: { width: 200, height: 200 },
+  ellipse: { width: 240, height: 160 },
+  triangle: { width: 220, height: 200 },
   diamond: { width: 220, height: 160 }
 };
 
 export const createNodeModel = (shape: NodeKind, position: Vec2, text?: string): NodeModel => {
-  const size = defaultNodeSizes[shape];
-  const appearance = defaultNodeAppearance[shape];
+  const hasDefaults = Object.prototype.hasOwnProperty.call(defaultNodeSizes, shape);
+  const kind: NodeKind = hasDefaults ? shape : 'rectangle';
+  const size = defaultNodeSizes[kind];
+  const appearance = defaultNodeAppearance[kind];
 
-  return {
+  const node: NodeModel = {
     id: nanoid(),
-    shape,
+    shape: kind,
     position: { ...position },
     size: { ...size },
-    text: ensureHtmlContent(text ?? defaultLabel(shape)),
+    text: ensureHtmlContent(text ?? defaultLabel(kind)),
     textAlign: 'center',
     fontSize: 18,
     fontWeight: 600,
     fill: appearance.fill,
     fillOpacity: 1,
-    stroke: { color: appearance.stroke, width: appearance.strokeWidth },
-    cornerRadius: appearance.cornerRadius
+    stroke: { color: appearance.stroke, width: appearance.strokeWidth }
   };
+
+  if (appearance.cornerRadius !== undefined) {
+    node.cornerRadius = appearance.cornerRadius;
+  }
+
+  return node;
 };
 
 export const getDefaultNodeSize = (shape: NodeKind) => ({ ...defaultNodeSizes[shape] });
 
 const defaultLabel = (type: NodeKind) => {
-  switch (type) {
-    case 'rectangle':
-      return 'Process';
-    case 'rounded-rectangle':
-      return 'Terminator';
-    case 'ellipse':
-      return 'Start';
-    case 'diamond':
-      return 'Decision';
-    default:
-      return 'Step';
-  }
+  return type.charAt(0).toUpperCase() + type.slice(1);
 };
 
 export const cloneScene = (scene: SceneContent): SceneContent => ({
