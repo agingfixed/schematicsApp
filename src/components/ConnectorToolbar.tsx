@@ -229,140 +229,162 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
         onReset={resetToAnchor}
         onKeyboardMove={moveMenuBy}
       />
-      <div className="connector-toolbar__section">
-        <label className="connector-toolbar__field">
-          <span>Stroke</span>
-          <input
-            type="number"
-            min={0.5}
-            max={20}
-            step={0.5}
-            value={connector.style.strokeWidth}
-            onChange={handleStrokeWidthChange}
-          />
-        </label>
-        <label className="connector-toolbar__field">
-          <span>Color</span>
-          <input type="color" value={connector.style.stroke} onChange={handleColorChange} />
-        </label>
-        <button
-          type="button"
-          className={`connector-toolbar__button${connector.style.dashed ? ' is-active' : ''}`}
-          onClick={handleDashToggle}
-        >
-          {connector.style.dashed ? 'Dashed' : 'Solid'}
-        </button>
-      </div>
-      <div className="connector-toolbar__section">
-        <label className="connector-toolbar__field">
-          <span>Start</span>
-          <select value={startShape} onChange={handleArrowShapeChange('startArrow')}>
-            {arrowOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="connector-toolbar__field">
-          <span>Fill</span>
-          <select
-            value={startFillValue}
-            onChange={handleArrowFillChange('startArrow')}
-            disabled={startFillDisabled}
-          >
-            {fillOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="connector-toolbar__field">
-          <span>End</span>
-          <select value={endShape} onChange={handleArrowShapeChange('endArrow')}>
-            {arrowOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="connector-toolbar__field">
-          <span>Fill</span>
-          <select
-            value={endFillValue}
-            onChange={handleArrowFillChange('endArrow')}
-            disabled={endFillDisabled}
-          >
-            {fillOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
-      <div className="connector-toolbar__section">
-        <label className="connector-toolbar__field">
-          <span>Arrow size</span>
-          <input
-            type="range"
-            min={0.5}
-            max={4}
-            step={0.1}
-            value={connector.style.arrowSize ?? 1}
-            onChange={handleArrowSizeChange}
-          />
-        </label>
-        <label className="connector-toolbar__field">
-          <span>Mode</span>
-          <select value={connector.mode} onChange={(event) => onModeChange(event.target.value as ConnectorModel['mode'])}>
-            {modeOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        {connector.mode === 'elbow' && (
-          <label className="connector-toolbar__field">
-            <span>Corner</span>
-            <input
-              type="range"
-              min={0}
-              max={80}
-              step={1}
-              value={connector.style.cornerRadius ?? 12}
-              onChange={handleCornerRadiusChange}
-            />
-          </label>
-        )}
-      </div>
-      <div className="connector-toolbar__section connector-toolbar__section--actions">
-        <button type="button" className="connector-toolbar__button" onClick={onFlipDirection}>
-          Flip
-        </button>
-        <button
-          type="button"
-          className={`connector-toolbar__button${avoidNodesEnabled ? '' : ' is-active'}`}
-          onClick={handleAvoidNodesToggle}
-          aria-pressed={!avoidNodesEnabled}
-          disabled={isStraight}
-          title={
-            isStraight ? 'Straight connectors always allow lines to pass behind nodes.' : undefined
-          }
-        >
-          {/*
-            The label reflects the current avoidance mode so users can tell at
-            a glance whether connectors will hug nodes (Avoid On) or are
-            allowed to pass beneath them (Avoid Off).
-          */}
-          {avoidNodesEnabled ? 'Avoid On' : 'Avoid Off'}
-        </button>
-        <button type="button" className="connector-toolbar__button" onClick={onTidyPath}>
-          Tidy
-        </button>
+      <div className="connector-toolbar__content">
+        <section className="connector-toolbar__panel connector-toolbar__panel--stroke">
+          <h3 className="connector-toolbar__panel-title">Stroke</h3>
+          <div className="connector-toolbar__section connector-toolbar__section--wrap">
+            <label className="connector-toolbar__field">
+              <span>Width</span>
+              <input
+                type="number"
+                min={0.5}
+                max={20}
+                step={0.5}
+                value={connector.style.strokeWidth}
+                onChange={handleStrokeWidthChange}
+              />
+            </label>
+            <label className="connector-toolbar__field connector-toolbar__field--color">
+              <span>Color</span>
+              <input type="color" value={connector.style.stroke} onChange={handleColorChange} />
+            </label>
+            <button
+              type="button"
+              className={`connector-toolbar__button${connector.style.dashed ? ' is-active' : ''}`}
+              onClick={handleDashToggle}
+            >
+              {connector.style.dashed ? 'Dashed' : 'Solid'}
+            </button>
+          </div>
+        </section>
+        <section className="connector-toolbar__panel connector-toolbar__panel--arrows">
+          <h3 className="connector-toolbar__panel-title">Arrowheads</h3>
+          <div className="connector-toolbar__columns">
+            <div className="connector-toolbar__column">
+              <span className="connector-toolbar__subheading">Start</span>
+              <div className="connector-toolbar__section connector-toolbar__section--column">
+                <label className="connector-toolbar__field">
+                  <span>Shape</span>
+                  <select value={startShape} onChange={handleArrowShapeChange('startArrow')}>
+                    {arrowOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="connector-toolbar__field">
+                  <span>Fill</span>
+                  <select
+                    value={startFillValue}
+                    onChange={handleArrowFillChange('startArrow')}
+                    disabled={startFillDisabled}
+                  >
+                    {fillOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            </div>
+            <div className="connector-toolbar__column">
+              <span className="connector-toolbar__subheading">End</span>
+              <div className="connector-toolbar__section connector-toolbar__section--column">
+                <label className="connector-toolbar__field">
+                  <span>Shape</span>
+                  <select value={endShape} onChange={handleArrowShapeChange('endArrow')}>
+                    {arrowOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="connector-toolbar__field">
+                  <span>Fill</span>
+                  <select
+                    value={endFillValue}
+                    onChange={handleArrowFillChange('endArrow')}
+                    disabled={endFillDisabled}
+                  >
+                    {fillOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            </div>
+          </div>
+        </section>
+        <section className="connector-toolbar__panel connector-toolbar__panel--geometry">
+          <h3 className="connector-toolbar__panel-title">Geometry</h3>
+          <div className="connector-toolbar__section connector-toolbar__section--column">
+            <label className="connector-toolbar__field">
+              <span>Arrow size</span>
+              <input
+                type="range"
+                min={0.5}
+                max={4}
+                step={0.1}
+                value={connector.style.arrowSize ?? 1}
+                onChange={handleArrowSizeChange}
+              />
+            </label>
+            <label className="connector-toolbar__field">
+              <span>Mode</span>
+              <select
+                value={connector.mode}
+                onChange={(event) => onModeChange(event.target.value as ConnectorModel['mode'])}
+              >
+                {modeOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {connector.mode === 'elbow' && (
+              <label className="connector-toolbar__field">
+                <span>Corner</span>
+                <input
+                  type="range"
+                  min={0}
+                  max={80}
+                  step={1}
+                  value={connector.style.cornerRadius ?? 12}
+                  onChange={handleCornerRadiusChange}
+                />
+              </label>
+            )}
+          </div>
+        </section>
+        <section className="connector-toolbar__panel connector-toolbar__panel--actions">
+          <h3 className="connector-toolbar__panel-title">Actions</h3>
+          <div className="connector-toolbar__actions">
+            <button type="button" className="connector-toolbar__button" onClick={onFlipDirection}>
+              Flip
+            </button>
+            <button
+              type="button"
+              className={`connector-toolbar__button${avoidNodesEnabled ? '' : ' is-active'}`}
+              onClick={handleAvoidNodesToggle}
+              aria-pressed={!avoidNodesEnabled}
+              disabled={isStraight}
+              title={
+                isStraight ? 'Straight connectors always allow lines to pass behind nodes.' : undefined
+              }
+            >
+              {avoidNodesEnabled ? 'Avoid On' : 'Avoid Off'}
+            </button>
+            <button type="button" className="connector-toolbar__button" onClick={onTidyPath}>
+              Tidy
+            </button>
+          </div>
+        </section>
       </div>
     </div>
   );

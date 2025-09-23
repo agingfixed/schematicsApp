@@ -40,7 +40,56 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
+  position: relative;
+  user-select: none;
   transition: background 0.2s ease, transform 0.12s ease, color 0.2s ease;
+}
+
+.toolbar__button[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 10px * var(--menu-scale));
+  transform: translate(-50%, 6px) scale(0.95);
+  background: rgba(15, 23, 42, 0.92);
+  color: rgba(226, 232, 240, 0.95);
+  padding: calc(4px * var(--menu-scale)) calc(8px * var(--menu-scale));
+  border-radius: calc(8px * var(--menu-scale));
+  font-size: calc(11px * var(--menu-scale));
+  font-weight: 500;
+  white-space: nowrap;
+  box-shadow: 0 10px 24px rgba(2, 6, 23, 0.4);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  z-index: 10;
+}
+
+.toolbar__button[data-tooltip]::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 6px * var(--menu-scale));
+  width: calc(10px * var(--menu-scale));
+  height: calc(10px * var(--menu-scale));
+  transform: translate(-50%, 8px) rotate(45deg);
+  background: rgba(15, 23, 42, 0.92);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  z-index: 10;
+}
+
+.toolbar__button[data-tooltip]:hover::after,
+.toolbar__button[data-tooltip]:focus-visible::after {
+  opacity: 1;
+  transform: translate(-50%, 0) scale(1);
+}
+
+.toolbar__button[data-tooltip]:hover::before,
+.toolbar__button[data-tooltip]:focus-visible::before {
+  opacity: 1;
+  transform: translate(-50%, 2px) rotate(45deg);
 }
 
 .toolbar__button:is(:hover, :focus-visible) {
@@ -60,7 +109,23 @@
 }
 
 .toolbar__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(20px * var(--menu-scale));
+  height: calc(20px * var(--menu-scale));
   font-size: calc(16px * var(--menu-scale));
+  line-height: 1;
+}
+
+.toolbar__icon svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.toolbar__cursor-icon {
+  filter: drop-shadow(0 2px 4px rgba(15, 23, 42, 0.45));
 }
 
 .toolbar__status {
