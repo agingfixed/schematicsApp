@@ -110,7 +110,7 @@ const InlineTextEditorComponent = (
     return null;
   }
 
-  const paddingTop = 8 * scale;
+  const paddingTop = 6 * scale;
   const paddingBottom = 10 * scale;
   const paddingX = 14 * scale;
 

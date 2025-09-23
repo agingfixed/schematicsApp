@@ -14,6 +14,7 @@ import {
   applyTextColorToSelection,
   extractPlainText,
   removeLinkFromSelection,
+  replaceSelectionWithText,
   toggleBoldInSelection,
   toggleItalicInSelection,
   toggleListInSelection,
@@ -71,6 +72,34 @@ const normalizeTextAlign = (value: string): TextAlign => {
       return 'left';
   }
 };
+
+interface TextSelectionState {
+  fontSize: number;
+  isBold: boolean;
+  isItalic: boolean;
+  isUnderline: boolean;
+  isStrikethrough: boolean;
+  textAlign: TextAlign;
+  color: string;
+  hasSelection: boolean;
+  hasLink: boolean;
+  linkUrl: string;
+  selectedText: string;
+}
+
+const createDefaultTextSelectionState = (node: NodeModel): TextSelectionState => ({
+  fontSize: node.fontSize,
+  isBold: node.fontWeight >= 700,
+  isItalic: false,
+  isUnderline: false,
+  isStrikethrough: false,
+  textAlign: node.textAlign,
+  color: node.textColor,
+  hasSelection: false,
+  hasLink: false,
+  linkUrl: '',
+  selectedText: ''
+});
 
 export const SelectionToolbar: React.FC<SelectionToolbarProps> = (props) => {
   const { isVisible, anchor } = props;
@@ -130,28 +159,21 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
   const pointerInteractionCleanupRef = useRef<(() => void) | null>(null);
   const textLinkButtonRef = useRef<HTMLButtonElement>(null);
   const textLinkPopoverRef = useRef<HTMLDivElement>(null);
-  const textLinkInputRef = useRef<HTMLInputElement>(null);
+  const textLinkVisibleInputRef = useRef<HTMLInputElement>(null);
+  const textLinkUrlInputRef = useRef<HTMLInputElement>(null);
   const savedSelectionRef = useRef<Range | null>(null);
 
   const [fontSizeValue, setFontSizeValue] = useState(node.fontSize.toString());
   const [textFontSizeValue, setTextFontSizeValue] = useState(node.fontSize.toString());
   const [strokeWidthValue, setStrokeWidthValue] = useState(node.stroke.width.toString());
   const [fillOpen, setFillOpen] = useState(false);
-  const [textSelectionState, setTextSelectionState] = useState({
-    fontSize: node.fontSize,
-    isBold: node.fontWeight >= 700,
-    isItalic: false,
-    isUnderline: false,
-    isStrikethrough: false,
-    textAlign: node.textAlign,
-    color: node.textColor,
-    hasSelection: false,
-    hasLink: false,
-    linkUrl: ''
-  });
+  const [textSelectionState, setTextSelectionState] = useState<TextSelectionState>(() =>
+    createDefaultTextSelectionState(node)
+  );
   const [textColorValue, setTextColorValue] = useState(node.textColor);
   const [textLinkOpen, setTextLinkOpen] = useState(false);
   const [textLinkDraft, setTextLinkDraft] = useState('');
+  const [textLinkVisibleDraft, setTextLinkVisibleDraft] = useState('');
   const [textLinkError, setTextLinkError] = useState<string | null>(null);
 
   const {
@@ -243,36 +265,14 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
     }
     const selection = window.getSelection();
     if (!selection || selection.rangeCount === 0) {
-      setTextSelectionState({
-        fontSize: node.fontSize,
-        isBold: node.fontWeight >= 700,
-        isItalic: false,
-        isUnderline: false,
-        isStrikethrough: false,
-        textAlign: node.textAlign,
-        color: node.textColor,
-        hasSelection: false,
-        hasLink: false,
-        linkUrl: ''
-      });
+      setTextSelectionState(createDefaultTextSelectionState(node));
       setTextFontSizeValue(node.fontSize.toString());
       setTextColorValue(node.textColor);
       return;
     }
     const range = selection.getRangeAt(0);
     if (!editor.contains(range.commonAncestorContainer)) {
-      setTextSelectionState({
-        fontSize: node.fontSize,
-        isBold: node.fontWeight >= 700,
-        isItalic: false,
-        isUnderline: false,
-        isStrikethrough: false,
-        textAlign: node.textAlign,
-        color: node.textColor,
-        hasSelection: false,
-        hasLink: false,
-        linkUrl: ''
-      });
+      setTextSelectionState(createDefaultTextSelectionState(node));
       setTextFontSizeValue(node.fontSize.toString());
       setTextColorValue(node.textColor);
       return;
@@ -311,6 +311,10 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
       : null;
     const hasLink = Boolean(hasSelection && linkElement && editor.contains(linkElement));
     const linkUrl = hasLink && linkElement ? linkElement.getAttribute('href') ?? '' : '';
+    const rawSelectedText = hasSelection ? selection.toString() : '';
+    const selectedText = hasSelection
+      ? rawSelectedText.replace(/\s*\n\s*/g, ' ').trim()
+      : '';
     setTextSelectionState({
       fontSize,
       isBold: bold,
@@ -321,7 +325,8 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
       color: colorHex,
       hasSelection,
       hasLink,
-      linkUrl
+      linkUrl,
+      selectedText
     });
     setTextFontSizeValue(Math.round(fontSize).toString());
     setTextColorValue(colorHex);
@@ -393,18 +398,7 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
     if (!isTextEditing) {
       setTextFontSizeValue(node.fontSize.toString());
       setTextColorValue(node.textColor);
-      setTextSelectionState({
-        fontSize: node.fontSize,
-        isBold: node.fontWeight >= 700,
-        isItalic: false,
-        isUnderline: false,
-        isStrikethrough: false,
-        textAlign: node.textAlign,
-        color: node.textColor,
-        hasSelection: false,
-        hasLink: false,
-        linkUrl: ''
-      });
+      setTextSelectionState(createDefaultTextSelectionState(node));
     }
   }, [isTextEditing, node.fontSize, node.fontWeight, node.textAlign, node.textColor]);
 
@@ -444,19 +438,14 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
   }, [fillOpen, finishFillInteraction]);
 
   useEffect(() => {
-    if (textLinkOpen) {
-      setTextLinkDraft(textSelectionState.linkUrl ?? '');
-      setTextLinkError(null);
-    }
-  }, [textLinkOpen, textSelectionState.linkUrl]);
-
-  useEffect(() => {
     if (!textLinkOpen) {
       return;
     }
     const frame = requestAnimationFrame(() => {
-      textLinkInputRef.current?.focus();
-      textLinkInputRef.current?.select();
+      if (textLinkVisibleInputRef.current) {
+        textLinkVisibleInputRef.current.focus();
+        textLinkVisibleInputRef.current.select();
+      }
     });
     return () => cancelAnimationFrame(frame);
   }, [textLinkOpen]);
@@ -466,6 +455,8 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
       setFillOpen(false);
       setTextLinkOpen(false);
       setTextLinkError(null);
+      setTextLinkDraft('');
+      setTextLinkVisibleDraft('');
       finishFillInteraction();
       onPointerInteractionChange?.(false);
     }
@@ -477,6 +468,8 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
     }
     setTextLinkOpen(false);
     setTextLinkError(null);
+    setTextLinkDraft('');
+    setTextLinkVisibleDraft('');
   }, [isTextEditing]);
 
   useEffect(() => {
@@ -488,6 +481,8 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
     }
     setTextLinkOpen(false);
     setTextLinkError(null);
+    setTextLinkDraft('');
+    setTextLinkVisibleDraft('');
   }, [isTextEditing, textSelectionState.hasSelection]);
 
   useEffect(() => {
@@ -648,6 +643,7 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
       const next = !prev;
       if (next) {
         setTextLinkDraft(textSelectionState.linkUrl ?? '');
+        setTextLinkVisibleDraft(textSelectionState.selectedText || '');
       }
       return next;
     });
@@ -657,12 +653,23 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
     if (!isTextEditing) {
       return;
     }
+    const visibleText = textLinkVisibleDraft.trim();
+    if (!visibleText) {
+      setTextLinkError('Enter visible text');
+      return;
+    }
     const normalized = ensureProtocol(textLinkDraft);
     if (!normalized || !isValidHttpUrl(normalized)) {
       setTextLinkError('Enter a valid URL');
       return;
     }
-    const applied = runSelectionCommand((editor) => wrapSelectionWithLink(editor, normalized));
+    const applied = runSelectionCommand((editor) => {
+      removeLinkFromSelection(editor);
+      if (!replaceSelectionWithText(editor, visibleText)) {
+        return false;
+      }
+      return wrapSelectionWithLink(editor, normalized);
+    });
     if (!applied) {
       setTextLinkError('Select text to link');
       return;
@@ -670,6 +677,7 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
     setTextLinkOpen(false);
     setTextLinkError(null);
     setTextLinkDraft(normalized);
+    setTextLinkVisibleDraft(visibleText);
   };
 
   const handleTextLinkRemove = () => {
@@ -680,6 +688,7 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
     setTextLinkOpen(false);
     setTextLinkError(null);
     setTextLinkDraft('');
+    setTextLinkVisibleDraft('');
   };
 
   const handleTextColorPointerDown = (event: React.PointerEvent<HTMLInputElement>) => {
@@ -1006,14 +1015,38 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
                   </button>
                   {textLinkOpen && (
                     <div className="selection-toolbar__text-link-popover" ref={textLinkPopoverRef}>
-                      <input
-                        ref={textLinkInputRef}
-                        type="url"
-                        value={textLinkDraft}
-                        placeholder="https://example.com"
-                        onChange={(event) => setTextLinkDraft(event.target.value)}
-                        onKeyDown={handleTextLinkKeyDown}
-                      />
+                      <label className="selection-toolbar__text-link-field">
+                        <span>Visible text</span>
+                        <input
+                          ref={textLinkVisibleInputRef}
+                          type="text"
+                          value={textLinkVisibleDraft}
+                          placeholder="Selected text"
+                          onChange={(event) => {
+                            if (textLinkError) {
+                              setTextLinkError(null);
+                            }
+                            setTextLinkVisibleDraft(event.target.value);
+                          }}
+                          onKeyDown={handleTextLinkKeyDown}
+                        />
+                      </label>
+                      <label className="selection-toolbar__text-link-field">
+                        <span>Link text</span>
+                        <input
+                          ref={textLinkUrlInputRef}
+                          type="url"
+                          value={textLinkDraft}
+                          placeholder="https://example.com"
+                          onChange={(event) => {
+                            if (textLinkError) {
+                              setTextLinkError(null);
+                            }
+                            setTextLinkDraft(event.target.value);
+                          }}
+                          onKeyDown={handleTextLinkKeyDown}
+                        />
+                      </label>
                       <div className="selection-toolbar__link-actions">
                         <button type="button" onClick={handleTextLinkApply}>
                           Apply
