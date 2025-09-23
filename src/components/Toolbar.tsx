@@ -50,6 +50,7 @@ const toolButtons: Array<{
 }> = [
   { id: 'select', label: 'Select', icon: <SelectCursorIcon />, shortcut: 'V', tooltip: 'Select' },
   { id: 'pan', label: 'Pan', icon: '✋', shortcut: 'Space', tooltip: 'Pan' },
+  { id: 'text', label: 'Text box', icon: 'T', shortcut: 'T', tooltip: 'Text box' },
   { id: 'connector', label: 'Connector', icon: '↦', shortcut: 'L', tooltip: 'Connector' }
 ];
 

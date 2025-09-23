@@ -1,4 +1,6 @@
 
+import { TextAlign } from '../types/scene';
+
 export interface CaretPoint {
   x: number;
   y: number;
@@ -98,6 +100,38 @@ const focusEditor = (editor: HTMLElement) => {
   }
 };
 
+const withEditorSelection = (
+  editor: HTMLElement,
+  handler: (selection: Selection, range: Range) => boolean
+): boolean => {
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0) {
+    return false;
+  }
+
+  const range = selection.getRangeAt(0);
+  if (!editor.contains(range.commonAncestorContainer)) {
+    return false;
+  }
+
+  focusEditor(editor);
+  return handler(selection, range);
+};
+
+const execFormattingCommand = (
+  editor: HTMLElement,
+  command: string,
+  value?: string
+): boolean =>
+  withEditorSelection(editor, () => {
+    document.execCommand('styleWithCSS', false, 'true');
+    const result = document.execCommand(command, false, value ?? undefined);
+    if (result) {
+      editor.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    return result;
+  });
+
 export const applyFontSizeToSelection = (editor: HTMLElement, size: number): boolean => {
   if (!Number.isFinite(size)) {
     return false;
@@ -160,21 +194,52 @@ export const applyFontSizeToSelection = (editor: HTMLElement, size: number): boo
 };
 
 export const toggleBoldInSelection = (editor: HTMLElement): boolean => {
-  const selection = window.getSelection();
-  if (!selection || selection.rangeCount === 0) {
-    return false;
-  }
-
-  const range = selection.getRangeAt(0);
-  if (!editor.contains(range.commonAncestorContainer)) {
-    return false;
-  }
-
-  focusEditor(editor);
-  document.execCommand('styleWithCSS', false, 'true');
-  const result = document.execCommand('bold');
-  if (result) {
-    editor.dispatchEvent(new Event('input', { bubbles: true }));
-  }
-  return result;
+  return execFormattingCommand(editor, 'bold');
 };
+
+export const toggleItalicInSelection = (editor: HTMLElement): boolean =>
+  execFormattingCommand(editor, 'italic');
+
+export const toggleUnderlineInSelection = (editor: HTMLElement): boolean =>
+  execFormattingCommand(editor, 'underline');
+
+export const toggleStrikethroughInSelection = (editor: HTMLElement): boolean =>
+  execFormattingCommand(editor, 'strikeThrough');
+
+export const applyTextColorToSelection = (editor: HTMLElement, color: string): boolean =>
+  execFormattingCommand(editor, 'foreColor', color);
+
+export const toggleListInSelection = (
+  editor: HTMLElement,
+  type: 'unordered' | 'ordered'
+): boolean =>
+  execFormattingCommand(
+    editor,
+    type === 'unordered' ? 'insertUnorderedList' : 'insertOrderedList'
+  );
+
+export const applyAlignmentToSelection = (editor: HTMLElement, align: TextAlign): boolean => {
+  const command = align === 'center' ? 'justifyCenter' : align === 'right' ? 'justifyRight' : 'justifyLeft';
+  return execFormattingCommand(editor, command);
+};
+
+export const wrapSelectionWithLink = (editor: HTMLElement, url: string): boolean =>
+  withEditorSelection(editor, (selection) => {
+    if (selection.isCollapsed) {
+      return false;
+    }
+    document.execCommand('styleWithCSS', false, 'true');
+    const result = document.execCommand('createLink', false, url);
+    if (result) {
+      editor.querySelectorAll('a').forEach((anchor) => {
+        const element = anchor as HTMLAnchorElement;
+        element.target = '_blank';
+        element.rel = 'noopener noreferrer';
+      });
+      editor.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    return result;
+  });
+
+export const removeLinkFromSelection = (editor: HTMLElement): boolean =>
+  execFormattingCommand(editor, 'unlink');

@@ -33,6 +33,7 @@ const createNode = (
   textAlign: 'center',
   fontSize: 16,
   fontWeight: 600,
+  textColor: '#ffffff',
   fill: '#ffffff',
   fillOpacity: 1,
   stroke: { color: '#0f172a', width: 1 },
