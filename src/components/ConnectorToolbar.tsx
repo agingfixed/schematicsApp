@@ -72,8 +72,7 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
     handlePointerMove: handleDragPointerMove,
     handlePointerUp: handleDragPointerUp,
     handlePointerCancel: handleDragPointerCancel,
-    moveBy: moveMenuBy,
-    resetToAnchor
+    moveBy: moveMenuBy
   } = useFloatingMenuDrag({
     menuType: 'connector-toolbar',
     menuRef: toolbarRef,
@@ -226,13 +225,12 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
         onPointerMove={handleDragPointerMove}
         onPointerUp={handleDragPointerUp}
         onPointerCancel={handleDragPointerCancel}
-        onReset={resetToAnchor}
         onKeyboardMove={moveMenuBy}
       />
       <div className="connector-toolbar__content">
         <section className="connector-toolbar__panel connector-toolbar__panel--stroke">
           <h3 className="connector-toolbar__panel-title">Stroke</h3>
-          <div className="connector-toolbar__section connector-toolbar__section--wrap">
+          <div className="connector-toolbar__section">
             <label className="connector-toolbar__field">
               <span>Width</span>
               <input
@@ -250,80 +248,77 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
             </label>
             <button
               type="button"
-              className={`connector-toolbar__button${connector.style.dashed ? ' is-active' : ''}`}
+              className={`connector-toolbar__button connector-toolbar__button--toggle${
+                connector.style.dashed ? ' is-active' : ''
+              }`}
               onClick={handleDashToggle}
             >
               {connector.style.dashed ? 'Dashed' : 'Solid'}
             </button>
           </div>
         </section>
-        <section className="connector-toolbar__panel connector-toolbar__panel--arrows">
-          <h3 className="connector-toolbar__panel-title">Arrowheads</h3>
-          <div className="connector-toolbar__columns">
-            <div className="connector-toolbar__column">
-              <span className="connector-toolbar__subheading">Start</span>
-              <div className="connector-toolbar__section connector-toolbar__section--column">
-                <label className="connector-toolbar__field">
-                  <span>Shape</span>
-                  <select value={startShape} onChange={handleArrowShapeChange('startArrow')}>
-                    {arrowOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="connector-toolbar__field">
-                  <span>Fill</span>
-                  <select
-                    value={startFillValue}
-                    onChange={handleArrowFillChange('startArrow')}
-                    disabled={startFillDisabled}
-                  >
-                    {fillOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-            </div>
-            <div className="connector-toolbar__column">
-              <span className="connector-toolbar__subheading">End</span>
-              <div className="connector-toolbar__section connector-toolbar__section--column">
-                <label className="connector-toolbar__field">
-                  <span>Shape</span>
-                  <select value={endShape} onChange={handleArrowShapeChange('endArrow')}>
-                    {arrowOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="connector-toolbar__field">
-                  <span>Fill</span>
-                  <select
-                    value={endFillValue}
-                    onChange={handleArrowFillChange('endArrow')}
-                    disabled={endFillDisabled}
-                  >
-                    {fillOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-            </div>
+        <section className="connector-toolbar__panel connector-toolbar__panel--start">
+          <h3 className="connector-toolbar__panel-title">Start</h3>
+          <div className="connector-toolbar__section">
+            <label className="connector-toolbar__field">
+              <span>Shape</span>
+              <select value={startShape} onChange={handleArrowShapeChange('startArrow')}>
+                {arrowOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="connector-toolbar__field">
+              <span>Fill</span>
+              <select
+                value={startFillValue}
+                onChange={handleArrowFillChange('startArrow')}
+                disabled={startFillDisabled}
+              >
+                {fillOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        </section>
+        <section className="connector-toolbar__panel connector-toolbar__panel--end">
+          <h3 className="connector-toolbar__panel-title">End</h3>
+          <div className="connector-toolbar__section">
+            <label className="connector-toolbar__field">
+              <span>Shape</span>
+              <select value={endShape} onChange={handleArrowShapeChange('endArrow')}>
+                {arrowOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="connector-toolbar__field">
+              <span>Fill</span>
+              <select
+                value={endFillValue}
+                onChange={handleArrowFillChange('endArrow')}
+                disabled={endFillDisabled}
+              >
+                {fillOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
         </section>
         <section className="connector-toolbar__panel connector-toolbar__panel--geometry">
           <h3 className="connector-toolbar__panel-title">Geometry</h3>
-          <div className="connector-toolbar__section connector-toolbar__section--column">
-            <label className="connector-toolbar__field">
+          <div className="connector-toolbar__section connector-toolbar__section--geometry">
+            <label className="connector-toolbar__field connector-toolbar__field--block">
               <span>Arrow size</span>
               <input
                 type="range"
@@ -348,7 +343,7 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
               </select>
             </label>
             {connector.mode === 'elbow' && (
-              <label className="connector-toolbar__field">
+              <label className="connector-toolbar__field connector-toolbar__field--block">
                 <span>Corner</span>
                 <input
                   type="range"

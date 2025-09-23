@@ -14,25 +14,14 @@
   color: #e2e8f0;
   pointer-events: auto;
   will-change: transform;
-  min-width: calc(320px * var(--menu-scale));
-  max-width: calc(720px * var(--menu-scale));
+  min-width: calc(300px * var(--menu-scale));
+  max-width: calc(560px * var(--menu-scale));
 }
 
 .connector-toolbar__content {
   display: flex;
-  align-items: stretch;
+  flex-wrap: wrap;
   gap: calc(12px * var(--menu-scale));
-  overflow-x: auto;
-  padding-bottom: calc(2px * var(--menu-scale));
-}
-
-.connector-toolbar__content::-webkit-scrollbar {
-  height: calc(6px * var(--menu-scale));
-}
-
-.connector-toolbar__content::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.3);
-  border-radius: calc(999px * var(--menu-scale));
 }
 
 .connector-toolbar__panel {
@@ -43,12 +32,8 @@
   display: flex;
   flex-direction: column;
   gap: calc(10px * var(--menu-scale));
-  min-width: calc(200px * var(--menu-scale));
-  flex: 0 0 auto;
-}
-
-.connector-toolbar__panel--arrows {
-  min-width: calc(280px * var(--menu-scale));
+  flex: 1 1 calc(200px * var(--menu-scale));
+  min-width: calc(180px * var(--menu-scale));
 }
 
 .connector-toolbar__panel-title {
@@ -59,51 +44,28 @@
   color: rgba(226, 232, 240, 0.7);
 }
 
-.connector-toolbar__columns {
-  display: flex;
-  gap: calc(12px * var(--menu-scale));
-  align-items: stretch;
-}
-
-.connector-toolbar__column {
-  display: flex;
-  flex-direction: column;
-  gap: calc(8px * var(--menu-scale));
-}
-
-.connector-toolbar__subheading {
-  font-size: calc(11px * var(--menu-scale));
-  font-weight: 600;
-  letter-spacing: 0.03em;
-  color: rgba(226, 232, 240, 0.7);
-}
-
 .connector-toolbar__section {
   display: flex;
   align-items: center;
-  gap: calc(12px * var(--menu-scale));
+  gap: calc(10px * var(--menu-scale));
   flex-wrap: wrap;
 }
 
-.connector-toolbar__section--wrap {
-  align-items: stretch;
-}
-
-.connector-toolbar__section--column {
-  flex-direction: column;
-  align-items: stretch;
-  gap: calc(8px * var(--menu-scale));
+.connector-toolbar__section--geometry {
+  row-gap: calc(8px * var(--menu-scale));
 }
 
 .connector-toolbar__field {
   display: flex;
-  flex-direction: column;
-  gap: calc(4px * var(--menu-scale));
+  align-items: center;
+  gap: calc(8px * var(--menu-scale));
   font-size: calc(12px * var(--menu-scale));
+  flex: 1 1 calc(150px * var(--menu-scale));
+  min-width: calc(140px * var(--menu-scale));
 }
 
-.connector-toolbar__section--wrap .connector-toolbar__field {
-  flex: 1 1 calc(120px * var(--menu-scale));
+.connector-toolbar__field--block {
+  flex: 1 1 100%;
 }
 
 .connector-toolbar__field--color {
@@ -120,6 +82,8 @@
   color: #e2e8f0;
   font-size: calc(12px * var(--menu-scale));
   min-width: calc(72px * var(--menu-scale));
+  flex: 1 1 auto;
+  min-height: calc(28px * var(--menu-scale));
 }
 
 .connector-toolbar__field input[type='range'] {
@@ -157,18 +121,19 @@
   color: #f8fafc;
 }
 
-.connector-toolbar__section--wrap .connector-toolbar__button {
-  flex: 1 1 calc(110px * var(--menu-scale));
+.connector-toolbar__button--toggle {
+  flex: 0 0 auto;
+  min-width: calc(92px * var(--menu-scale));
 }
 
 .connector-toolbar__actions {
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   gap: calc(8px * var(--menu-scale));
-  justify-content: flex-end;
+  justify-content: flex-start;
 }
 
 .connector-toolbar__actions .connector-toolbar__button {
-  flex: 0 0 auto;
-  min-width: calc(88px * var(--menu-scale));
+  flex: 1 1 calc(100px * var(--menu-scale));
+  min-width: calc(96px * var(--menu-scale));
 }
