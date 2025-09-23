@@ -115,8 +115,7 @@ export const SelectionToolbar: React.FC<SelectionToolbarProps> = ({
     handlePointerMove: handleDragPointerMove,
     handlePointerUp: handleDragPointerUp,
     handlePointerCancel: handleDragPointerCancel,
-    moveBy: moveMenuBy,
-    resetToAnchor
+    moveBy: moveMenuBy
   } = useFloatingMenuDrag({
     menuType: 'selection-toolbar',
     menuRef: toolbarRef,
@@ -639,7 +638,6 @@ export const SelectionToolbar: React.FC<SelectionToolbarProps> = ({
         onPointerMove={handleDragPointerMove}
         onPointerUp={handleDragPointerUp}
         onPointerCancel={handleDragPointerCancel}
-        onReset={resetToAnchor}
         onKeyboardMove={moveMenuBy}
       />
       <div className="selection-toolbar__content">

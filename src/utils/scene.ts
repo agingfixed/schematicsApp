@@ -51,15 +51,17 @@ const defaultNodeSizes: Record<NodeKind, { width: number; height: number }> = {
 };
 
 export const createNodeModel = (shape: NodeKind, position: Vec2, text?: string): NodeModel => {
-  const size = defaultNodeSizes[shape];
-  const appearance = defaultNodeAppearance[shape];
+  const hasDefaults = Object.prototype.hasOwnProperty.call(defaultNodeSizes, shape);
+  const kind: NodeKind = hasDefaults ? shape : 'rectangle';
+  const size = defaultNodeSizes[kind];
+  const appearance = defaultNodeAppearance[kind];
 
   const node: NodeModel = {
     id: nanoid(),
-    shape,
+    shape: kind,
     position: { ...position },
     size: { ...size },
-    text: ensureHtmlContent(text ?? defaultLabel(shape)),
+    text: ensureHtmlContent(text ?? defaultLabel(kind)),
     textAlign: 'center',
     fontSize: 18,
     fontWeight: 600,
