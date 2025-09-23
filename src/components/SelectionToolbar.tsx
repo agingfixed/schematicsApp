@@ -141,6 +141,7 @@ export const SelectionToolbar: React.FC<SelectionToolbarProps> = ({
   );
   const editorElement = getEditorElement();
   const hasText = extractPlainText(node.text).length > 0;
+  const textDisabled = isTextEditing ? !editorElement : !hasText;
   const isBold = node.fontWeight >= 700;
   const boldActive = isTextEditing ? textSelectionState.isBold : isBold;
   const displayedFontSizeValue = isTextEditing ? textFontSizeValue : fontSizeValue;
@@ -562,7 +563,6 @@ export const SelectionToolbar: React.FC<SelectionToolbarProps> = ({
     window.open(node.link.url, '_blank', 'noopener');
   };
 
-  const textDisabled = isTextEditing ? !editorElement : !hasText;
   const strokeWidthDisabled = !node.stroke.color;
 
   return (
