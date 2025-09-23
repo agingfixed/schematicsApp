@@ -68,7 +68,7 @@
   color: #e2e8f0;
   background: transparent;
   border-radius: 14px;
-  padding: 10px 14px;
+  padding: 8px 14px 10px;
   min-height: 24px;
   pointer-events: auto;
   user-select: none;
@@ -83,6 +83,7 @@
 .diagram-node__label a {
   color: #38bdf8;
   text-decoration: underline;
+  font-style: italic;
 }
 
 .diagram-node__label a:hover {
@@ -101,20 +102,6 @@
 
 .diagram-node__label.is-editing {
   opacity: 0;
-}
-
-.diagram-node__link-chip {
-  font-size: 12px;
-  line-height: 1;
-  color: #bae6fd;
-  background: rgba(15, 23, 42, 0.8);
-  border-radius: 999px;
-  padding: 6px 10px;
-  pointer-events: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 4px 18px rgba(2, 6, 23, 0.35);
 }
 
 .diagram-node__connector-handles {
