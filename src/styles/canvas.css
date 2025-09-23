@@ -303,19 +303,11 @@
   stroke: rgba(148, 163, 184, 0.9);
   stroke-width: 2;
   cursor: grab;
-  transition: transform 0.18s ease, fill 0.2s ease, stroke 0.2s ease;
   filter: drop-shadow(0 6px 14px rgba(15, 23, 42, 0.45));
-}
-
-.diagram-connector__label-handle:hover {
-  transform: scale(1.08);
-  fill: rgba(59, 130, 246, 0.25);
-  stroke: rgba(147, 197, 253, 0.95);
 }
 
 .diagram-connector__label-handle:active {
   cursor: grabbing;
-  transform: scale(0.94);
 }
 
 .canvas-overlays {

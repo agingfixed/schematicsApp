@@ -27,12 +27,17 @@ interface DiagramConnectorProps {
   onCancelLabelEdit: () => void;
   onRequestLabelEdit: () => void;
   onLabelPointerDown: (event: React.PointerEvent<Element>) => void;
+  shouldIgnoreLabelBlur?: () => boolean;
 }
 
 const DEFAULT_LABEL_POSITION = 0.5;
 const DEFAULT_LABEL_OFFSET = 18;
+const MAX_LABEL_OFFSET = 120;
 
 const clampLabel = (value: string) => value.trim();
+
+const clampLabelOffset = (value: number) =>
+  Math.max(-MAX_LABEL_OFFSET, Math.min(MAX_LABEL_OFFSET, value));
 
 const arrowPathForShape = (shape: ArrowShape, orientation: 'start' | 'end'): string | null => {
   switch (shape) {
@@ -129,7 +134,8 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
   onCommitLabel,
   onCancelLabelEdit,
   onRequestLabelEdit,
-  onLabelPointerDown
+  onLabelPointerDown,
+  shouldIgnoreLabelBlur
 }) => {
   const [draft, setDraft] = useState(connector.label ?? '');
   const [hoveredSegment, setHoveredSegment] = useState<number | null>(null);
@@ -212,7 +218,7 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
   const midpoint = useMemo(() => getPolylineMidpoint(geometry.points), [geometry]);
 
   const labelPosition = connector.labelPosition ?? DEFAULT_LABEL_POSITION;
-  const labelOffset = connector.labelOffset ?? DEFAULT_LABEL_OFFSET;
+  const labelOffset = clampLabelOffset(connector.labelOffset ?? DEFAULT_LABEL_OFFSET);
 
   const labelPlacement = useMemo(() => {
     const { point, segmentIndex } = getPointAtRatio(geometry.points, labelPosition);
@@ -356,8 +362,12 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
     }
   }, [cancelSignal, connector.label, labelEditing, onCancelLabelEdit]);
 
-  const handleLabelBlur = () => {
+  const handleLabelBlur = (event: React.FocusEvent<HTMLDivElement>) => {
     if (!labelEditing) {
+      return;
+    }
+    if (shouldIgnoreLabelBlur?.()) {
+      event.stopPropagation();
       return;
     }
     commitDraft();
