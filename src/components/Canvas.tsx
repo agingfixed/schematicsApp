@@ -320,7 +320,6 @@ const CanvasComponent = (
   const [lastPointerPosition, setLastPointerPosition] = useState<{ x: number; y: number } | null>(
     null
   );
-  const [linkFocusSignal, setLinkFocusSignal] = useState(0);
   const [activeGuides, setActiveGuides] = useState<SnapMatch[]>([]);
   const [distanceBadges, setDistanceBadges] = useState<SnapDistanceBadge[]>([]);
   const [smartSelectionState, setSmartSelectionState] = useState<SmartSelectionResult | null>(null);
@@ -663,18 +662,20 @@ const CanvasComponent = (
     if (!editorNode) {
       return null;
     }
-    const padding = 12;
+    const paddingX = 12;
+    const paddingTop = 8;
+    const paddingBottom = 12;
     const topLeft = worldToScreen(
       {
-        x: editorNode.position.x + padding,
-        y: editorNode.position.y + padding
+        x: editorNode.position.x + paddingX,
+        y: editorNode.position.y + paddingTop
       },
       transform
     );
     const bottomRight = worldToScreen(
       {
-        x: editorNode.position.x + editorNode.size.width - padding,
-        y: editorNode.position.y + editorNode.size.height - padding
+        x: editorNode.position.x + editorNode.size.width - paddingX,
+        y: editorNode.position.y + editorNode.size.height - paddingBottom
       },
       transform
     );
@@ -1651,14 +1652,6 @@ const CanvasComponent = (
       return;
     }
 
-    if ((event.metaKey || event.ctrlKey) && node.link?.url) {
-      event.preventDefault();
-      pendingTextEditRef.current = null;
-      lastClickRef.current = null;
-      window.open(node.link.url, '_blank', 'noopener');
-      return;
-    }
-
     const now = performance.now();
     const lastClick = lastClickRef.current;
     const selectionState = useSceneStore.getState().selection;
@@ -2488,11 +2481,6 @@ const CanvasComponent = (
             applyStyles([singleNodeSelected.id], { fontSize: next });
             return;
           }
-          if (event.key.toLowerCase() === 'k') {
-            event.preventDefault();
-            setLinkFocusSignal((value) => value + 1);
-            return;
-          }
         }
       }
 
@@ -2863,7 +2851,6 @@ const CanvasComponent = (
           anchor={toolbarAnchor}
           viewportSize={viewport}
           isVisible={tool === 'select' && !isPanning}
-          focusLinkSignal={linkFocusSignal}
           pointerPosition={lastPointerPosition}
           isTextEditing={Boolean(editingNodeId && editingNodeId === selectedNode.id)}
           textEditorRef={inlineEditorRef}
