@@ -1,5 +1,5 @@
 export type NodeShape = 'rectangle' | 'circle' | 'ellipse' | 'triangle' | 'diamond';
-export type NodeKind = NodeShape;
+export type NodeKind = NodeShape | 'text';
 
 export interface Vec2 {
   x: number;
@@ -21,7 +21,7 @@ export interface NodeLink {
 
 export interface NodeModel {
   id: string;
-  shape: NodeShape;
+  shape: NodeKind;
   position: Vec2;
   size: { width: number; height: number };
   rotation?: number;
@@ -29,6 +29,7 @@ export interface NodeModel {
   textAlign: TextAlign;
   fontSize: number;
   fontWeight: NodeFontWeight;
+  textColor: string;
   fill: string;
   fillOpacity: number;
   stroke: NodeStroke;
@@ -118,7 +119,8 @@ export type Tool =
   | 'ellipse'
   | 'triangle'
   | 'diamond'
-  | 'connector';
+  | 'connector'
+  | 'text';
 
 export interface CanvasTransform {
   x: number;

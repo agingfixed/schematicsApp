@@ -65,6 +65,8 @@ const renderShape = (
           {...common}
         />
       );
+    case 'text':
+      return <rect width={width} height={height} rx={8} {...common} />;
     default:
       return <rect width={width} height={height} rx={8} {...common} />;
   }
@@ -110,10 +112,27 @@ export const DiagramNode: React.FC<DiagramNodeProps> = ({
   const connectorHandleRadius = 9;
 
   const labelClassName = `diagram-node__label ${editing ? 'is-editing' : ''}`;
+  const labelStyle: React.CSSProperties = {
+    textAlign: node.textAlign,
+    fontSize: node.fontSize,
+    fontWeight: node.fontWeight,
+    color: node.textColor
+  };
+  const nodeClassName = `diagram-node ${selected ? 'is-selected' : ''} ${
+    hovered ? 'is-hovered' : ''
+  } ${node.shape === 'text' ? 'diagram-node--text' : ''}`;
+  const showShadow = node.shape !== 'text';
+
+  const handleLabelPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    const target = event.target as HTMLElement;
+    if (target.closest('a')) {
+      event.stopPropagation();
+    }
+  };
 
   return (
     <g
-      className={`diagram-node ${selected ? 'is-selected' : ''} ${hovered ? 'is-hovered' : ''}`}
+      className={nodeClassName.trim()}
       transform={`translate(${node.position.x} ${node.position.y})`}
       onPointerDown={onPointerDown}
       onPointerUp={onPointerUp}
@@ -122,16 +141,18 @@ export const DiagramNode: React.FC<DiagramNodeProps> = ({
       onDoubleClick={onDoubleClick}
       style={{ cursor }}
     >
-      <g className="diagram-node__shadow" opacity={selected ? 0.45 : 0.25}>
-        <rect
-          x={-12}
-          y={-12}
-          width={node.size.width + 24}
-          height={node.size.height + 24}
-          rx={24}
-          fill="rgba(15, 23, 42, 0.35)"
-        />
-      </g>
+      {showShadow && (
+        <g className="diagram-node__shadow" opacity={selected ? 0.45 : 0.25}>
+          <rect
+            x={-12}
+            y={-12}
+            width={node.size.width + 24}
+            height={node.size.height + 24}
+            rx={24}
+            fill="rgba(15, 23, 42, 0.35)"
+          />
+        </g>
+      )}
       {shapeElement}
       {outlineElement}
       {tool === 'connector' && (
@@ -156,11 +177,8 @@ export const DiagramNode: React.FC<DiagramNodeProps> = ({
       >
         <div
           className={labelClassName}
-          style={{
-            textAlign: node.textAlign,
-            fontSize: node.fontSize,
-            fontWeight: node.fontWeight
-          }}
+          style={labelStyle}
+          onPointerDown={handleLabelPointerDown}
           dangerouslySetInnerHTML={{ __html: node.text }}
         />
       </foreignObject>

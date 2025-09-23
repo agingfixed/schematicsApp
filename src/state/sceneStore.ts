@@ -41,6 +41,7 @@ export interface NodeStylePatch {
   fontSize?: number;
   fontWeight?: NodeFontWeight;
   textAlign?: TextAlign;
+  textColor?: string;
 }
 
 export interface SnapSettings {
@@ -655,6 +656,10 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
         }
         if (patch.textAlign !== undefined && node.textAlign !== patch.textAlign) {
           node.textAlign = patch.textAlign;
+          changed = true;
+        }
+        if (patch.textColor !== undefined && node.textColor !== patch.textColor) {
+          node.textColor = patch.textColor;
           changed = true;
         }
       });

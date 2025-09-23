@@ -19,3 +19,18 @@
 .inline-text-editor::selection {
   background: rgba(96, 165, 250, 0.35);
 }
+
+.inline-text-editor a {
+  color: #38bdf8;
+  text-decoration: underline;
+}
+
+.inline-text-editor ul,
+.inline-text-editor ol {
+  margin: 0 0 0.5em;
+  padding-left: 1.4em;
+}
+
+.inline-text-editor li {
+  margin: 0.1em 0;
+}

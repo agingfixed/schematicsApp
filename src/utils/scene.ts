@@ -3,6 +3,7 @@ import {
   CanvasTransform,
   NodeKind,
   NodeModel,
+  NodeShape,
   SceneContent,
   Vec2
 } from '../types/scene';
@@ -12,7 +13,7 @@ import { ensureHtmlContent } from './text';
 export const GRID_SIZE = 32;
 
 const defaultNodeAppearance: Record<
-  NodeKind,
+  NodeShape,
   { fill: string; stroke: string; strokeWidth: number; cornerRadius?: number }
 > = {
   rectangle: {
@@ -42,7 +43,7 @@ const defaultNodeAppearance: Record<
   }
 };
 
-const defaultNodeSizes: Record<NodeKind, { width: number; height: number }> = {
+const defaultNodeSizes: Record<NodeShape, { width: number; height: number }> = {
   rectangle: { width: 220, height: 120 },
   circle: { width: 200, height: 200 },
   ellipse: { width: 240, height: 160 },
@@ -50,9 +51,38 @@ const defaultNodeSizes: Record<NodeKind, { width: number; height: number }> = {
   diamond: { width: 220, height: 160 }
 };
 
+const textNodeDefaults = {
+  size: { width: 320, height: 200 },
+  text: 'Text',
+  fontSize: 20,
+  fontWeight: 400 as const,
+  textAlign: 'left' as const,
+  textColor: '#e2e8f0',
+  fill: 'transparent',
+  fillOpacity: 0,
+  stroke: { color: 'transparent', width: 1 }
+};
+
 export const createNodeModel = (shape: NodeKind, position: Vec2, text?: string): NodeModel => {
+  if (shape === 'text') {
+    return {
+      id: nanoid(),
+      shape,
+      position: { ...position },
+      size: { ...textNodeDefaults.size },
+      text: ensureHtmlContent(text ?? textNodeDefaults.text),
+      textAlign: textNodeDefaults.textAlign,
+      fontSize: textNodeDefaults.fontSize,
+      fontWeight: textNodeDefaults.fontWeight,
+      textColor: textNodeDefaults.textColor,
+      fill: textNodeDefaults.fill,
+      fillOpacity: textNodeDefaults.fillOpacity,
+      stroke: { ...textNodeDefaults.stroke }
+    };
+  }
+
   const hasDefaults = Object.prototype.hasOwnProperty.call(defaultNodeSizes, shape);
-  const kind: NodeKind = hasDefaults ? shape : 'rectangle';
+  const kind: NodeShape = hasDefaults ? (shape as NodeShape) : 'rectangle';
   const size = defaultNodeSizes[kind];
   const appearance = defaultNodeAppearance[kind];
 
@@ -65,6 +95,7 @@ export const createNodeModel = (shape: NodeKind, position: Vec2, text?: string):
     textAlign: 'center',
     fontSize: 18,
     fontWeight: 600,
+    textColor: '#e2e8f0',
     fill: appearance.fill,
     fillOpacity: 1,
     stroke: { color: appearance.stroke, width: appearance.strokeWidth }
@@ -77,7 +108,15 @@ export const createNodeModel = (shape: NodeKind, position: Vec2, text?: string):
   return node;
 };
 
-export const getDefaultNodeSize = (shape: NodeKind) => ({ ...defaultNodeSizes[shape] });
+export const getDefaultNodeSize = (shape: NodeKind) => {
+  if (shape === 'text') {
+    return { ...textNodeDefaults.size };
+  }
+  const key = Object.prototype.hasOwnProperty.call(defaultNodeSizes, shape)
+    ? (shape as NodeShape)
+    : 'rectangle';
+  return { ...defaultNodeSizes[key] };
+};
 
 const defaultLabel = (type: NodeKind) => {
   return type.charAt(0).toUpperCase() + type.slice(1);
@@ -89,6 +128,7 @@ export const cloneScene = (scene: SceneContent): SceneContent => ({
     position: { ...node.position },
     size: { ...node.size },
     stroke: { ...node.stroke },
+    textColor: node.textColor,
     link: node.link ? { ...node.link } : undefined
   })),
   connectors: scene.connectors.map((connector) => ({

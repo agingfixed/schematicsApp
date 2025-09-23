@@ -214,6 +214,14 @@
   position: relative;
 }
 
+.selection-toolbar__group--text {
+  align-items: center;
+}
+
+.selection-toolbar__group--text .selection-toolbar__size-control {
+  margin-left: calc(8px * var(--menu-scale));
+}
+
 .selection-toolbar__link-popover {
   position: absolute;
   top: calc(100% + 10px);
@@ -270,6 +278,32 @@
 .selection-toolbar__link-error {
   font-size: calc(12px * var(--menu-scale));
   color: #fca5a5;
+}
+
+.selection-toolbar__text-link-popover {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  min-width: calc(220px * var(--menu-scale));
+  background: rgba(15, 23, 42, 0.95);
+  border-radius: calc(12px * var(--menu-scale));
+  padding: calc(12px * var(--menu-scale));
+  box-shadow: 0 16px 34px rgba(2, 6, 23, 0.55), 0 0 0 1px rgba(148, 163, 184, 0.2);
+  display: flex;
+  flex-direction: column;
+  gap: calc(10px * var(--menu-scale));
+  z-index: 47;
+}
+
+.selection-toolbar__text-link-popover input {
+  width: 100%;
+  padding: calc(8px * var(--menu-scale)) calc(10px * var(--menu-scale));
+  border-radius: calc(8px * var(--menu-scale));
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  background: rgba(15, 23, 42, 0.9);
+  color: inherit;
+  font-size: calc(13px * var(--menu-scale));
+  outline: none;
 }
 
 .inline-text-editor {

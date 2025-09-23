@@ -67,3 +67,19 @@ export const normalizeHexInput = (value: string): string | null => {
 };
 
 export const clamp01 = (value: number) => clamp(value, 0, 1);
+
+export const cssColorToHex = (value: string): string | null => {
+  if (!value) {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (trimmed.startsWith('#')) {
+    return normalizeHexInput(trimmed);
+  }
+  const match = trimmed.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
+  if (match) {
+    const [, r, g, b] = match;
+    return rgbToHex({ r: Number(r), g: Number(g), b: Number(b) });
+  }
+  return null;
+};

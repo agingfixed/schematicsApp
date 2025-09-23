@@ -123,13 +123,13 @@ const InlineTextEditorComponent = (
     fontSize: node.fontSize * scale,
     fontWeight: node.fontWeight,
     lineHeight: 1.3,
-    color: '#e2e8f0',
+    color: node.textColor,
     textAlign: node.textAlign,
     whiteSpace: 'normal',
     wordBreak: 'break-word',
     overflow: 'hidden',
     background: 'transparent',
-    caretColor: '#f8fafc',
+    caretColor: node.textColor,
     zIndex: 30
   };
 
