@@ -641,6 +641,40 @@ const ensureOrthogonalSegments = (points: Vec2[]): Vec2[] => {
   return corrected;
 };
 
+const ensureOrthogonalSegmentsPreview = (points: Vec2[], axes: SegmentAxis[]): Vec2[] => {
+  if (points.length < 2) {
+    return points.map((point) => clonePoint(point));
+  }
+
+  const corrected: Vec2[] = [clonePoint(points[0])];
+
+  for (let index = 1; index < points.length; index += 1) {
+    const previous = corrected[corrected.length - 1];
+    const current = points[index];
+    const dx = current.x - previous.x;
+    const dy = current.y - previous.y;
+
+    if (Math.abs(dx) > EPSILON && Math.abs(dy) > EPSILON) {
+      const axis =
+        axes[index - 1] ??
+        axes[index] ??
+        (Math.abs(dx) >= Math.abs(dy) ? 'horizontal' : 'vertical');
+      const intermediate =
+        axis === 'horizontal'
+          ? { x: current.x, y: previous.y }
+          : { x: previous.x, y: current.y };
+
+      if (!nearlyEqual(intermediate.x, previous.x) || !nearlyEqual(intermediate.y, previous.y)) {
+        corrected.push(clonePoint(intermediate));
+      }
+    }
+
+    corrected.push(clonePoint(current));
+  }
+
+  return corrected;
+};
+
 const computeSegmentAxes = (points: Vec2[]): SegmentAxis[] => {
   const axes: SegmentAxis[] = [];
 
@@ -722,6 +756,42 @@ const simplifyPolyline = (points: Vec2[]): Vec2[] => {
   }
 
   return simplified;
+};
+
+export const tidyOrthogonalWaypointsPreview = (
+  start: Vec2,
+  waypoints: Vec2[],
+  end: Vec2
+): Vec2[] => {
+  if (!waypoints.length) {
+    return [];
+  }
+
+  const points = [start, ...waypoints.map((point) => clonePoint(point)), end];
+  const axes = computeSegmentAxes(points);
+
+  for (let index = 1; index < points.length - 1; index += 1) {
+    const prev = points[index - 1];
+    const next = points[index + 1];
+    const current = points[index];
+    const prevAxis = axes[index - 1] ?? axes[index] ?? 'horizontal';
+    const nextAxis = axes[index] ?? axes[index - 1] ?? 'horizontal';
+
+    if (prevAxis === 'horizontal') {
+      current.y = prev.y;
+    } else {
+      current.x = prev.x;
+    }
+
+    if (nextAxis === 'horizontal') {
+      current.y = next.y;
+    } else {
+      current.x = next.x;
+    }
+  }
+
+  const enforced = ensureOrthogonalSegmentsPreview(points, axes);
+  return enforced.slice(1, enforced.length - 1).map((point) => clonePoint(point));
 };
 
 export const tidyOrthogonalWaypoints = (start: Vec2, waypoints: Vec2[], end: Vec2): Vec2[] => {

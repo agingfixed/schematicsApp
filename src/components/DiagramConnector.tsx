@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowShape, ConnectorModel, NodeModel, Vec2 } from '../types/scene';
 import {
+  ConnectorPath,
   buildRoundedConnectorPath,
   getConnectorPath,
   getNormalAtRatio,
@@ -29,6 +30,7 @@ interface DiagramConnectorProps {
   onRequestLabelEdit: (point?: CaretPoint) => void;
   onLabelPointerDown: (event: React.PointerEvent<Element>) => void;
   shouldIgnoreLabelBlur?: () => boolean;
+  previewPoints?: Vec2[] | null;
 }
 
 const DEFAULT_LABEL_POSITION = 0.5;
@@ -140,7 +142,8 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
   onCancelLabelEdit,
   onRequestLabelEdit,
   onLabelPointerDown,
-  shouldIgnoreLabelBlur
+  shouldIgnoreLabelBlur,
+  previewPoints
 }) => {
   const [draft, setDraft] = useState(connector.label ?? '');
   const [hoveredSegment, setHoveredSegment] = useState<number | null>(null);
@@ -193,9 +196,26 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
     }
   }, [labelEditing, draft, labelEditEntryPoint]);
 
+  const previewGeometry = useMemo<ConnectorPath | null>(() => {
+    if (!previewPoints || previewPoints.length < 2) {
+      return null;
+    }
+    const start = { ...previewPoints[0] };
+    const end = { ...previewPoints[previewPoints.length - 1] };
+    const waypoints = previewPoints
+      .slice(1, previewPoints.length - 1)
+      .map((point) => ({ ...point }));
+    return {
+      start,
+      end,
+      waypoints,
+      points: previewPoints.map((point) => ({ ...point }))
+    };
+  }, [previewPoints]);
+
   const geometry = useMemo(
-    () => getConnectorPath(connector, source, target, nodes),
-    [connector, source, target, nodes]
+    () => previewGeometry ?? getConnectorPath(connector, source, target, nodes),
+    [previewGeometry, connector, source, target, nodes]
   );
 
   const cornerRadius = connector.mode === 'elbow' ? connector.style.cornerRadius ?? 12 : 0;
