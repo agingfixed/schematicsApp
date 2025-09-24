@@ -407,7 +407,7 @@ const CanvasComponent = (
     [nodes, connectors]
   );
 
-  const finalizePendingConnection = useCallback(
+  const completePendingConnection = useCallback(
     (pending: PendingConnection, dropEndpoint: ConnectorEndpoint) => {
       if (pending.type === 'create') {
         const source = pending.source;
@@ -1038,69 +1038,35 @@ const CanvasComponent = (
     containerRef.current?.setPointerCapture(event.pointerId);
   };
 
-  const handleBackgroundPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (event.target !== event.currentTarget) {
-      return;
+  const updatePan = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    const panState = panStateRef.current;
+    if (!panState || panState.pointerId !== event.pointerId) {
+      return false;
     }
-
-    pendingTextEditRef.current = null;
-    lastClickRef.current = null;
-
-    if (tool === 'pan' || event.button === 1 || event.button === 2) {
-      beginPan(event);
-      return;
+    const { last } = panState;
+    const dx = event.clientX - last.x;
+    const dy = event.clientY - last.y;
+    if (dx !== 0 || dy !== 0) {
+      setTransformState((previous) => ({
+        x: previous.x + dx,
+        y: previous.y + dy,
+        scale: previous.scale
+      }));
     }
-
-    if (event.button !== 0) {
-      return;
-    }
-
-    commitEditingIfNeeded();
-
-    if (tool === 'select') {
-      if (!event.shiftKey) {
-        clearSelection();
-      }
-      return;
-    }
-
-    if (tool === 'connector') {
-      return;
-    }
-
-    const worldPoint = getWorldPoint(event);
-    const { width, height } = getDefaultSizeForTool(tool);
-    const position = {
-      x: worldPoint.x - width / 2,
-      y: worldPoint.y - height / 2
+    panStateRef.current = {
+      pointerId: event.pointerId,
+      last: { x: event.clientX, y: event.clientY }
     };
-    if (isNodeCreationTool(tool)) {
-      addNode(tool, position);
-    }
-  };
+    return true;
+  }, []);
 
-  const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
-    const resizeState = resizeStateRef.current;
-    if (resizeState && resizeState.pointerId === event.pointerId) {
-      event.preventDefault();
-      event.stopPropagation();
-      updateResizeDrag(event, resizeState);
-      return;
-    }
-
-    if (panStateRef.current && panStateRef.current.pointerId === event.pointerId) {
-      const { last } = panStateRef.current;
-      const dx = event.clientX - last.x;
-      const dy = event.clientY - last.y;
-      if (dx !== 0 || dy !== 0) {
-        setTransformState((prev) => ({ x: prev.x + dx, y: prev.y + dy, scale: prev.scale }));
+  const continueNodeDrag = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      const dragState = dragStateRef.current;
+      if (!dragState || dragState.pointerId !== event.pointerId) {
+        return false;
       }
-      panStateRef.current = { pointerId: event.pointerId, last: { x: event.clientX, y: event.clientY } };
-      return;
-    }
 
-    const dragState = dragStateRef.current;
-    if (dragState && dragState.pointerId === event.pointerId) {
       pendingTextEditRef.current = null;
       const worldPoint = getWorldPoint(event);
       let translation = {
@@ -1112,11 +1078,8 @@ const CanvasComponent = (
         const axis =
           dragState.axisLock ??
           (Math.abs(translation.x) >= Math.abs(translation.y) ? 'x' : 'y');
-        if (axis === 'x') {
-          translation = { ...translation, y: 0 };
-        } else {
-          translation = { ...translation, x: 0 };
-        }
+        translation =
+          axis === 'x' ? { ...translation, y: 0 } : { ...translation, x: 0 };
         dragState.axisLock = axis;
       } else if (dragState.axisLock) {
         dragState.axisLock = null;
@@ -1193,6 +1156,7 @@ const CanvasComponent = (
         x: appliedTranslation.x - dragState.translation.x,
         y: appliedTranslation.y - dragState.translation.y
       };
+
       if (Math.abs(delta.x) > 0.0001 || Math.abs(delta.y) > 0.0001) {
         batchMove(dragState.nodeIds, delta);
         dragState.moved = true;
@@ -1203,32 +1167,39 @@ const CanvasComponent = (
 
       dragState.translation = appliedTranslation;
       dragState.activeSnap = nextActiveSnap;
-      return;
-    }
 
-    if (pendingConnectorEditRef.current?.pointerId === event.pointerId) {
-      pendingConnectorEditRef.current = null;
-    }
+      return true;
+    },
+    [batchMove, gridVisible, nodes, snapSettings, transform]
+  );
 
-    const labelDrag = connectorLabelDragRef.current;
-    if (labelDrag && labelDrag.pointerId === event.pointerId) {
+  const continueConnectorLabelDrag = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      const labelDrag = connectorLabelDragRef.current;
+      if (!labelDrag || labelDrag.pointerId !== event.pointerId) {
+        return false;
+      }
+
       const connector = connectors.find((item) => item.id === labelDrag.connectorId);
       if (!connector) {
-        return;
+        return false;
       }
+
       const sourceNode = resolveEndpointNode(connector.source);
       const targetNode = resolveEndpointNode(connector.target);
       const geometry = getConnectorPath(connector, sourceNode, targetNode, nodes);
       if (geometry.points.length < 2) {
-        return;
+        return false;
       }
+
       const worldPoint = getWorldPoint(event);
       const closest = findClosestPointOnPolyline(worldPoint, geometry.points);
       const measure = measurePolyline(geometry.points);
       const totalLength = measure.totalLength;
       if (totalLength <= 0) {
-        return;
+        return false;
       }
+
       const start = geometry.points[closest.index];
       const end = geometry.points[closest.index + 1] ?? start;
       const segmentLength = Math.hypot(end.x - start.x, end.y - start.y) || 1;
@@ -1250,20 +1221,30 @@ const CanvasComponent = (
       if (!Number.isFinite(angle)) {
         angle = labelDrag.lastAngle ?? labelDrag.originalAngle;
       }
+
       labelDrag.lastPosition = position;
       labelDrag.lastRadius = radius;
       labelDrag.lastAngle = angle;
       labelDrag.moved = true;
+
       updateConnector(connector.id, {
         labelPosition: position,
         labelOffset: radius,
         labelAngle: angle
       });
-      return;
-    }
 
-    const connectorDragState = connectorDragStateRef.current;
-    if (connectorDragState && connectorDragState.pointerId === event.pointerId) {
+      return true;
+    },
+    [connectors, nodes, resolveEndpointNode, updateConnector]
+  );
+
+  const continueConnectorDrag = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      const connectorDragState = connectorDragStateRef.current;
+      if (!connectorDragState || connectorDragState.pointerId !== event.pointerId) {
+        return false;
+      }
+
       const worldPoint = getWorldPoint(event);
       connectorDragState.moved = true;
 
@@ -1347,7 +1328,7 @@ const CanvasComponent = (
           updateConnector(connectorDragState.connectorId, {
             points: connectorDragState.currentWaypoints
           });
-          return;
+          return true;
         }
       }
 
@@ -1406,10 +1387,18 @@ const CanvasComponent = (
       updateConnector(connectorDragState.connectorId, {
         points: connectorDragState.currentWaypoints
       });
-      return;
-    }
 
-    if (connectionPointerRef.current === event.pointerId) {
+      return true;
+    },
+    [updateConnector]
+  );
+
+  const continuePendingConnection = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (connectionPointerRef.current !== event.pointerId) {
+        return false;
+      }
+
       const pending = pendingConnection;
       const worldPoint = getWorldPoint(event);
       const screenPoint = getRelativePoint(event);
@@ -1484,7 +1473,207 @@ const CanvasComponent = (
             }
           : current
       );
+
+      return true;
+    },
+    [hoveredNodeId, nodes, pendingConnection, transform]
+  );
+
+  const finalizeResizeDrag = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      const resizeState = resizeStateRef.current;
+      if (!resizeState || resizeState.pointerId !== event.pointerId) {
+        return null;
+      }
+      resizeStateRef.current = null;
+      endTransaction();
+      releasePointerCapture(event.pointerId);
+      return true;
+    },
+    [endTransaction, releasePointerCapture]
+  );
+
+  const finalizePan = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      const panState = panStateRef.current;
+      if (!panState || panState.pointerId !== event.pointerId) {
+        return null;
+      }
+      panStateRef.current = null;
+      setIsPanning(false);
+      releasePointerCapture(event.pointerId);
+      return false;
+    },
+    [releasePointerCapture, setIsPanning]
+  );
+
+  const finalizeNodeDrag = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      const drag = dragStateRef.current;
+      if (!drag || drag.pointerId !== event.pointerId) {
+        return null;
+      }
+      setActiveGuides([]);
+      setDistanceBadges([]);
+      dragStateRef.current = null;
+      endTransaction();
+      releasePointerCapture(event.pointerId);
+      return false;
+    },
+    [endTransaction, releasePointerCapture]
+  );
+
+  const finalizeSpacingDrag = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      const drag = spacingDragStateRef.current;
+      if (!drag || drag.pointerId !== event.pointerId) {
+        return null;
+      }
+      spacingDragStateRef.current = null;
+      endTransaction();
+      setActiveGuides([]);
+      setDistanceBadges([]);
+      releasePointerCapture(event.pointerId);
+      return false;
+    },
+    [endTransaction, releasePointerCapture]
+  );
+
+  const finalizeConnectorDrag = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      const drag = connectorDragStateRef.current;
+      if (!drag || drag.pointerId !== event.pointerId) {
+        return null;
+      }
+      connectorDragStateRef.current = null;
+      const nextPoints = drag.moved ? drag.currentWaypoints : drag.originalWaypoints;
+      updateConnector(drag.connectorId, { points: nextPoints });
+      endTransaction();
+      releasePointerCapture(event.pointerId);
+      return drag.moved;
+    },
+    [endTransaction, releasePointerCapture, updateConnector]
+  );
+
+  const finalizeConnectorLabelDrag = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      const drag = connectorLabelDragRef.current;
+      if (!drag || drag.pointerId !== event.pointerId) {
+        return null;
+      }
+      connectorLabelDragRef.current = null;
+      const nextPosition = drag.moved ? drag.lastPosition : drag.originalPosition;
+      const nextRadius = drag.moved ? drag.lastRadius : drag.originalRadius;
+      const nextAngle = drag.moved ? drag.lastAngle : drag.originalAngle;
+      const patch: Partial<ConnectorModel> = {
+        labelPosition: nextPosition,
+        labelOffset: drag.moved ? nextRadius : drag.originalOffsetValue
+      };
+      if (drag.moved || drag.hadAngle) {
+        patch.labelAngle = nextAngle;
+      }
+      updateConnector(drag.connectorId, patch);
+      endTransaction();
+      releasePointerCapture(event.pointerId);
+      return drag.moved;
+    },
+    [endTransaction, releasePointerCapture, updateConnector]
+  );
+
+  const finalizeConnectionPointer = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (connectionPointerRef.current !== event.pointerId) {
+        return null;
+      }
+      const pending = pendingConnection;
+      if (pending) {
+        const dropPoint = getWorldPoint(event);
+        const dropEndpoint =
+          !pending.bypassSnap && pending.snapPort
+            ? { nodeId: pending.snapPort.nodeId, port: pending.snapPort.port }
+            : { position: dropPoint };
+        completePendingConnection(pending, dropEndpoint);
+      }
+      setPendingConnection(null);
+      setPortHints([]);
+      connectionPointerRef.current = null;
+      releasePointerCapture(event.pointerId);
+      return true;
+    },
+    [completePendingConnection, pendingConnection, releasePointerCapture]
+  );
+
+  const handleBackgroundPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.target !== event.currentTarget) {
+      return;
     }
+
+    pendingTextEditRef.current = null;
+    lastClickRef.current = null;
+
+    if (tool === 'pan' || event.button === 1 || event.button === 2) {
+      beginPan(event);
+      return;
+    }
+
+    if (event.button !== 0) {
+      return;
+    }
+
+    commitEditingIfNeeded();
+
+    if (tool === 'select') {
+      if (!event.shiftKey) {
+        clearSelection();
+      }
+      return;
+    }
+
+    if (tool === 'connector') {
+      return;
+    }
+
+    const worldPoint = getWorldPoint(event);
+    const { width, height } = getDefaultSizeForTool(tool);
+    const position = {
+      x: worldPoint.x - width / 2,
+      y: worldPoint.y - height / 2
+    };
+    if (isNodeCreationTool(tool)) {
+      addNode(tool, position);
+    }
+  };
+
+  const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const resizeState = resizeStateRef.current;
+    if (resizeState && resizeState.pointerId === event.pointerId) {
+      event.preventDefault();
+      event.stopPropagation();
+      updateResizeDrag(event, resizeState);
+      return;
+    }
+
+    if (updatePan(event)) {
+      return;
+    }
+
+    if (continueNodeDrag(event)) {
+      return;
+    }
+
+    if (pendingConnectorEditRef.current?.pointerId === event.pointerId) {
+      pendingConnectorEditRef.current = null;
+    }
+
+    if (continueConnectorLabelDrag(event)) {
+      return;
+    }
+
+    if (continueConnectorDrag(event)) {
+      return;
+    }
+
+    continuePendingConnection(event);
   };
 
   const handlePointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -1530,82 +1719,24 @@ const CanvasComponent = (
     }
 
     let handled = false;
+    const finalizers = [
+      finalizeResizeDrag,
+      finalizePan,
+      finalizeNodeDrag,
+      finalizeSpacingDrag,
+      finalizeConnectorDrag,
+      finalizeConnectorLabelDrag,
+      finalizeConnectionPointer
+    ];
 
-    if (!handled && resizeStateRef.current?.pointerId === event.pointerId) {
-      resizeStateRef.current = null;
-      endTransaction();
-      releasePointerCapture(event.pointerId);
-      handled = true;
-    }
-
-    if (!handled && panStateRef.current?.pointerId === event.pointerId) {
-      panStateRef.current = null;
-      setIsPanning(false);
-      releasePointerCapture(event.pointerId);
-    }
-
-    if (!handled && dragStateRef.current?.pointerId === event.pointerId) {
-      setActiveGuides([]);
-      setDistanceBadges([]);
-      dragStateRef.current = null;
-      endTransaction();
-      releasePointerCapture(event.pointerId);
-    }
-
-    if (!handled && spacingDragStateRef.current?.pointerId === event.pointerId) {
-      spacingDragStateRef.current = null;
-      endTransaction();
-      setActiveGuides([]);
-      setDistanceBadges([]);
-      releasePointerCapture(event.pointerId);
-    }
-
-    if (!handled && connectorDragStateRef.current?.pointerId === event.pointerId) {
-      const drag = connectorDragStateRef.current;
-      connectorDragStateRef.current = null;
-      const nextPoints = drag.moved ? drag.currentWaypoints : drag.originalWaypoints;
-      updateConnector(drag.connectorId, { points: nextPoints });
-      endTransaction();
-      releasePointerCapture(event.pointerId);
-      handled = drag.moved;
-    }
-
-    if (!handled && connectorLabelDragRef.current?.pointerId === event.pointerId) {
-      const drag = connectorLabelDragRef.current;
-      connectorLabelDragRef.current = null;
-      const nextPosition = drag.moved ? drag.lastPosition : drag.originalPosition;
-      const nextRadius = drag.moved ? drag.lastRadius : drag.originalRadius;
-      const nextAngle = drag.moved ? drag.lastAngle : drag.originalAngle;
-      const patch: Partial<ConnectorModel> = {
-        labelPosition: nextPosition,
-        labelOffset: drag.moved ? nextRadius : drag.originalOffsetValue
-      };
-      if (drag.moved || drag.hadAngle) {
-        patch.labelAngle = nextAngle;
+    for (const finalize of finalizers) {
+      if (handled) {
+        break;
       }
-      updateConnector(drag.connectorId, patch);
-      endTransaction();
-      releasePointerCapture(event.pointerId);
-      handled = drag.moved;
-    }
-
-    if (!handled && connectionPointerRef.current === event.pointerId) {
-      const pending = pendingConnection;
-      if (pending) {
-        const dropPoint = getWorldPoint(event);
-        let dropEndpoint: ConnectorEndpoint;
-        if (!pending.bypassSnap && pending.snapPort) {
-          dropEndpoint = { nodeId: pending.snapPort.nodeId, port: pending.snapPort.port };
-        } else {
-          dropEndpoint = { position: dropPoint };
-        }
-        finalizePendingConnection(pending, dropEndpoint);
+      const result = finalize(event);
+      if (result !== null) {
+        handled = result;
       }
-      setPendingConnection(null);
-      setPortHints([]);
-      connectionPointerRef.current = null;
-      releasePointerCapture(event.pointerId);
-      handled = true;
     }
 
     if (!handled && connectorEditRequest) {
@@ -1826,7 +1957,7 @@ const CanvasComponent = (
       dropEndpoint = { position: dropPoint };
     }
 
-    finalizePendingConnection(pending, dropEndpoint);
+    completePendingConnection(pending, dropEndpoint);
 
     setPendingConnection(null);
     connectionPointerRef.current = null;
