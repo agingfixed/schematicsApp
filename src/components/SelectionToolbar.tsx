@@ -21,6 +21,7 @@ import {
 } from '../utils/text';
 import { InlineTextEditorHandle } from './InlineTextEditor';
 import '../styles/selection-toolbar.css';
+import { ensureHttpProtocol, isValidHttpUrl } from '../utils/url';
 
 const FONT_SIZE_MIN = 8;
 const FONT_SIZE_MAX = 200;
@@ -43,17 +44,6 @@ const alignOptions: Array<{ value: TextAlign; label: string; icon: string }> = [
 ];
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
-
-const ensureProtocol = (value: string) => {
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return '';
-  }
-  if (/^https?:\/\//i.test(trimmed)) {
-    return trimmed;
-  }
-  return `https://${trimmed}`;
-};
 
 const normalizeTextAlign = (value: string): TextAlign => {
   switch (value) {
@@ -99,18 +89,6 @@ export const SelectionToolbar: React.FC<SelectionToolbarProps> = (props) => {
   }
 
   return <SelectionToolbarContent {...props} anchor={anchor} />;
-};
-
-const isValidHttpUrl = (value: string) => {
-  if (!value) {
-    return true;
-  }
-  try {
-    const url = new URL(value);
-    return url.protocol === 'http:' || url.protocol === 'https:';
-  } catch (error) {
-    return false;
-  }
 };
 
 export interface SelectionToolbarProps {
@@ -160,7 +138,10 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
   );
   const [textColorValue, setTextColorValue] = useState(node.textColor);
   const setNodeLink = useSceneStore((state) => state.setNodeLink);
-  const [linkAddressValue, setLinkAddressValue] = useState(node.link?.url ?? '');
+  const [linkAddressValue, setLinkAddressValue] = useState(() =>
+    ensureHttpProtocol(node.link?.url ?? '')
+  );
+  const linkUrl = ensureHttpProtocol(node.link?.url ?? '');
 
   const {
     menuState,
@@ -373,7 +354,7 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
   }, [isTextEditing, node.fontSize, node.fontWeight, node.textAlign, node.textColor]);
 
   useEffect(() => {
-    setLinkAddressValue(node.link?.url ?? '');
+    setLinkAddressValue(ensureHttpProtocol(node.link?.url ?? ''));
   }, [node.id, node.link?.url]);
 
   useEffect(() => {
@@ -563,7 +544,7 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
 
   const commitLinkAddress = useCallback(() => {
     const trimmed = linkAddressValue.trim();
-    const normalized = ensureProtocol(trimmed);
+    const normalized = ensureHttpProtocol(trimmed);
     if (normalized !== linkAddressValue) {
       setLinkAddressValue(normalized);
     }
@@ -583,7 +564,7 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
       commitLinkAddress();
     } else if (event.key === 'Escape') {
       event.preventDefault();
-      setLinkAddressValue(node.link?.url ?? '');
+      setLinkAddressValue(ensureHttpProtocol(node.link?.url ?? ''));
     }
   };
 
@@ -977,6 +958,20 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
                   </label>
                 </div>
               </>
+            )}
+            {isLinkNode && linkUrl && (
+              <div className="selection-toolbar__group selection-toolbar__group--link">
+                <span className="selection-toolbar__link-preview-label">Link</span>
+                <a
+                  className="selection-toolbar__link-preview"
+                  href={linkUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  translate="no"
+                >
+                  {linkUrl}
+                </a>
+              </div>
             )}
           </>
         )}
