@@ -11,6 +11,16 @@ import {
 const EPSILON = 1e-6;
 const DEFAULT_STUB_LENGTH = 48;
 const MAX_PREVIEW_SNAP = 1e-3;
+const MIN_AVOIDANCE_PADDING = 24;
+const COORDINATE_PRECISION = 1e3;
+const TURN_PENALTY_FACTOR = 2;
+
+type Rect = {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+};
 
 export type ConnectorAxis = 'horizontal' | 'vertical' | 'diagonal';
 
@@ -32,6 +42,8 @@ const clonePoint = (point: Vec2): Vec2 => ({ x: point.x, y: point.y });
 
 const nearlyEqual = (a: number, b: number, tolerance = 0.001) => Math.abs(a - b) <= tolerance;
 
+const roundCoordinate = (value: number) => Math.round(value * COORDINATE_PRECISION) / COORDINATE_PRECISION;
+
 const offsetPoint = (point: Vec2, direction: ConnectorDirection, distance: number): Vec2 => {
   switch (direction) {
     case 'up':
@@ -51,6 +63,383 @@ const getNodeCenter = (node: NodeModel): Vec2 => ({
   x: node.position.x + node.size.width / 2,
   y: node.position.y + node.size.height / 2
 });
+
+const expandNodeBounds = (node: NodeModel, padding: number): Rect => ({
+  left: node.position.x - padding,
+  top: node.position.y - padding,
+  right: node.position.x + node.size.width + padding,
+  bottom: node.position.y + node.size.height + padding
+});
+
+const pointKey = (point: Vec2) => `${roundCoordinate(point.x)}:${roundCoordinate(point.y)}`;
+
+const rangesOverlap = (startA: number, endA: number, startB: number, endB: number) =>
+  Math.max(startA, startB) < Math.min(endA, endB) - EPSILON;
+
+const isPointInsideRect = (point: Vec2, rect: Rect) =>
+  point.x > rect.left + EPSILON &&
+  point.x < rect.right - EPSILON &&
+  point.y > rect.top + EPSILON &&
+  point.y < rect.bottom - EPSILON;
+
+const segmentIntersectsRect = (start: Vec2, end: Vec2, rect: Rect) => {
+  if (nearlyEqual(start.x, end.x)) {
+    const x = start.x;
+    if (x > rect.left + EPSILON && x < rect.right - EPSILON) {
+      const minY = Math.min(start.y, end.y);
+      const maxY = Math.max(start.y, end.y);
+      return rangesOverlap(minY, maxY, rect.top, rect.bottom);
+    }
+    return false;
+  }
+
+  if (nearlyEqual(start.y, end.y)) {
+    const y = start.y;
+    if (y > rect.top + EPSILON && y < rect.bottom - EPSILON) {
+      const minX = Math.min(start.x, end.x);
+      const maxX = Math.max(start.x, end.x);
+      return rangesOverlap(minX, maxX, rect.left, rect.right);
+    }
+    return false;
+  }
+
+  return false;
+};
+
+const segmentBlockedByAny = (start: Vec2, end: Vec2, obstacles: Rect[]) =>
+  obstacles.some((rect) => segmentIntersectsRect(start, end, rect));
+
+const isPointInsideAny = (point: Vec2, obstacles: Rect[]) =>
+  obstacles.some((rect) => isPointInsideRect(point, rect));
+
+type ConnectorTravelDirection = 'horizontal' | 'vertical';
+
+interface ConnectorGraphEdge {
+  key: string;
+  cost: number;
+  direction: ConnectorTravelDirection;
+}
+
+const manhattanDistance = (a: Vec2, b: Vec2) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+
+const addCoordinate = (set: Set<number>, value: number) => {
+  if (!Number.isFinite(value)) {
+    return;
+  }
+  set.add(roundCoordinate(value));
+};
+
+const expandSearchBounds = (start: Vec2, end: Vec2, clearance: number): Rect => ({
+  left: Math.min(start.x, end.x) - clearance * 4,
+  right: Math.max(start.x, end.x) + clearance * 4,
+  top: Math.min(start.y, end.y) - clearance * 4,
+  bottom: Math.max(start.y, end.y) + clearance * 4
+});
+
+const rectsIntersect = (a: Rect, b: Rect) =>
+  a.left <= b.right && a.right >= b.left && a.top <= b.bottom && a.bottom >= b.top;
+
+const oppositeDirection: Record<ConnectorDirection, ConnectorDirection> = {
+  up: 'down',
+  down: 'up',
+  left: 'right',
+  right: 'left',
+  none: 'none'
+};
+
+const movePointOutsideObstacles = (
+  point: Vec2,
+  direction: ConnectorDirection,
+  clearance: number,
+  obstacles: Rect[],
+  maxIterations = 8
+): Vec2 => {
+  if (direction === 'none') {
+    return { x: point.x, y: point.y };
+  }
+  let adjusted = { x: point.x, y: point.y };
+  let iterations = 0;
+  while (isPointInsideAny(adjusted, obstacles) && iterations < maxIterations) {
+    adjusted = offsetPoint(adjusted, direction, clearance);
+    iterations += 1;
+  }
+  return adjusted;
+};
+
+const computeSafeStubPoint = (
+  anchor: Vec2,
+  direction: ConnectorDirection,
+  desiredLength: number,
+  obstacles: Rect[]
+): Vec2 => {
+  if (direction === 'none' || desiredLength <= EPSILON) {
+    return clonePoint(anchor);
+  }
+
+  let maxDistance = desiredLength;
+  for (const rect of obstacles) {
+    if (direction === 'right') {
+      const overlaps = anchor.y >= rect.top - EPSILON && anchor.y <= rect.bottom + EPSILON;
+      if (!overlaps) {
+        continue;
+      }
+      const distance = rect.left - anchor.x - EPSILON * 2;
+      maxDistance = Math.min(maxDistance, Math.max(0, distance));
+    } else if (direction === 'left') {
+      const overlaps = anchor.y >= rect.top - EPSILON && anchor.y <= rect.bottom + EPSILON;
+      if (!overlaps) {
+        continue;
+      }
+      const distance = anchor.x - rect.right - EPSILON * 2;
+      maxDistance = Math.min(maxDistance, Math.max(0, distance));
+    } else if (direction === 'down') {
+      const overlaps = anchor.x >= rect.left - EPSILON && anchor.x <= rect.right + EPSILON;
+      if (!overlaps) {
+        continue;
+      }
+      const distance = rect.top - anchor.y - EPSILON * 2;
+      maxDistance = Math.min(maxDistance, Math.max(0, distance));
+    } else if (direction === 'up') {
+      const overlaps = anchor.x >= rect.left - EPSILON && anchor.x <= rect.right + EPSILON;
+      if (!overlaps) {
+        continue;
+      }
+      const distance = anchor.y - rect.bottom - EPSILON * 2;
+      maxDistance = Math.min(maxDistance, Math.max(0, distance));
+    }
+  }
+
+  const stub = offsetPoint(anchor, direction, maxDistance);
+  if (isPointInsideAny(stub, obstacles)) {
+    return offsetPoint(stub, oppositeDirection[direction], EPSILON * 2);
+  }
+  return stub;
+};
+
+const buildAvoidancePolyline = (
+  start: Vec2,
+  end: Vec2,
+  obstacles: Rect[],
+  clearance: number
+): Vec2[] | null => {
+  if (!obstacles.length) {
+    return null;
+  }
+
+  const startPoint = { x: roundCoordinate(start.x), y: roundCoordinate(start.y) };
+  const endPoint = { x: roundCoordinate(end.x), y: roundCoordinate(end.y) };
+
+  const bounds = expandSearchBounds(startPoint, endPoint, clearance);
+  const relevantObstacles = obstacles.filter((rect) => rectsIntersect(rect, bounds));
+
+  if (!relevantObstacles.length) {
+    return null;
+  }
+
+  const xs = new Set<number>();
+  const ys = new Set<number>();
+  addCoordinate(xs, startPoint.x);
+  addCoordinate(xs, endPoint.x);
+  addCoordinate(ys, startPoint.y);
+  addCoordinate(ys, endPoint.y);
+
+  for (const rect of relevantObstacles) {
+    addCoordinate(xs, rect.left);
+    addCoordinate(xs, rect.right);
+    addCoordinate(xs, rect.left - clearance);
+    addCoordinate(xs, rect.right + clearance);
+    addCoordinate(ys, rect.top);
+    addCoordinate(ys, rect.bottom);
+    addCoordinate(ys, rect.top - clearance);
+    addCoordinate(ys, rect.bottom + clearance);
+  }
+
+  const sortedXs = Array.from(xs).sort((a, b) => a - b);
+  const sortedYs = Array.from(ys).sort((a, b) => a - b);
+
+  const pointMap = new Map<string, Vec2>();
+  for (const x of sortedXs) {
+    for (const y of sortedYs) {
+      const point = { x: roundCoordinate(x), y: roundCoordinate(y) };
+      if (isPointInsideAny(point, relevantObstacles)) {
+        continue;
+      }
+      pointMap.set(pointKey(point), point);
+    }
+  }
+
+  const startKey = pointKey(startPoint);
+  const endKey = pointKey(endPoint);
+  if (!pointMap.has(startKey)) {
+    pointMap.set(startKey, { ...startPoint });
+  }
+  if (!pointMap.has(endKey)) {
+    pointMap.set(endKey, { ...endPoint });
+  }
+
+  const adjacency = new Map<string, ConnectorGraphEdge[]>();
+  const ensureAdjacency = (key: string) => {
+    if (!adjacency.has(key)) {
+      adjacency.set(key, []);
+    }
+    return adjacency.get(key)!;
+  };
+
+  for (const y of sortedYs) {
+    const row: Array<{ key: string; point: Vec2 }> = [];
+    for (const x of sortedXs) {
+      const key = pointKey({ x: roundCoordinate(x), y: roundCoordinate(y) });
+      const point = pointMap.get(key);
+      if (point) {
+        row.push({ key, point });
+      }
+    }
+    for (let index = 0; index < row.length - 1; index += 1) {
+      const current = row[index];
+      const next = row[index + 1];
+      if (segmentBlockedByAny(current.point, next.point, relevantObstacles)) {
+        continue;
+      }
+      const distance = Math.abs(next.point.x - current.point.x);
+      if (distance <= EPSILON) {
+        continue;
+      }
+      ensureAdjacency(current.key).push({ key: next.key, cost: distance, direction: 'horizontal' });
+      ensureAdjacency(next.key).push({ key: current.key, cost: distance, direction: 'horizontal' });
+    }
+  }
+
+  for (const x of sortedXs) {
+    const column: Array<{ key: string; point: Vec2 }> = [];
+    for (const y of sortedYs) {
+      const key = pointKey({ x: roundCoordinate(x), y: roundCoordinate(y) });
+      const point = pointMap.get(key);
+      if (point) {
+        column.push({ key, point });
+      }
+    }
+    for (let index = 0; index < column.length - 1; index += 1) {
+      const current = column[index];
+      const next = column[index + 1];
+      if (segmentBlockedByAny(current.point, next.point, relevantObstacles)) {
+        continue;
+      }
+      const distance = Math.abs(next.point.y - current.point.y);
+      if (distance <= EPSILON) {
+        continue;
+      }
+      ensureAdjacency(current.key).push({ key: next.key, cost: distance, direction: 'vertical' });
+      ensureAdjacency(next.key).push({ key: current.key, cost: distance, direction: 'vertical' });
+    }
+  }
+
+  const startPointEntry = pointMap.get(startKey);
+  const endPointEntry = pointMap.get(endKey);
+  if (!startPointEntry || !endPointEntry) {
+    return null;
+  }
+
+  const startStateKey = `${startKey}|none`;
+  type StateMeta = { pointKey: string; direction: ConnectorTravelDirection | 'none' };
+  const stateMeta = new Map<string, StateMeta>();
+  stateMeta.set(startStateKey, { pointKey: startKey, direction: 'none' });
+
+  const gScore = new Map<string, number>();
+  gScore.set(startStateKey, 0);
+
+  const fScore = new Map<string, number>();
+  fScore.set(startStateKey, manhattanDistance(startPointEntry, endPointEntry));
+
+  const cameFrom = new Map<string, string | null>();
+  cameFrom.set(startStateKey, null);
+
+  const open: string[] = [startStateKey];
+  const turnPenalty = clearance * TURN_PENALTY_FACTOR;
+
+  while (open.length) {
+    let bestIndex = 0;
+    let bestScore = Number.POSITIVE_INFINITY;
+    for (let index = 0; index < open.length; index += 1) {
+      const candidate = open[index];
+      const score = fScore.get(candidate) ?? Number.POSITIVE_INFINITY;
+      if (score < bestScore) {
+        bestScore = score;
+        bestIndex = index;
+      }
+    }
+
+    const currentState = open.splice(bestIndex, 1)[0];
+    const currentMeta = stateMeta.get(currentState);
+    if (!currentMeta) {
+      continue;
+    }
+
+    if (currentMeta.pointKey === endKey) {
+      const path: Vec2[] = [];
+      let cursor: string | null = currentState;
+      const visited = new Set<string>();
+      while (cursor) {
+        const meta = stateMeta.get(cursor);
+        if (!meta) {
+          break;
+        }
+        const point = pointMap.get(meta.pointKey);
+        if (!point) {
+          break;
+        }
+        path.push({ x: point.x, y: point.y });
+        const previous: string | null = cameFrom.get(cursor) ?? null;
+        if (!previous || visited.has(previous)) {
+          cursor = previous;
+        } else {
+          visited.add(previous);
+          cursor = previous;
+        }
+      }
+      return path.reverse();
+    }
+
+    const currentPoint = pointMap.get(currentMeta.pointKey);
+    if (!currentPoint) {
+      continue;
+    }
+
+    const neighbours = adjacency.get(currentMeta.pointKey);
+    if (!neighbours || !neighbours.length) {
+      continue;
+    }
+
+    const currentG = gScore.get(currentState) ?? Number.POSITIVE_INFINITY;
+
+    for (const edge of neighbours) {
+      const neighbourPoint = pointMap.get(edge.key);
+      if (!neighbourPoint) {
+        continue;
+      }
+
+      const neighbourState = `${edge.key}|${edge.direction}`;
+      const moveCost = edge.cost;
+      const turnCost =
+        currentMeta.direction === 'none' || currentMeta.direction === edge.direction ? 0 : turnPenalty;
+      const tentativeG = currentG + moveCost + turnCost;
+
+      if (tentativeG + EPSILON >= (gScore.get(neighbourState) ?? Number.POSITIVE_INFINITY)) {
+        continue;
+      }
+
+      cameFrom.set(neighbourState, currentState);
+      stateMeta.set(neighbourState, { pointKey: edge.key, direction: edge.direction });
+      gScore.set(neighbourState, tentativeG);
+      const heuristic = manhattanDistance(neighbourPoint, endPointEntry);
+      fScore.set(neighbourState, tentativeG + heuristic);
+      if (!open.includes(neighbourState)) {
+        open.push(neighbourState);
+      }
+    }
+  }
+
+  return null;
+};
 
 export const CARDINAL_PORTS: CardinalConnectorPort[] = ['top', 'right', 'bottom', 'left'];
 
@@ -150,40 +539,110 @@ const shouldAddStub = (direction: ConnectorDirection) => direction !== 'none';
 const buildDefaultWaypoints = (
   connector: ConnectorModel,
   start: ResolvedEndpoint,
-  end: ResolvedEndpoint
+  end: ResolvedEndpoint,
+  nodes: NodeModel[],
+  sourceNode?: NodeModel,
+  targetNode?: NodeModel
 ): Vec2[] => {
   if (connector.mode === 'straight') {
     return [];
   }
 
   const stubLength = connector.style.strokeWidth ? Math.max(36, connector.style.strokeWidth * 12) : DEFAULT_STUB_LENGTH;
-  const startStub = shouldAddStub(start.direction)
-    ? offsetPoint(start.point, start.direction, stubLength)
-    : clonePoint(start.point);
-  const endStub = shouldAddStub(end.direction)
-    ? offsetPoint(end.point, end.direction, stubLength)
-    : clonePoint(end.point);
+  const startHasStub = shouldAddStub(start.direction);
+  const endHasStub = shouldAddStub(end.direction);
+  let startStub = startHasStub ? offsetPoint(start.point, start.direction, stubLength) : clonePoint(start.point);
+  let endStub = endHasStub ? offsetPoint(end.point, end.direction, stubLength) : clonePoint(end.point);
 
   const waypoints: Vec2[] = [];
 
-  if (shouldAddStub(start.direction)) {
-    waypoints.push(startStub);
-  }
+  const avoidNodesEnabled = connector.style.avoidNodes !== false;
+  let clearance = 0;
+  let avoidanceHandled = false;
 
-  const bridgeNeeded =
-    !nearlyEqual(startStub.x, endStub.x) && !nearlyEqual(startStub.y, endStub.y);
+  if (avoidNodesEnabled) {
+    const candidateNodes = nodes.length
+      ? nodes
+      : [sourceNode, targetNode].filter((node): node is NodeModel => Boolean(node));
+    if (candidateNodes.length) {
+      clearance = Math.max(MIN_AVOIDANCE_PADDING, stubLength / 2);
+      const startNodeId = isAttachedConnectorEndpoint(connector.source) ? connector.source.nodeId : null;
+      const endNodeId = isAttachedConnectorEndpoint(connector.target) ? connector.target.nodeId : null;
+      const nodeRectPairs = candidateNodes.map((node) => ({
+        node,
+        rect: expandNodeBounds(node, clearance)
+      }));
 
-  if (bridgeNeeded) {
-    const horizontalFirst = Math.abs(endStub.x - startStub.x) >= Math.abs(endStub.y - startStub.y);
-    if (horizontalFirst) {
-      waypoints.push({ x: endStub.x, y: startStub.y });
-    } else {
-      waypoints.push({ x: startStub.x, y: endStub.y });
+      if (startHasStub && start.direction !== 'none') {
+        const startBlockingRects = nodeRectPairs
+          .filter(({ node }) => startNodeId === null || node.id !== startNodeId)
+          .map(({ rect }) => rect);
+        startStub = computeSafeStubPoint(start.point, start.direction, stubLength, startBlockingRects);
+        startStub = movePointOutsideObstacles(startStub, start.direction, clearance, startBlockingRects);
+      }
+
+      if (endHasStub && end.direction !== 'none') {
+        const endBlockingRects = nodeRectPairs
+          .filter(({ node }) => endNodeId === null || node.id !== endNodeId)
+          .map(({ rect }) => rect);
+        endStub = computeSafeStubPoint(end.point, end.direction, stubLength, endBlockingRects);
+        endStub = movePointOutsideObstacles(endStub, end.direction, clearance, endBlockingRects);
+      }
+
+      const obstaclesForRouting = nodeRectPairs
+        .filter(({ node, rect }) => {
+          const matchesStart = startNodeId !== null && node.id === startNodeId;
+          if (matchesStart && isPointInsideRect(start.point, rect)) {
+            return false;
+          }
+          const matchesEnd = endNodeId !== null && node.id === endNodeId;
+          if (matchesEnd && isPointInsideRect(end.point, rect)) {
+            return false;
+          }
+          return true;
+        })
+        .map(({ rect }) => rect);
+
+      if (obstaclesForRouting.length) {
+        const avoidancePath = buildAvoidancePolyline(startStub, endStub, obstaclesForRouting, clearance);
+        if (avoidancePath && avoidancePath.length >= 2) {
+          if (startHasStub) {
+            waypoints.push(startStub);
+          }
+          for (let index = 1; index < avoidancePath.length - 1; index += 1) {
+            waypoints.push(avoidancePath[index]);
+          }
+          if (endHasStub) {
+            waypoints.push(endStub);
+          }
+          avoidanceHandled = true;
+        }
+      }
     }
   }
 
-  if (shouldAddStub(end.direction)) {
-    waypoints.push(endStub);
+  if (!avoidanceHandled) {
+    if (startHasStub) {
+      waypoints.push(startStub);
+    }
+
+    const routeStart = startHasStub ? startStub : start.point;
+    const routeEnd = endHasStub ? endStub : end.point;
+
+    const bridgeNeeded = !nearlyEqual(routeStart.x, routeEnd.x) && !nearlyEqual(routeStart.y, routeEnd.y);
+
+    if (bridgeNeeded) {
+      const horizontalFirst = Math.abs(routeEnd.x - routeStart.x) >= Math.abs(routeEnd.y - routeStart.y);
+      if (horizontalFirst) {
+        waypoints.push({ x: routeEnd.x, y: routeStart.y });
+      } else {
+        waypoints.push({ x: routeStart.x, y: routeEnd.y });
+      }
+    }
+
+    if (endHasStub) {
+      waypoints.push(endStub);
+    }
   }
 
   return waypoints.map(clonePoint);
@@ -270,7 +729,7 @@ export const getConnectorPath = (
   const baseWaypoints = connector.points?.map(clonePoint) ?? [];
   const waypoints = baseWaypoints.length
     ? stripDuplicateWaypoints(baseWaypoints)
-    : buildDefaultWaypoints(connector, resolvedSource, resolvedTarget);
+    : buildDefaultWaypoints(connector, resolvedSource, resolvedTarget, nodes, sourceNode, targetNode);
 
   const points = [resolvedSource.point, ...waypoints.map(clonePoint), resolvedTarget.point];
   const merged = mergeColinear(points);

@@ -60,6 +60,39 @@ const createConnector = (
   labelOffset: 18
 });
 
+const expandRect = (node: NodeModel, clearance: number) => ({
+  left: node.position.x - clearance,
+  right: node.position.x + node.size.width + clearance,
+  top: node.position.y - clearance,
+  bottom: node.position.y + node.size.height + clearance
+});
+
+const segmentCrossesRect = (
+  segment: { start: Vec2; end: Vec2; axis: 'horizontal' | 'vertical' | 'diagonal'; },
+  rect: ReturnType<typeof expandRect>,
+  epsilon = 1e-3
+) => {
+  if (segment.axis === 'horizontal') {
+    const y = segment.start.y;
+    if (y > rect.top + epsilon && y < rect.bottom - epsilon) {
+      const minX = Math.min(segment.start.x, segment.end.x);
+      const maxX = Math.max(segment.start.x, segment.end.x);
+      return maxX > rect.left + epsilon && minX < rect.right - epsilon;
+    }
+    return false;
+  }
+  if (segment.axis === 'vertical') {
+    const x = segment.start.x;
+    if (x > rect.left + epsilon && x < rect.right - epsilon) {
+      const minY = Math.min(segment.start.y, segment.end.y);
+      const maxY = Math.max(segment.start.y, segment.end.y);
+      return maxY > rect.top + epsilon && minY < rect.bottom - epsilon;
+    }
+    return false;
+  }
+  return false;
+};
+
 test('cardinal connector ports recognise supported values', () => {
   for (const port of CARDINAL_PORTS) {
     assert.ok(isCardinalConnectorPortValue(port), `Expected ${port} to be recognised.`);
@@ -142,6 +175,30 @@ test('tidyOrthogonalWaypoints removes redundant points', () => {
     { x: 60, y: 40 },
     { x: 60, y: 0 }
   ]);
+});
+
+test('avoidance-aware connectors route around nearby nodes', () => {
+  const source = createNode('source', { x: 0, y: 100 });
+  const target = createNode('target', { x: 420, y: 100 });
+  const blocker = createNode('blocker', { x: 200, y: 70 }, { width: 140, height: 140 });
+
+  const connector = createConnector('elbow', 'right', 'left');
+  connector.style.avoidNodes = true;
+
+  const path = getConnectorPath(connector, source, target, [source, target, blocker]);
+
+  const stubLength = Math.max(36, connector.style.strokeWidth * 12);
+  const clearance = Math.max(24, stubLength / 2);
+  const padded = expandRect(blocker, clearance);
+
+  assert.ok(
+    path.segments.length >= 4,
+    'expected avoidance to introduce intermediate waypoints'
+  );
+
+  for (const segment of path.segments) {
+    assert.ok(!segmentCrossesRect(segment, padded), 'segment should not overlap blocked area');
+  }
 });
 
 test('closest point on polyline identifies the nearest segment', () => {
