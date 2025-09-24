@@ -724,6 +724,42 @@ const simplifyPolyline = (points: Vec2[]): Vec2[] => {
   return simplified;
 };
 
+export const tidyOrthogonalWaypointsPreview = (
+  start: Vec2,
+  waypoints: Vec2[],
+  end: Vec2
+): Vec2[] => {
+  if (!waypoints.length) {
+    return [];
+  }
+
+  const points = [start, ...waypoints.map((point) => clonePoint(point)), end];
+  const axes = computeSegmentAxes(points);
+
+  for (let index = 1; index < points.length - 1; index += 1) {
+    const prev = points[index - 1];
+    const next = points[index + 1];
+    const current = points[index];
+    const prevAxis = axes[index - 1] ?? axes[index] ?? 'horizontal';
+    const nextAxis = axes[index] ?? axes[index - 1] ?? 'horizontal';
+
+    if (prevAxis === 'horizontal') {
+      current.y = prev.y;
+    } else {
+      current.x = prev.x;
+    }
+
+    if (nextAxis === 'horizontal') {
+      current.y = next.y;
+    } else {
+      current.x = next.x;
+    }
+  }
+
+  const enforced = ensureOrthogonalSegments(points);
+  return enforced.slice(1, enforced.length - 1).map((point) => clonePoint(point));
+};
+
 export const tidyOrthogonalWaypoints = (start: Vec2, waypoints: Vec2[], end: Vec2): Vec2[] => {
   if (!waypoints.length) {
     return [];
