@@ -66,6 +66,7 @@ const renderShape = (
         />
       );
     case 'text':
+    case 'link':
       return <rect width={width} height={height} rx={8} {...common} />;
     default:
       return <rect width={width} height={height} rx={8} {...common} />;
@@ -111,17 +112,23 @@ export const DiagramNode: React.FC<DiagramNodeProps> = ({
   ];
   const connectorHandleRadius = 9;
 
-  const labelClassName = `diagram-node__label ${editing ? 'is-editing' : ''}`;
+  const isLinkNode = node.shape === 'link';
+  const isTextualNode = node.shape === 'text' || isLinkNode;
+  const labelClassName = `diagram-node__label ${editing ? 'is-editing' : ''} ${
+    isLinkNode ? 'diagram-node__label--link' : ''
+  }`.trim();
   const labelStyle: React.CSSProperties = {
     textAlign: node.textAlign,
     fontSize: node.fontSize,
     fontWeight: node.fontWeight,
-    color: node.textColor
+    color: node.textColor,
+    fontStyle: isLinkNode ? 'italic' : undefined,
+    textDecoration: isLinkNode ? 'underline' : undefined
   };
   const nodeClassName = `diagram-node ${selected ? 'is-selected' : ''} ${
     hovered ? 'is-hovered' : ''
-  } ${node.shape === 'text' ? 'diagram-node--text' : ''}`;
-  const showShadow = node.shape !== 'text';
+  } ${isTextualNode ? 'diagram-node--text' : ''} ${isLinkNode ? 'diagram-node--link' : ''}`.trim();
+  const showShadow = !isTextualNode;
 
   const handleLabelPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement;
@@ -178,6 +185,7 @@ export const DiagramNode: React.FC<DiagramNodeProps> = ({
         <div
           className={labelClassName}
           style={labelStyle}
+          translate="no"
           onPointerDown={handleLabelPointerDown}
           dangerouslySetInnerHTML={{ __html: node.text }}
         />

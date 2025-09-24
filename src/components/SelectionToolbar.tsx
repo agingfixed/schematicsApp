@@ -11,17 +11,13 @@ import { useFrozenFloatingPlacement } from '../hooks/useFrozenFloatingPlacement'
 import {
   applyAlignmentToSelection,
   applyFontSizeToSelection,
-  applyLinkFormattingToSelection,
   applyTextColorToSelection,
   extractPlainText,
-  removeLinkFromSelection,
-  replaceSelectionWithText,
   toggleBoldInSelection,
   toggleItalicInSelection,
   toggleListInSelection,
   toggleStrikethroughInSelection,
-  toggleUnderlineInSelection,
-  wrapSelectionWithLink
+  toggleUnderlineInSelection
 } from '../utils/text';
 import { InlineTextEditorHandle } from './InlineTextEditor';
 import '../styles/selection-toolbar.css';
@@ -32,7 +28,7 @@ const STROKE_MIN = 0;
 const STROKE_MAX = 20;
 const TOOLBAR_GAP = 12;
 
-const shapeOptions: Array<{ value: Exclude<NodeKind, 'text'>; label: string }> = [
+const shapeOptions: Array<{ value: Exclude<NodeKind, 'text' | 'link'>; label: string }> = [
   { value: 'circle', label: 'Circle' },
   { value: 'ellipse', label: 'Ellipse' },
   { value: 'rectangle', label: 'Rectangle' },
@@ -83,9 +79,6 @@ interface TextSelectionState {
   textAlign: TextAlign;
   color: string;
   hasSelection: boolean;
-  hasLink: boolean;
-  linkUrl: string;
-  selectedText: string;
 }
 
 const createDefaultTextSelectionState = (node: NodeModel): TextSelectionState => ({
@@ -96,10 +89,7 @@ const createDefaultTextSelectionState = (node: NodeModel): TextSelectionState =>
   isStrikethrough: false,
   textAlign: node.textAlign,
   color: node.textColor,
-  hasSelection: false,
-  hasLink: false,
-  linkUrl: '',
-  selectedText: ''
+  hasSelection: false
 });
 
 export const SelectionToolbar: React.FC<SelectionToolbarProps> = (props) => {
@@ -159,11 +149,6 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
   const fillInteractionRef = useRef(false);
   const pointerInteractionCleanupRef = useRef<(() => void) | null>(null);
   const pointerActiveRef = useRef(false);
-  const textLinkButtonRef = useRef<HTMLButtonElement>(null);
-  const textLinkPopoverRef = useRef<HTMLDivElement>(null);
-  const textLinkVisibleInputRef = useRef<HTMLInputElement>(null);
-  const textLinkUrlInputRef = useRef<HTMLInputElement>(null);
-  const textLinkOpenRef = useRef(false);
   const savedSelectionRef = useRef<Range | null>(null);
 
   const [fontSizeValue, setFontSizeValue] = useState(node.fontSize.toString());
@@ -174,10 +159,8 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
     createDefaultTextSelectionState(node)
   );
   const [textColorValue, setTextColorValue] = useState(node.textColor);
-  const [textLinkOpen, setTextLinkOpen] = useState(false);
-  const [textLinkDraft, setTextLinkDraft] = useState('');
-  const [textLinkVisibleDraft, setTextLinkVisibleDraft] = useState('');
-  const [textLinkError, setTextLinkError] = useState<string | null>(null);
+  const setNodeLink = useSceneStore((state) => state.setNodeLink);
+  const [linkAddressValue, setLinkAddressValue] = useState(node.link?.url ?? '');
 
   const {
     menuState,
@@ -215,7 +198,8 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
     [textEditorRef]
   );
   const editorElement = getEditorElement();
-  const isTextNode = node.shape === 'text';
+  const isLinkNode = node.shape === 'link';
+  const isTextualNode = node.shape === 'text' || isLinkNode;
   const hasText = extractPlainText(node.text).length > 0;
   const textDisabled = isTextEditing ? !editorElement : !hasText;
   const isBold = node.fontWeight >= 700;
@@ -224,8 +208,6 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
   const underlineActive = isTextEditing ? textSelectionState.isUnderline : false;
   const strikethroughActive = isTextEditing ? textSelectionState.isStrikethrough : false;
   const activeAlign = isTextEditing ? textSelectionState.textAlign : node.textAlign;
-  const hasTextSelection = isTextEditing ? textSelectionState.hasSelection : false;
-  const selectionHasLink = hasTextSelection && textSelectionState.hasLink;
   const displayedFontSizeValue = isTextEditing ? textFontSizeValue : fontSizeValue;
   const fontSizeDisabled = isTextEditing ? !editorElement : textDisabled;
   const displayedTextColor = isTextEditing ? textColorValue : node.textColor;
@@ -306,18 +288,6 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
     const colorHex = cssColorToHex(computed.color) ?? node.textColor;
     const align = normalizeTextAlign(computed.textAlign);
     const hasSelection = !selection.isCollapsed;
-    const linkElement = hasSelection
-      ? (element.closest('a') as HTMLAnchorElement | null) ??
-        ((range.commonAncestorContainer instanceof Element
-          ? range.commonAncestorContainer.closest('a')
-          : null) as HTMLAnchorElement | null)
-      : null;
-    const hasLink = Boolean(hasSelection && linkElement && editor.contains(linkElement));
-    const linkUrl = hasLink && linkElement ? linkElement.getAttribute('href') ?? '' : '';
-    const rawSelectedText = hasSelection ? selection.toString() : '';
-    const selectedText = hasSelection
-      ? rawSelectedText.replace(/\s*\n\s*/g, ' ').trim()
-      : '';
     setTextSelectionState({
       fontSize,
       isBold: bold,
@@ -326,10 +296,7 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
       isStrikethrough: strikethrough,
       textAlign: align,
       color: colorHex,
-      hasSelection,
-      hasLink,
-      linkUrl,
-      selectedText
+      hasSelection
     });
     setTextFontSizeValue(Math.round(fontSize).toString());
     setTextColorValue(colorHex);
@@ -362,99 +329,6 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
     selection.removeAllRanges();
     selection.addRange(range);
   }, [isTextEditing]);
-
-  const getLinkableRange = useCallback((): Range | null => {
-    if (!isTextEditing) {
-      return null;
-    }
-    const editor = getEditorElement();
-    if (!editor) {
-      return null;
-    }
-    const activeSelection = window.getSelection();
-    if (activeSelection && activeSelection.rangeCount > 0) {
-      const currentRange = activeSelection.getRangeAt(0);
-      if (!activeSelection.isCollapsed && editor.contains(currentRange.commonAncestorContainer)) {
-        return currentRange;
-      }
-    }
-    const saved = savedSelectionRef.current;
-    if (!saved || saved.collapsed) {
-      return null;
-    }
-    const startElement =
-      saved.startContainer instanceof Element
-        ? saved.startContainer
-        : saved.startContainer.parentElement;
-    const endElement =
-      saved.endContainer instanceof Element
-        ? saved.endContainer
-        : saved.endContainer.parentElement;
-    if (!startElement || !endElement) {
-      return null;
-    }
-    if (!editor.contains(startElement) || !editor.contains(endElement)) {
-      return null;
-    }
-    return saved;
-  }, [getEditorElement, isTextEditing]);
-
-  const getLinkSelectionSnapshot = useCallback(() => {
-    const range = getLinkableRange();
-    if (!range) {
-      return null;
-    }
-    const editor = getEditorElement();
-    if (!editor) {
-      return null;
-    }
-    const fallbackText = range
-      .toString()
-      .replace(/\s*\n\s*/g, ' ')
-      .trim();
-    const selectedText = textSelectionState.hasSelection
-      ? textSelectionState.selectedText || fallbackText
-      : fallbackText;
-    if (!selectedText) {
-      return null;
-    }
-    const resolveElement = (node: Node): HTMLElement | null => {
-      if (node instanceof HTMLElement) {
-        return node;
-      }
-      if (node instanceof Text) {
-        return node.parentElement;
-      }
-      return null;
-    };
-    const candidates: Array<HTMLElement | null> = [
-      resolveElement(range.startContainer),
-      resolveElement(range.endContainer),
-      resolveElement(range.commonAncestorContainer)
-    ];
-    let linkElement: HTMLAnchorElement | null = null;
-    for (const candidate of candidates) {
-      if (!candidate) {
-        continue;
-      }
-      const anchor = candidate.closest('a');
-      if (anchor && editor.contains(anchor)) {
-        linkElement = anchor as HTMLAnchorElement;
-        break;
-      }
-    }
-    const linkUrlFromDom = linkElement?.getAttribute('href') ?? '';
-    const linkUrl =
-      linkUrlFromDom ||
-      (textSelectionState.hasSelection && textSelectionState.hasLink
-        ? textSelectionState.linkUrl
-        : '');
-    return {
-      range,
-      selectedText,
-      linkUrl
-    };
-  }, [getEditorElement, getLinkableRange, textSelectionState.hasLink, textSelectionState.hasSelection, textSelectionState.linkUrl, textSelectionState.selectedText]);
 
   const handleFillChange = useCallback(
     (nextColor: RGBColor, alpha: number, options?: { commit?: boolean }) => {
@@ -499,6 +373,10 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
   }, [isTextEditing, node.fontSize, node.fontWeight, node.textAlign, node.textColor]);
 
   useEffect(() => {
+    setLinkAddressValue(node.link?.url ?? '');
+  }, [node.id, node.link?.url]);
+
+  useEffect(() => {
     setStrokeWidthValue(node.stroke.width.toString());
   }, [node.stroke.width]);
 
@@ -534,32 +412,8 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
   }, [fillOpen, finishFillInteraction]);
 
   useEffect(() => {
-    if (!textLinkOpen) {
-      return;
-    }
-    const frame = requestAnimationFrame(() => {
-      if (textLinkVisibleInputRef.current) {
-        textLinkVisibleInputRef.current.focus();
-        textLinkVisibleInputRef.current.select();
-      }
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [textLinkOpen]);
-
-  useEffect(() => {
-    textLinkOpenRef.current = textLinkOpen;
-    if (onPointerInteractionChange) {
-      onPointerInteractionChange(pointerActiveRef.current || textLinkOpen);
-    }
-  }, [onPointerInteractionChange, textLinkOpen]);
-
-  useEffect(() => {
     if (!isVisible) {
       setFillOpen(false);
-      setTextLinkOpen(false);
-      setTextLinkError(null);
-      setTextLinkDraft('');
-      setTextLinkVisibleDraft('');
       finishFillInteraction();
       onPointerInteractionChange?.(false);
     }
@@ -569,24 +423,7 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
     if (isTextEditing) {
       setFillOpen(false);
     }
-    setTextLinkOpen(false);
-    setTextLinkError(null);
-    setTextLinkDraft('');
-    setTextLinkVisibleDraft('');
   }, [isTextEditing]);
-
-  useEffect(() => {
-    if (!isTextEditing) {
-      return;
-    }
-    if (textSelectionState.hasSelection || textLinkOpen) {
-      return;
-    }
-    setTextLinkOpen(false);
-    setTextLinkError(null);
-    setTextLinkDraft('');
-    setTextLinkVisibleDraft('');
-  }, [isTextEditing, textLinkOpen, textSelectionState.hasSelection]);
 
   useEffect(() => {
     if (!isTextEditing) {
@@ -608,26 +445,6 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
       }
     };
   }, [getEditorElement, isTextEditing, updateTextSelectionFromEditor]);
-
-  useEffect(() => {
-    if (!textLinkOpen) {
-      return;
-    }
-    const handlePointerDown = (event: MouseEvent) => {
-      const target = event.target as Node;
-      if (
-        textLinkPopoverRef.current &&
-        !textLinkPopoverRef.current.contains(target) &&
-        textLinkButtonRef.current &&
-        !textLinkButtonRef.current.contains(target)
-      ) {
-        setTextLinkOpen(false);
-        setTextLinkError(null);
-      }
-    };
-    document.addEventListener('mousedown', handlePointerDown);
-    return () => document.removeEventListener('mousedown', handlePointerDown);
-  }, [textLinkOpen]);
 
   useEffect(() => {
     if (!fillOpen) {
@@ -737,77 +554,6 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
     runSelectionCommand((editor) => toggleListInSelection(editor, type));
   };
 
-  const handleTextLinkButtonClick = () => {
-    if (!isTextEditing) {
-      return;
-    }
-    if (textLinkOpen) {
-      setTextLinkOpen(false);
-      setTextLinkError(null);
-      return;
-    }
-    const snapshot = getLinkSelectionSnapshot();
-    if (!snapshot) {
-      return;
-    }
-    savedSelectionRef.current = snapshot.range.cloneRange();
-    restoreSelection();
-    setTextLinkError(null);
-    setTextLinkOpen((prev) => {
-      const next = !prev;
-      if (next) {
-        setTextLinkDraft(snapshot.linkUrl ?? '');
-        setTextLinkVisibleDraft(snapshot.selectedText);
-      }
-      return next;
-    });
-  };
-
-  const handleTextLinkApply = () => {
-    if (!isTextEditing) {
-      return;
-    }
-    const visibleText = textLinkVisibleDraft.trim();
-    if (!visibleText) {
-      setTextLinkError('Enter visible text');
-      return;
-    }
-    const normalized = ensureProtocol(textLinkDraft);
-    if (!normalized || !isValidHttpUrl(normalized)) {
-      setTextLinkError('Enter a valid URL');
-      return;
-    }
-    const applied = runSelectionCommand((editor) => {
-      removeLinkFromSelection(editor);
-      if (!replaceSelectionWithText(editor, visibleText)) {
-        return false;
-      }
-      if (!wrapSelectionWithLink(editor, normalized)) {
-        return false;
-      }
-      return applyLinkFormattingToSelection(editor);
-    });
-    if (!applied) {
-      setTextLinkError('Select text to link');
-      return;
-    }
-    setTextLinkOpen(false);
-    setTextLinkError(null);
-    setTextLinkDraft(normalized);
-    setTextLinkVisibleDraft(visibleText);
-  };
-
-  const handleTextLinkRemove = () => {
-    if (!isTextEditing) {
-      return;
-    }
-    runSelectionCommand((editor) => removeLinkFromSelection(editor));
-    setTextLinkOpen(false);
-    setTextLinkError(null);
-    setTextLinkDraft('');
-    setTextLinkVisibleDraft('');
-  };
-
   const handleTextColorPointerDown = (event: React.PointerEvent<HTMLInputElement>) => {
     if (isTextEditing) {
       event.stopPropagation();
@@ -815,14 +561,29 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
     }
   };
 
-  const handleTextLinkKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+  const commitLinkAddress = useCallback(() => {
+    const trimmed = linkAddressValue.trim();
+    const normalized = ensureProtocol(trimmed);
+    if (normalized !== linkAddressValue) {
+      setLinkAddressValue(normalized);
+    }
+    const currentUrl = node.link?.url ?? '';
+    if (normalized !== currentUrl) {
+      setNodeLink(node.id, normalized ? normalized : null);
+    }
+  }, [linkAddressValue, node.id, node.link?.url, setNodeLink]);
+
+  const handleLinkAddressBlur = () => {
+    commitLinkAddress();
+  };
+
+  const handleLinkAddressKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'Enter') {
       event.preventDefault();
-      handleTextLinkApply();
+      commitLinkAddress();
     } else if (event.key === 'Escape') {
       event.preventDefault();
-      setTextLinkOpen(false);
-      setTextLinkError(null);
+      setLinkAddressValue(node.link?.url ?? '');
     }
   };
 
@@ -928,7 +689,7 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
     onPointerInteractionChange(true);
     const handlePointerUp = () => {
       pointerActiveRef.current = false;
-      onPointerInteractionChange(textLinkOpenRef.current);
+      onPointerInteractionChange(false);
       document.removeEventListener('pointerup', handlePointerUp, true);
       document.removeEventListener('pointercancel', handlePointerUp, true);
       pointerInteractionCleanupRef.current = null;
@@ -939,6 +700,7 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
       document.removeEventListener('pointerup', handlePointerUp, true);
       document.removeEventListener('pointercancel', handlePointerUp, true);
       pointerActiveRef.current = false;
+      onPointerInteractionChange(false);
     };
   }, [onPointerInteractionChange]);
 
@@ -991,7 +753,7 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
                 className={`selection-toolbar__button ${italicActive ? 'is-active' : ''}`}
                 onClick={handleToggleItalic}
                 onPointerDown={handleTextControlPointerDown}
-                disabled={!editorElement}
+                disabled={!editorElement || isLinkNode}
                 title="Italic (Cmd/Ctrl+I)"
               >
                 <span className="selection-toolbar__icon" style={{ fontStyle: 'italic' }}>
@@ -1003,7 +765,7 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
                 className={`selection-toolbar__button ${underlineActive ? 'is-active' : ''}`}
                 onClick={handleToggleUnderline}
                 onPointerDown={handleTextControlPointerDown}
-                disabled={!editorElement}
+                disabled={!editorElement || isLinkNode}
                 title="Underline (Cmd/Ctrl+U)"
               >
                 <span
@@ -1119,79 +881,26 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
               >
                 1.
               </button>
-              {hasTextSelection && (
-                <div className="selection-toolbar__group selection-toolbar__group--link">
-                  <button
-                    type="button"
-                    ref={textLinkButtonRef}
-                    className={`selection-toolbar__button ${
-                      textLinkOpen || selectionHasLink ? 'is-active' : ''
-                    }`}
-                    onClick={handleTextLinkButtonClick}
+              {isLinkNode && (
+                <label className="selection-toolbar__link-address">
+                  <span>Link address</span>
+                  <input
+                    type="url"
+                    value={linkAddressValue}
+                    placeholder="https://example.com"
+                    onChange={(event) => setLinkAddressValue(event.target.value)}
+                    onBlur={handleLinkAddressBlur}
+                    onKeyDown={handleLinkAddressKeyDown}
                     onPointerDown={handleTextControlPointerDown}
-                    disabled={textColorDisabled}
-                    title="Link (Cmd/Ctrl+K)"
-                  >
-                    🔗
-                  </button>
-                  {textLinkOpen && (
-                    <div className="selection-toolbar__text-link-popover" ref={textLinkPopoverRef}>
-                      <label className="selection-toolbar__text-link-field">
-                        <span>Visible text</span>
-                        <input
-                          ref={textLinkVisibleInputRef}
-                          type="text"
-                          value={textLinkVisibleDraft}
-                          placeholder="Selected text"
-                          onChange={(event) => {
-                            if (textLinkError) {
-                              setTextLinkError(null);
-                            }
-                            setTextLinkVisibleDraft(event.target.value);
-                          }}
-                          onKeyDown={handleTextLinkKeyDown}
-                        />
-                      </label>
-                      <label className="selection-toolbar__text-link-field">
-                        <span>Link text</span>
-                        <input
-                          ref={textLinkUrlInputRef}
-                          type="url"
-                          value={textLinkDraft}
-                          placeholder="https://example.com"
-                          onChange={(event) => {
-                            if (textLinkError) {
-                              setTextLinkError(null);
-                            }
-                            setTextLinkDraft(event.target.value);
-                          }}
-                          onKeyDown={handleTextLinkKeyDown}
-                        />
-                      </label>
-                      <div className="selection-toolbar__link-actions">
-                        <button type="button" onClick={handleTextLinkApply}>
-                          Apply
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleTextLinkRemove}
-                          disabled={!selectionHasLink && !textLinkDraft.trim()}
-                        >
-                          Remove
-                        </button>
-                      </div>
-                      {textLinkError && (
-                        <div className="selection-toolbar__link-error">{textLinkError}</div>
-                      )}
-                    </div>
-                  )}
-                </div>
+                    translate="no"
+                  />
+                </label>
               )}
             </div>
           </>
         ) : (
           <>
-            {!isTextNode && (
+            {!isTextualNode && (
               <>
                 <div className="selection-toolbar__group">
                   <div className="selection-toolbar__swatch" title={fillTitle}>

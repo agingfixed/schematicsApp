@@ -1,5 +1,5 @@
 export type NodeShape = 'rectangle' | 'circle' | 'ellipse' | 'triangle' | 'diamond';
-export type NodeKind = NodeShape | 'text';
+export type NodeKind = NodeShape | 'text' | 'link';
 
 export interface Vec2 {
   x: number;
@@ -120,7 +120,8 @@ export type Tool =
   | 'triangle'
   | 'diamond'
   | 'connector'
-  | 'text';
+  | 'text'
+  | 'link';
 
 export interface CanvasTransform {
   x: number;
