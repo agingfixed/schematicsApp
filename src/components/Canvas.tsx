@@ -214,6 +214,8 @@ interface ConnectorDragState {
     inserted: [number, number, number];
     axis: 'horizontal' | 'vertical';
   };
+  segmentStartSnapshot?: Vec2;
+  segmentEndSnapshot?: Vec2;
 }
 
 interface ConnectorLabelDragState {
@@ -312,6 +314,7 @@ const CanvasComponent = (
   const setGlobalTransform = useSceneStore((state) => state.setTransform);
   const setEditingNode = useSceneStore((state) => state.setEditingNode);
   const equalizeSpacing = useSceneStore((state) => state.equalizeSpacing);
+  const setNodeLink = useSceneStore((state) => state.setNodeLink);
   const { applyStyles, setText } = useCommands();
 
   const selectedNodeIds = selection.nodeIds;
@@ -746,14 +749,18 @@ const CanvasComponent = (
   );
 
   const handleTextCommit = useCallback(
-    (value: string) => {
+    (value: string, metadata?: { linkUrl?: string }) => {
       if (editingNode) {
         setText(editingNode.id, value);
+        if (editingNode.shape === 'link') {
+          const url = metadata?.linkUrl?.trim() ?? '';
+          setNodeLink(editingNode.id, url.length ? url : null);
+        }
       }
       editingEntryPointRef.current = null;
       setEditingNode(null);
     },
-    [editingNode, setText, setEditingNode]
+    [editingNode, setNodeLink, setText, setEditingNode]
   );
 
   const handleTextCancel = useCallback(() => {
@@ -1301,13 +1308,13 @@ const CanvasComponent = (
           }
 
           const newBase = [
-            startPoint,
+            { ...startPoint },
             ...interior.map((point) => ({ ...point })),
-            endPoint
+            { ...endPoint }
           ];
 
-          connectorDragState.basePoints = newBase.map((point) => ({ ...point }));
-          connectorDragState.workingPoints = connectorDragState.basePoints.map((point) => ({ ...point }));
+          connectorDragState.basePoints = newBase;
+          connectorDragState.workingPoints = newBase.map((point) => ({ ...point }));
           connectorDragState.currentWaypoints = interior.map((point) => ({ ...point }));
           connectorDragState.initialPointer = worldPoint;
 
@@ -1318,11 +1325,24 @@ const CanvasComponent = (
 
           if (anchorIdx === -1 || pivotIdx === -1 || tailIdx === -1) {
             connectorDragState.split = undefined;
+            connectorDragState.segmentStartSnapshot = pivotSnapshot;
+            connectorDragState.segmentEndSnapshot = tailSnapshot;
           } else {
             connectorDragState.split = {
               inserted: [anchorIdx, pivotIdx, tailIdx],
               axis: splitAxis
             };
+            const startIndex = Math.min(pivotIdx, tailIdx);
+            const endIndex = Math.max(pivotIdx, tailIdx);
+            const resolvedAxis =
+              Math.abs(newBase[endIndex].x - newBase[startIndex].x) >=
+              Math.abs(newBase[endIndex].y - newBase[startIndex].y)
+                ? 'horizontal'
+                : 'vertical';
+            connectorDragState.segmentIndex = startIndex;
+            connectorDragState.axis = resolvedAxis;
+            connectorDragState.segmentStartSnapshot = { ...newBase[startIndex] };
+            connectorDragState.segmentEndSnapshot = { ...newBase[endIndex] };
           }
 
           updateConnector(connectorDragState.connectorId, {
@@ -1334,6 +1354,9 @@ const CanvasComponent = (
 
       const nextPoints = connectorDragState.basePoints.map((point) => ({ ...point }));
 
+      let trackedSegmentStart: Vec2 | null = null;
+      let trackedSegmentEnd: Vec2 | null = null;
+
       if (connectorDragState.kind === 'waypoint' && connectorDragState.waypointIndex !== undefined) {
         const index = connectorDragState.waypointIndex + 1;
         if (nextPoints[index]) {
@@ -1344,12 +1367,25 @@ const CanvasComponent = (
         connectorDragState.segmentIndex !== undefined &&
         connectorDragState.axis
       ) {
+        const startSnapshot = connectorDragState.segmentStartSnapshot;
+        const endSnapshot = connectorDragState.segmentEndSnapshot;
+
+        let startIndex = connectorDragState.segmentIndex;
+        let endIndex = Math.min(startIndex + 1, nextPoints.length - 1);
+
+        if (startSnapshot && endSnapshot) {
+          const startMatch = nextPoints.findIndex((point) => pointsRoughlyEqual(point, startSnapshot));
+          const endMatch = nextPoints.findIndex((point) => pointsRoughlyEqual(point, endSnapshot));
+          if (startMatch !== -1 && endMatch !== -1) {
+            startIndex = Math.min(startMatch, endMatch);
+            endIndex = Math.max(startMatch, endMatch);
+          }
+        }
+
         const offset =
           connectorDragState.axis === 'horizontal'
             ? worldPoint.y - connectorDragState.initialPointer.y
             : worldPoint.x - connectorDragState.initialPointer.x;
-        const startIndex = connectorDragState.segmentIndex;
-        const endIndex = Math.min(connectorDragState.segmentIndex + 1, nextPoints.length - 1);
         const applyOffset = (point: Vec2) =>
           connectorDragState.axis === 'horizontal'
             ? { ...point, y: point.y + offset }
@@ -1365,6 +1401,9 @@ const CanvasComponent = (
           nextPoints[startIndex] = applyOffset(nextPoints[startIndex]);
           nextPoints[endIndex] = applyOffset(nextPoints[endIndex]);
         }
+
+        trackedSegmentStart = nextPoints[startIndex] ? { ...nextPoints[startIndex] } : null;
+        trackedSegmentEnd = nextPoints[endIndex] ? { ...nextPoints[endIndex] } : null;
       }
 
       const startPoint = nextPoints[0];
@@ -1374,15 +1413,41 @@ const CanvasComponent = (
         interior = tidyOrthogonalWaypoints(startPoint, interior, endPoint);
       }
 
-      connectorDragState.basePoints = [
-        startPoint,
+      const base = [
+        { ...startPoint },
         ...interior.map((point) => ({ ...point })),
-        endPoint
+        { ...endPoint }
       ];
-      connectorDragState.workingPoints = connectorDragState.basePoints.map((point) => ({ ...point }));
+
+      connectorDragState.basePoints = base;
+      connectorDragState.workingPoints = base.map((point) => ({ ...point }));
       connectorDragState.currentWaypoints = interior.map((point) => ({ ...point }));
       connectorDragState.initialPointer = worldPoint;
       connectorDragState.split = undefined;
+
+      if (
+        connectorDragState.kind === 'segment' &&
+        trackedSegmentStart &&
+        trackedSegmentEnd
+      ) {
+        const startMatch = base.findIndex((point) => pointsRoughlyEqual(point, trackedSegmentStart));
+        const endMatch = base.findIndex((point) => pointsRoughlyEqual(point, trackedSegmentEnd));
+        if (startMatch !== -1 && endMatch !== -1) {
+          const minIndex = Math.min(startMatch, endMatch);
+          const maxIndex = Math.max(startMatch, endMatch);
+          connectorDragState.segmentIndex = minIndex;
+          connectorDragState.axis =
+            Math.abs(base[maxIndex].x - base[minIndex].x) >=
+            Math.abs(base[maxIndex].y - base[minIndex].y)
+              ? 'horizontal'
+              : 'vertical';
+          connectorDragState.segmentStartSnapshot = { ...base[minIndex] };
+          connectorDragState.segmentEndSnapshot = { ...base[maxIndex] };
+        } else {
+          connectorDragState.segmentStartSnapshot = trackedSegmentStart;
+          connectorDragState.segmentEndSnapshot = trackedSegmentEnd;
+        }
+      }
 
       updateConnector(connectorDragState.connectorId, {
         points: connectorDragState.currentWaypoints
@@ -2151,6 +2216,10 @@ const CanvasComponent = (
         basePoints.splice(insertIndex, 0, anchorPoint, pivotPoint, tailPoint);
       }
 
+      const pivotIndex = insertIndex + 1;
+      const tailIndex = insertIndex + 2;
+      const pivotSnapshot = basePoints[pivotIndex] ? { ...basePoints[pivotIndex] } : undefined;
+      const tailSnapshot = basePoints[tailIndex] ? { ...basePoints[tailIndex] } : undefined;
       const interior = basePoints.slice(1, basePoints.length - 1).map((point) => ({ ...point }));
       connectorDragStateRef.current = {
         pointerId: event.pointerId,
@@ -2165,7 +2234,9 @@ const CanvasComponent = (
         currentWaypoints: interior,
         initialPointer: worldPoint,
         moved: false,
-        split: { inserted: [insertIndex, insertIndex + 1, insertIndex + 2], axis }
+        split: { inserted: [insertIndex, insertIndex + 1, insertIndex + 2], axis },
+        segmentStartSnapshot: pivotSnapshot,
+        segmentEndSnapshot: tailSnapshot
       };
       updateConnector(connector.id, { points: interior });
     } else {
@@ -2181,7 +2252,11 @@ const CanvasComponent = (
         originalWaypoints: connector.points?.map((point) => ({ ...point })) ?? [],
         currentWaypoints: connector.points?.map((point) => ({ ...point })) ?? [],
         initialPointer: worldPoint,
-        moved: false
+        moved: false,
+        segmentStartSnapshot: basePoints[index] ? { ...basePoints[index] } : undefined,
+        segmentEndSnapshot: basePoints[index + 1]
+          ? { ...basePoints[index + 1] }
+          : undefined
       };
     }
     containerRef.current?.setPointerCapture(event.pointerId);
