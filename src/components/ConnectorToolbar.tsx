@@ -130,12 +130,6 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
     placementOptions
   ]);
 
-  // Connectors avoid nodes by default; only an explicit `false` opts into
-  // overlapping other shapes. Straight connectors ignore avoidance so that
-  // their geometry remains a single segment.
-  const isStraight = connector.mode === 'straight';
-  const avoidNodesEnabled = !isStraight && connector.style.avoidNodes !== false;
-
   if (!isVisible || !anchor) {
     return null;
   }
@@ -162,13 +156,6 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
 
   const handleDashToggle = () => {
     onStyleChange({ dashed: !connector.style.dashed });
-  };
-
-  const handleAvoidNodesToggle = () => {
-    if (isStraight) {
-      return;
-    }
-    onStyleChange({ avoidNodes: !avoidNodesEnabled });
   };
 
   const handleArrowChange = (key: 'startArrow' | 'endArrow', shape: ConnectorModel['style']['startArrow']) => {
@@ -362,18 +349,6 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
           <div className="connector-toolbar__actions">
             <button type="button" className="connector-toolbar__button" onClick={onFlipDirection}>
               Flip
-            </button>
-            <button
-              type="button"
-              className={`connector-toolbar__button${avoidNodesEnabled ? '' : ' is-active'}`}
-              onClick={handleAvoidNodesToggle}
-              aria-pressed={!avoidNodesEnabled}
-              disabled={isStraight}
-              title={
-                isStraight ? 'Straight connectors always allow lines to pass behind nodes.' : undefined
-              }
-            >
-              {avoidNodesEnabled ? 'Avoid On' : 'Avoid Off'}
             </button>
             <button type="button" className="connector-toolbar__button" onClick={onTidyPath}>
               Tidy

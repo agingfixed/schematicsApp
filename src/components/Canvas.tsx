@@ -38,9 +38,12 @@ import {
   CARDINAL_PORTS,
   cloneConnectorEndpoint,
   buildRoundedConnectorPath,
+  buildStraightConnectorBend,
   getConnectorPath,
   getConnectorPortAnchor,
+  getConnectorPortDirection,
   getConnectorPortPositions,
+  getConnectorStubLength,
   getNearestConnectorPort,
   getNormalAtRatio,
   getPointAtRatio,
@@ -830,16 +833,9 @@ const CanvasComponent = (
       if (mode === connector.mode) {
         return;
       }
-      let stylePatch: Partial<ConnectorModel['style']> | undefined;
-      if (mode === 'straight') {
-        stylePatch = { avoidNodes: false };
-      } else if (connector.mode === 'straight' && connector.style.avoidNodes === false) {
-        stylePatch = { avoidNodes: true };
-      }
       updateConnector(connector.id, {
         mode,
-        points: [],
-        ...(stylePatch ? { style: stylePatch } : {})
+        points: []
       });
     },
     [updateConnector]
@@ -2076,13 +2072,48 @@ const CanvasComponent = (
 
     const sourceNode = resolveEndpointNode(connector.source);
     const targetNode = resolveEndpointNode(connector.target);
-    const geometry = getConnectorPath(connector, sourceNode, targetNode, nodes);
+    let geometry = getConnectorPath(connector, sourceNode, targetNode, nodes);
     if (geometry.points.length < 2) {
       return;
     }
 
     const worldPoint = getWorldPoint(event);
-    const closest = findClosestPointOnPolyline(worldPoint, geometry.points);
+    const originalWaypoints = connector.points?.map((point) => ({ ...point })) ?? [];
+    let closest = findClosestPointOnPolyline(worldPoint, geometry.points);
+    let seededWaypoints: Vec2[] | null = null;
+
+    const segmentsShareAxis =
+      geometry.segments.length > 0 &&
+      geometry.segments.every(
+        (segment) => segment.axis !== 'diagonal' && segment.axis === geometry.segments[0].axis
+      );
+
+    if (
+      segmentsShareAxis &&
+      isAttachedConnectorEndpoint(connector.source) &&
+      isAttachedConnectorEndpoint(connector.target)
+    ) {
+      const startDirection = getConnectorPortDirection(connector.source.port);
+      const endDirection = getConnectorPortDirection(connector.target.port);
+      const stubLength = getConnectorStubLength(connector);
+      const seed = buildStraightConnectorBend(
+        geometry.start,
+        startDirection,
+        geometry.end,
+        endDirection,
+        stubLength
+      );
+      if (seed.length) {
+        seededWaypoints = seed.map((point) => ({ ...point }));
+        const seededConnector: ConnectorModel = {
+          ...connector,
+          points: seededWaypoints.map((point) => ({ ...point }))
+        };
+        geometry = getConnectorPath(seededConnector, sourceNode, targetNode, nodes);
+        closest = findClosestPointOnPolyline(worldPoint, geometry.points);
+      }
+    }
+
     const segmentIndex = closest.index;
     if (segmentIndex <= 0 || segmentIndex >= geometry.points.length - 2) {
       return;
@@ -2093,6 +2124,10 @@ const CanvasComponent = (
     const axis = inferSegmentAxis(segmentStart, segmentEnd);
 
     beginTransaction();
+
+    if (seededWaypoints) {
+      updateConnector(connector.id, { points: seededWaypoints }, { reroute: false });
+    }
 
     const pointerValue = axis === 'horizontal' ? worldPoint.y : worldPoint.x;
     const segmentValue = axis === 'horizontal' ? segmentStart.y : segmentStart.x;
@@ -2108,7 +2143,7 @@ const CanvasComponent = (
       start: { ...geometry.start },
       end: { ...geometry.end },
       baseWaypoints: geometry.waypoints.map((point) => ({ ...point })),
-      originalWaypoints: connector.points?.map((point) => ({ ...point })) ?? [],
+      originalWaypoints,
       previewWaypoints: geometry.waypoints.map((point) => ({ ...point })),
       previewPoints: geometry.points.map((point) => ({ ...point })),
       moved: false
