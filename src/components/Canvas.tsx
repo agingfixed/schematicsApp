@@ -96,7 +96,6 @@ const DEFAULT_CONNECTOR_LABEL_STYLE = {
 };
 const PORT_VISIBILITY_DISTANCE = 72;
 const PORT_SNAP_DISTANCE = 12;
-const POINT_TOLERANCE = 0.5;
 const PORT_TIE_DISTANCE = 0.25;
 const PORT_PRIORITY: Record<CardinalConnectorPort, number> = {
   top: 0,
@@ -134,8 +133,6 @@ const clampConnectorLabelOffset = (value: number) =>
 const clampConnectorLabelRadius = (value: number) =>
   Math.max(0, Math.min(MAX_CONNECTOR_LABEL_DISTANCE, Math.abs(value)));
 
-const pointsRoughlyEqual = (a: Vec2, b: Vec2) =>
-  Math.abs(a.x - b.x) <= POINT_TOLERANCE && Math.abs(a.y - b.y) <= POINT_TOLERANCE;
 export interface CanvasHandle {
   zoomIn: () => void;
   zoomOut: () => void;
@@ -196,25 +193,45 @@ type PendingConnection =
       bypassSnap: boolean;
     };
 
-interface ConnectorDragState {
+type ConnectorSegmentAxis = 'horizontal' | 'vertical';
+
+interface ConnectorEditStateBase {
   pointerId: number;
   connectorId: string;
-  kind: 'waypoint' | 'segment';
-  waypointIndex?: number;
-  segmentIndex?: number;
-  axis?: 'horizontal' | 'vertical';
-  mode: ConnectorModel['mode'];
-  basePoints: Vec2[];
-  workingPoints: Vec2[];
+  start: Vec2;
+  end: Vec2;
+  baseWaypoints: Vec2[];
   originalWaypoints: Vec2[];
-  currentWaypoints: Vec2[];
-  initialPointer: Vec2;
+  previewWaypoints: Vec2[];
+  previewPoints: Vec2[];
   moved: boolean;
-  split?: {
-    inserted: [number, number, number];
-    axis: 'horizontal' | 'vertical';
-  };
 }
+
+interface ConnectorSegmentDragState extends ConnectorEditStateBase {
+  type: 'segment';
+  segmentIndex: number;
+  axis: ConnectorSegmentAxis;
+  grabOffset: number;
+}
+
+interface ConnectorJointDragState extends ConnectorEditStateBase {
+  type: 'joint';
+  waypointIndex: number;
+  grabOffset: Vec2;
+  prevAxis: ConnectorSegmentAxis | null;
+  nextAxis: ConnectorSegmentAxis | null;
+}
+
+type ConnectorEditState = ConnectorSegmentDragState | ConnectorJointDragState;
+
+const inferSegmentAxis = (start: Vec2, end: Vec2): ConnectorSegmentAxis => {
+  const dx = Math.abs(end.x - start.x);
+  const dy = Math.abs(end.y - start.y);
+  if (dx >= dy) {
+    return 'horizontal';
+  }
+  return 'vertical';
+};
 
 interface ConnectorLabelDragState {
   pointerId: number;
@@ -283,7 +300,7 @@ const CanvasComponent = (
   const resizeStateRef = useRef<ResizeState | null>(null);
   const connectionPointerRef = useRef<number | null>(null);
   const initialFitDoneRef = useRef(false);
-  const connectorDragStateRef = useRef<ConnectorDragState | null>(null);
+  const connectorEditRef = useRef<ConnectorEditState | null>(null);
   const releasePointerCapture = useCallback((pointerId: number) => {
     const element = containerRef.current;
     if (element && element.hasPointerCapture(pointerId)) {
@@ -312,6 +329,7 @@ const CanvasComponent = (
   const setGlobalTransform = useSceneStore((state) => state.setTransform);
   const setEditingNode = useSceneStore((state) => state.setEditingNode);
   const equalizeSpacing = useSceneStore((state) => state.equalizeSpacing);
+  const setNodeLink = useSceneStore((state) => state.setNodeLink);
   const { applyStyles, setText } = useCommands();
 
   const selectedNodeIds = selection.nodeIds;
@@ -746,14 +764,18 @@ const CanvasComponent = (
   );
 
   const handleTextCommit = useCallback(
-    (value: string) => {
+    (value: string, metadata?: { linkUrl?: string }) => {
       if (editingNode) {
         setText(editingNode.id, value);
+        if (editingNode.shape === 'link') {
+          const url = metadata?.linkUrl?.trim() ?? '';
+          setNodeLink(editingNode.id, url.length ? url : null);
+        }
       }
       editingEntryPointRef.current = null;
       setEditingNode(null);
     },
-    [editingNode, setText, setEditingNode]
+    [editingNode, setNodeLink, setText, setEditingNode]
   );
 
   const handleTextCancel = useCallback(() => {
@@ -1238,159 +1260,95 @@ const CanvasComponent = (
     [connectors, nodes, resolveEndpointNode, updateConnector]
   );
 
-  const continueConnectorDrag = useCallback(
+  const continueConnectorEdit = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
-      const connectorDragState = connectorDragStateRef.current;
-      if (!connectorDragState || connectorDragState.pointerId !== event.pointerId) {
+      const edit = connectorEditRef.current;
+      if (!edit || edit.pointerId !== event.pointerId) {
         return false;
       }
 
       const worldPoint = getWorldPoint(event);
-      connectorDragState.moved = true;
+      const baseWaypoints = edit.baseWaypoints.map((point) => ({ ...point }));
+      const path = [
+        { ...edit.start },
+        ...baseWaypoints.map((point) => ({ ...point })),
+        { ...edit.end }
+      ];
 
-      if (
-        connectorDragState.kind === 'segment' &&
-        connectorDragState.segmentIndex !== undefined &&
-        connectorDragState.axis &&
-        connectorDragState.split
-      ) {
-        const nextPoints = connectorDragState.basePoints.map((point) => ({ ...point }));
-        const [anchorIndex, pivotIndex, tailIndex] = connectorDragState.split.inserted;
+      edit.moved = true;
 
-        if (
-          !nextPoints[anchorIndex] ||
-          !nextPoints[pivotIndex] ||
-          !nextPoints[tailIndex]
-        ) {
-          connectorDragState.split = undefined;
-        } else {
-          const offset =
-            connectorDragState.axis === 'horizontal'
-              ? worldPoint.y - connectorDragState.initialPointer.y
-              : worldPoint.x - connectorDragState.initialPointer.x;
-
-          if (connectorDragState.axis === 'horizontal') {
-            nextPoints[pivotIndex] = {
-              ...nextPoints[pivotIndex],
-              y: nextPoints[pivotIndex].y + offset
-            };
-            nextPoints[tailIndex] = {
-              ...nextPoints[tailIndex],
-              y: nextPoints[tailIndex].y + offset
-            };
-          } else {
-            nextPoints[pivotIndex] = {
-              ...nextPoints[pivotIndex],
-              x: nextPoints[pivotIndex].x + offset
-            };
-            nextPoints[tailIndex] = {
-              ...nextPoints[tailIndex],
-              x: nextPoints[tailIndex].x + offset
-            };
-          }
-
-          const anchorSnapshot = { ...nextPoints[anchorIndex] };
-          const pivotSnapshot = { ...nextPoints[pivotIndex] };
-          const tailSnapshot = { ...nextPoints[tailIndex] };
-
-          const startPoint = nextPoints[0];
-          const endPoint = nextPoints[nextPoints.length - 1];
-          let interior = nextPoints.slice(1, nextPoints.length - 1);
-          if (connectorDragState.mode === 'elbow') {
-            interior = tidyOrthogonalWaypoints(startPoint, interior, endPoint);
-          }
-
-          const newBase = [
-            startPoint,
-            ...interior.map((point) => ({ ...point })),
-            endPoint
-          ];
-
-          connectorDragState.basePoints = newBase.map((point) => ({ ...point }));
-          connectorDragState.workingPoints = connectorDragState.basePoints.map((point) => ({ ...point }));
-          connectorDragState.currentWaypoints = interior.map((point) => ({ ...point }));
-          connectorDragState.initialPointer = worldPoint;
-
-          const splitAxis = connectorDragState.split.axis;
-          const anchorIdx = newBase.findIndex((point) => pointsRoughlyEqual(point, anchorSnapshot));
-          const pivotIdx = newBase.findIndex((point) => pointsRoughlyEqual(point, pivotSnapshot));
-          const tailIdx = newBase.findIndex((point) => pointsRoughlyEqual(point, tailSnapshot));
-
-          if (anchorIdx === -1 || pivotIdx === -1 || tailIdx === -1) {
-            connectorDragState.split = undefined;
-          } else {
-            connectorDragState.split = {
-              inserted: [anchorIdx, pivotIdx, tailIdx],
-              axis: splitAxis
-            };
-          }
-
-          updateConnector(connectorDragState.connectorId, {
-            points: connectorDragState.currentWaypoints
-          });
+      if (edit.type === 'segment') {
+        const pointerValue = edit.axis === 'horizontal' ? worldPoint.y : worldPoint.x;
+        const newValue = pointerValue - edit.grabOffset;
+        const index = Math.max(0, Math.min(path.length - 2, edit.segmentIndex));
+        if (index === 0 || index === path.length - 2) {
           return true;
         }
-      }
-
-      const nextPoints = connectorDragState.basePoints.map((point) => ({ ...point }));
-
-      if (connectorDragState.kind === 'waypoint' && connectorDragState.waypointIndex !== undefined) {
-        const index = connectorDragState.waypointIndex + 1;
-        if (nextPoints[index]) {
-          nextPoints[index] = { x: worldPoint.x, y: worldPoint.y };
-        }
-      } else if (
-        connectorDragState.kind === 'segment' &&
-        connectorDragState.segmentIndex !== undefined &&
-        connectorDragState.axis
-      ) {
-        const offset =
-          connectorDragState.axis === 'horizontal'
-            ? worldPoint.y - connectorDragState.initialPointer.y
-            : worldPoint.x - connectorDragState.initialPointer.x;
-        const startIndex = connectorDragState.segmentIndex;
-        const endIndex = Math.min(connectorDragState.segmentIndex + 1, nextPoints.length - 1);
-        const applyOffset = (point: Vec2) =>
-          connectorDragState.axis === 'horizontal'
-            ? { ...point, y: point.y + offset }
-            : { ...point, x: point.x + offset };
-
-        if (startIndex === 0) {
-          if (endIndex < nextPoints.length) {
-            nextPoints[endIndex] = applyOffset(nextPoints[endIndex]);
-          }
-        } else if (endIndex === nextPoints.length - 1) {
-          nextPoints[startIndex] = applyOffset(nextPoints[startIndex]);
+        if (edit.axis === 'horizontal') {
+          path[index] = { ...path[index], y: newValue };
+          path[index + 1] = { ...path[index + 1], y: newValue };
         } else {
-          nextPoints[startIndex] = applyOffset(nextPoints[startIndex]);
-          nextPoints[endIndex] = applyOffset(nextPoints[endIndex]);
+          path[index] = { ...path[index], x: newValue };
+          path[index + 1] = { ...path[index + 1], x: newValue };
         }
+      } else {
+        const pathIndex = edit.waypointIndex + 1;
+        if (!path[pathIndex]) {
+          return true;
+        }
+        const point = {
+          x: worldPoint.x - edit.grabOffset.x,
+          y: worldPoint.y - edit.grabOffset.y
+        };
+
+        const prev = path[pathIndex - 1];
+        const next = path[pathIndex + 1];
+
+        if (edit.prevAxis === 'horizontal') {
+          if (pathIndex - 1 > 0) {
+            path[pathIndex - 1] = { ...prev, y: point.y };
+          } else {
+            point.y = prev.y;
+          }
+        } else if (edit.prevAxis === 'vertical') {
+          if (pathIndex - 1 > 0) {
+            path[pathIndex - 1] = { ...prev, x: point.x };
+          } else {
+            point.x = prev.x;
+          }
+        }
+
+        if (edit.nextAxis === 'horizontal') {
+          if (pathIndex + 1 < path.length - 1) {
+            path[pathIndex + 1] = { ...next, y: point.y };
+          } else if (next) {
+            point.y = next.y;
+          }
+        } else if (edit.nextAxis === 'vertical') {
+          if (pathIndex + 1 < path.length - 1) {
+            path[pathIndex + 1] = { ...next, x: point.x };
+          } else if (next) {
+            point.x = next.x;
+          }
+        }
+
+        path[pathIndex] = point;
       }
 
-      const startPoint = nextPoints[0];
-      const endPoint = nextPoints[nextPoints.length - 1];
-      let interior = nextPoints.slice(1, nextPoints.length - 1);
-      if (connectorDragState.mode === 'elbow') {
-        interior = tidyOrthogonalWaypoints(startPoint, interior, endPoint);
-      }
+      const startPoint = path[0];
+      const endPoint = path[path.length - 1];
+      const interior = path.slice(1, path.length - 1);
+      const cleaned = tidyOrthogonalWaypoints(startPoint, interior, endPoint).map((point) => ({ ...point }));
+      const previewPoints = [startPoint, ...cleaned, endPoint].map((point) => ({ ...point }));
 
-      connectorDragState.basePoints = [
-        startPoint,
-        ...interior.map((point) => ({ ...point })),
-        endPoint
-      ];
-      connectorDragState.workingPoints = connectorDragState.basePoints.map((point) => ({ ...point }));
-      connectorDragState.currentWaypoints = interior.map((point) => ({ ...point }));
-      connectorDragState.initialPointer = worldPoint;
-      connectorDragState.split = undefined;
+      edit.previewWaypoints = cleaned;
+      edit.previewPoints = previewPoints;
 
-      updateConnector(connectorDragState.connectorId, {
-        points: connectorDragState.currentWaypoints
-      });
+      updateConnector(edit.connectorId, { points: cleaned }, { reroute: false });
 
       return true;
     },
-    [updateConnector]
+    [getWorldPoint, updateConnector]
   );
 
   const continuePendingConnection = useCallback(
@@ -1539,18 +1497,28 @@ const CanvasComponent = (
     [endTransaction, releasePointerCapture]
   );
 
-  const finalizeConnectorDrag = useCallback(
+  const finalizeConnectorEdit = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
-      const drag = connectorDragStateRef.current;
-      if (!drag || drag.pointerId !== event.pointerId) {
+      const edit = connectorEditRef.current;
+      if (!edit || edit.pointerId !== event.pointerId) {
         return null;
       }
-      connectorDragStateRef.current = null;
-      const nextPoints = drag.moved ? drag.currentWaypoints : drag.originalWaypoints;
-      updateConnector(drag.connectorId, { points: nextPoints });
+      connectorEditRef.current = null;
+
+      let nextPoints: Vec2[];
+      if (edit.moved) {
+        const preview = edit.previewWaypoints.length
+          ? edit.previewWaypoints
+          : edit.baseWaypoints.map((point) => ({ ...point }));
+        nextPoints = tidyOrthogonalWaypoints(edit.start, preview, edit.end).map((point) => ({ ...point }));
+      } else {
+        nextPoints = edit.originalWaypoints.map((point) => ({ ...point }));
+      }
+
+      updateConnector(edit.connectorId, { points: nextPoints }, { reroute: false });
       endTransaction();
-      releasePointerCapture(event.pointerId);
-      return drag.moved;
+      releasePointerCapture(edit.pointerId);
+      return edit.moved;
     },
     [endTransaction, releasePointerCapture, updateConnector]
   );
@@ -1669,7 +1637,7 @@ const CanvasComponent = (
       return;
     }
 
-    if (continueConnectorDrag(event)) {
+    if (continueConnectorEdit(event)) {
       return;
     }
 
@@ -1703,10 +1671,10 @@ const CanvasComponent = (
     let connectorEditRequest: { connectorId: string; entryPoint: CaretPoint | null } | null = null;
     const pendingConnector = pendingConnectorEditRef.current;
     if (pendingConnector && pendingConnector.pointerId === event.pointerId) {
-      const connectorDrag = connectorDragStateRef.current;
+      const connectorEdit = connectorEditRef.current;
       const labelDrag = connectorLabelDragRef.current;
       const movedConnector =
-        connectorDrag && connectorDrag.pointerId === event.pointerId ? connectorDrag.moved : false;
+        connectorEdit && connectorEdit.pointerId === event.pointerId ? connectorEdit.moved : false;
       const movedLabel =
         labelDrag && labelDrag.pointerId === event.pointerId ? labelDrag.moved : false;
       if (!movedConnector && !movedLabel && tool === 'select') {
@@ -1724,7 +1692,7 @@ const CanvasComponent = (
       finalizePan,
       finalizeNodeDrag,
       finalizeSpacingDrag,
-      finalizeConnectorDrag,
+      finalizeConnectorEdit,
       finalizeConnectorLabelDrag,
       finalizeConnectionPointer
     ];
@@ -2047,14 +2015,13 @@ const CanvasComponent = (
     connector: ConnectorModel
   ) => {
     setLastPointerPosition(getRelativePoint(event));
-    if (tool !== 'select') {
+    if (tool !== 'select' || event.button !== 0) {
       return;
     }
-    if (event.button !== 0) {
-      return;
-    }
+
     pendingTextEditRef.current = null;
     commitEditingIfNeeded();
+
     const alreadySelected = selectedConnectorIds.includes(connector.id);
     let nextSelection = selectedConnectorIds;
     if (event.shiftKey) {
@@ -2103,10 +2070,7 @@ const CanvasComponent = (
       lastConnectorClickRef.current = null;
     }
 
-    if (!willBeSingleSelected) {
-      return;
-    }
-    if (connector.mode !== 'elbow') {
+    if (!willBeSingleSelected || connector.mode !== 'elbow') {
       return;
     }
 
@@ -2119,71 +2083,37 @@ const CanvasComponent = (
 
     const worldPoint = getWorldPoint(event);
     const closest = findClosestPointOnPolyline(worldPoint, geometry.points);
-    const { index } = closest;
-    const start = geometry.points[index];
-    const end = geometry.points[index + 1] ?? start;
-    const axis = Math.abs(end.x - start.x) >= Math.abs(end.y - start.y) ? 'horizontal' : 'vertical';
+    const segmentIndex = closest.index;
+    if (segmentIndex <= 0 || segmentIndex >= geometry.points.length - 2) {
+      return;
+    }
+
+    const segmentStart = geometry.points[segmentIndex];
+    const segmentEnd = geometry.points[segmentIndex + 1];
+    const axis = inferSegmentAxis(segmentStart, segmentEnd);
 
     beginTransaction();
-    const basePoints = geometry.points.map((point) => ({ ...point }));
 
-    if (event.altKey) {
-      const insertIndex = Math.min(index + 1, basePoints.length - 1);
-      const startPoint = basePoints[index];
-      const endPoint = basePoints[index + 1] ?? startPoint;
+    const pointerValue = axis === 'horizontal' ? worldPoint.y : worldPoint.x;
+    const segmentValue = axis === 'horizontal' ? segmentStart.y : segmentStart.x;
+    const grabOffset = pointerValue - segmentValue;
 
-      const anchorPoint = { ...closest.point };
-      if (axis === 'horizontal') {
-        const minX = Math.min(startPoint.x, endPoint.x);
-        const maxX = Math.max(startPoint.x, endPoint.x);
-        anchorPoint.x = Math.max(minX, Math.min(maxX, anchorPoint.x));
-        anchorPoint.y = startPoint.y;
-        const pivotPoint: Vec2 = { x: anchorPoint.x, y: worldPoint.y };
-        const tailPoint: Vec2 = { x: endPoint.x, y: worldPoint.y };
-        basePoints.splice(insertIndex, 0, anchorPoint, pivotPoint, tailPoint);
-      } else {
-        const minY = Math.min(startPoint.y, endPoint.y);
-        const maxY = Math.max(startPoint.y, endPoint.y);
-        anchorPoint.y = Math.max(minY, Math.min(maxY, anchorPoint.y));
-        anchorPoint.x = startPoint.x;
-        const pivotPoint: Vec2 = { x: worldPoint.x, y: anchorPoint.y };
-        const tailPoint: Vec2 = { x: worldPoint.x, y: endPoint.y };
-        basePoints.splice(insertIndex, 0, anchorPoint, pivotPoint, tailPoint);
-      }
+    connectorEditRef.current = {
+      pointerId: event.pointerId,
+      connectorId: connector.id,
+      type: 'segment',
+      segmentIndex,
+      axis,
+      grabOffset,
+      start: { ...geometry.start },
+      end: { ...geometry.end },
+      baseWaypoints: geometry.waypoints.map((point) => ({ ...point })),
+      originalWaypoints: connector.points?.map((point) => ({ ...point })) ?? [],
+      previewWaypoints: geometry.waypoints.map((point) => ({ ...point })),
+      previewPoints: geometry.points.map((point) => ({ ...point })),
+      moved: false
+    };
 
-      const interior = basePoints.slice(1, basePoints.length - 1).map((point) => ({ ...point }));
-      connectorDragStateRef.current = {
-        pointerId: event.pointerId,
-        connectorId: connector.id,
-        kind: 'segment',
-        segmentIndex: insertIndex + 1,
-        axis,
-        mode: connector.mode,
-        basePoints: basePoints.map((point) => ({ ...point })),
-        workingPoints: basePoints.map((point) => ({ ...point })),
-        originalWaypoints: connector.points?.map((point) => ({ ...point })) ?? [],
-        currentWaypoints: interior,
-        initialPointer: worldPoint,
-        moved: false,
-        split: { inserted: [insertIndex, insertIndex + 1, insertIndex + 2], axis }
-      };
-      updateConnector(connector.id, { points: interior });
-    } else {
-      connectorDragStateRef.current = {
-        pointerId: event.pointerId,
-        connectorId: connector.id,
-        kind: 'segment',
-        segmentIndex: index,
-        axis,
-        mode: connector.mode,
-        basePoints,
-        workingPoints: basePoints.map((point) => ({ ...point })),
-        originalWaypoints: connector.points?.map((point) => ({ ...point })) ?? [],
-        currentWaypoints: connector.points?.map((point) => ({ ...point })) ?? [],
-        initialPointer: worldPoint,
-        moved: false
-      };
-    }
     containerRef.current?.setPointerCapture(event.pointerId);
   };
 
@@ -2192,10 +2122,7 @@ const CanvasComponent = (
     connector: ConnectorModel,
     pointIndex: number
   ) => {
-    if (tool !== 'select') {
-      return;
-    }
-    if (event.button !== 0) {
+    if (tool !== 'select' || event.button !== 0) {
       return;
     }
 
@@ -2203,37 +2130,55 @@ const CanvasComponent = (
     commitEditingIfNeeded();
     event.stopPropagation();
 
-    const alreadySelected = selectedConnectorIds.includes(connector.id);
-    if (!alreadySelected) {
+    if (!selectedConnectorIds.includes(connector.id)) {
       setSelection({ nodeIds: [], connectorIds: [connector.id] });
     }
 
-    const sourceNode = resolveEndpointNode(connector.source);
-    const targetNode = resolveEndpointNode(connector.target);
     if (connector.mode !== 'elbow') {
       return;
     }
 
+    const sourceNode = resolveEndpointNode(connector.source);
+    const targetNode = resolveEndpointNode(connector.target);
     const geometry = getConnectorPath(connector, sourceNode, targetNode, nodes);
-    if (!geometry.points[pointIndex + 1]) {
+    const waypoint = geometry.waypoints[pointIndex];
+    if (!waypoint) {
       return;
     }
 
+    const pathIndex = pointIndex + 1;
+    const worldPoint = getWorldPoint(event);
+    const grabOffset = { x: worldPoint.x - waypoint.x, y: worldPoint.y - waypoint.y };
+
+    const prevPoint = geometry.points[pathIndex - 1];
+    const nextPoint = geometry.points[pathIndex + 1];
+
+    const prevAxis =
+      pathIndex > 0 ? inferSegmentAxis(prevPoint, geometry.points[pathIndex]) : null;
+    const nextAxis =
+      pathIndex < geometry.points.length - 1
+        ? inferSegmentAxis(geometry.points[pathIndex], nextPoint ?? geometry.points[pathIndex])
+        : null;
+
     beginTransaction();
-    const basePoints = geometry.points.map((point) => ({ ...point }));
-    connectorDragStateRef.current = {
+
+    connectorEditRef.current = {
       pointerId: event.pointerId,
       connectorId: connector.id,
-      kind: 'waypoint',
+      type: 'joint',
       waypointIndex: pointIndex,
-      mode: connector.mode,
-      basePoints,
-      workingPoints: basePoints.map((point) => ({ ...point })),
+      grabOffset,
+      prevAxis,
+      nextAxis,
+      start: { ...geometry.start },
+      end: { ...geometry.end },
+      baseWaypoints: geometry.waypoints.map((point) => ({ ...point })),
       originalWaypoints: connector.points?.map((point) => ({ ...point })) ?? [],
-      currentWaypoints: connector.points?.map((point) => ({ ...point })) ?? [],
-      initialPointer: getWorldPoint(event),
+      previewWaypoints: geometry.waypoints.map((point) => ({ ...point })),
+      previewPoints: geometry.points.map((point) => ({ ...point })),
       moved: false
     };
+
     containerRef.current?.setPointerCapture(event.pointerId);
   };
 
@@ -2699,13 +2644,13 @@ const CanvasComponent = (
           endTransaction();
           releasePointerCapture(resizeState.pointerId);
         }
-        if (connectorDragStateRef.current) {
-          const drag = connectorDragStateRef.current;
-          connectorDragStateRef.current = null;
-          updateConnector(drag.connectorId, { points: drag.originalPoints });
+        if (connectorEditRef.current) {
+          const edit = connectorEditRef.current;
+          connectorEditRef.current = null;
+          updateConnector(edit.connectorId, { points: edit.originalWaypoints }, { reroute: false });
           endTransaction();
-          if (containerRef.current && drag.pointerId !== undefined) {
-            releasePointerCapture(drag.pointerId);
+          if (containerRef.current && edit.pointerId !== undefined) {
+            releasePointerCapture(edit.pointerId);
           }
         }
         if (connectionPointerRef.current !== null) {
@@ -2746,6 +2691,8 @@ const CanvasComponent = (
       opacity
     } as React.CSSProperties;
   }, [transform, gridVisible]);
+
+  const activeConnectorEdit = connectorEditRef.current;
 
   const pendingPreview = useMemo(() => {
     if (!pendingConnection) {
@@ -2898,6 +2845,11 @@ const CanvasComponent = (
               onRequestLabelEdit={(point) => handleConnectorRequestLabelEdit(connector.id, point)}
               onLabelPointerDown={(event) => handleConnectorLabelPointerDown(event, connector)}
               shouldIgnoreLabelBlur={isConnectorLabelToolbarInteracting}
+              previewPoints={
+                activeConnectorEdit?.connectorId === connector.id
+                  ? activeConnectorEdit.previewPoints
+                  : undefined
+              }
             />
           ))}
           {nodes.map((node) => (
