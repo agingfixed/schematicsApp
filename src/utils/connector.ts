@@ -21,9 +21,9 @@ type ResolvedEndpoint = {
 };
 
 const directionForPort: Record<CardinalConnectorPort, ConnectorDirection> = {
-  top: 'up',
+  top: 'down',
   right: 'right',
-  bottom: 'down',
+  bottom: 'up',
   left: 'left'
 };
 
@@ -156,10 +156,6 @@ const buildDefaultWaypoints = (
   start: ResolvedEndpoint,
   end: ResolvedEndpoint
 ): Vec2[] => {
-  if (connector.mode === 'straight') {
-    return [];
-  }
-
   const stubLength = getConnectorStubLength(connector);
   const startHasStub = shouldAddStub(start.direction);
   const endHasStub = shouldAddStub(end.direction);
@@ -172,27 +168,29 @@ const buildDefaultWaypoints = (
     waypoints.push(startStub);
   }
 
-  const routeStart = startHasStub ? startStub : start.point;
-  const routeEnd = endHasStub ? endStub : end.point;
+  if (connector.mode !== 'straight') {
+    const routeStart = startHasStub ? startStub : start.point;
+    const routeEnd = endHasStub ? endStub : end.point;
 
-  const bridgeNeeded = !nearlyEqual(routeStart.x, routeEnd.x) && !nearlyEqual(routeStart.y, routeEnd.y);
+    const bridgeNeeded = !nearlyEqual(routeStart.x, routeEnd.x) && !nearlyEqual(routeStart.y, routeEnd.y);
 
-  if (bridgeNeeded) {
-    const horizontalFirst =
-      start.direction === 'left' || start.direction === 'right'
-        ? true
-        : start.direction === 'up' || start.direction === 'down'
-        ? false
-        : end.direction === 'up' || end.direction === 'down'
-        ? true
-        : end.direction === 'left' || end.direction === 'right'
-        ? false
-        : Math.abs(routeEnd.x - routeStart.x) >= Math.abs(routeEnd.y - routeStart.y);
+    if (bridgeNeeded) {
+      const horizontalFirst =
+        start.direction === 'left' || start.direction === 'right'
+          ? true
+          : start.direction === 'up' || start.direction === 'down'
+          ? false
+          : end.direction === 'up' || end.direction === 'down'
+          ? true
+          : end.direction === 'left' || end.direction === 'right'
+          ? false
+          : Math.abs(routeEnd.x - routeStart.x) >= Math.abs(routeEnd.y - routeStart.y);
 
-    if (horizontalFirst) {
-      waypoints.push({ x: routeEnd.x, y: routeStart.y });
-    } else {
-      waypoints.push({ x: routeStart.x, y: routeEnd.y });
+      if (horizontalFirst) {
+        waypoints.push({ x: routeEnd.x, y: routeStart.y });
+      } else {
+        waypoints.push({ x: routeStart.x, y: routeEnd.y });
+      }
     }
   }
 
