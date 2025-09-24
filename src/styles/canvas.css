@@ -86,6 +86,16 @@
   font-style: italic;
 }
 
+.diagram-node--link .diagram-node__label {
+  font-style: italic !important;
+  text-decoration: underline !important;
+}
+
+.diagram-node--link .diagram-node__label * {
+  font-style: inherit !important;
+  text-decoration: inherit !important;
+}
+
 .diagram-node__label a:hover {
   color: #bae6fd;
 }

@@ -26,6 +26,16 @@
   font-style: italic;
 }
 
+.inline-text-editor--link {
+  font-style: italic !important;
+  text-decoration: underline !important;
+}
+
+.inline-text-editor--link * {
+  font-style: inherit !important;
+  text-decoration: inherit !important;
+}
+
 .inline-text-editor ul,
 .inline-text-editor ol {
   margin: 0 0 0.5em;

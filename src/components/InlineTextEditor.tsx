@@ -110,6 +110,7 @@ const InlineTextEditorComponent = (
     return null;
   }
 
+  const isLinkNode = node.shape === 'link';
   const paddingTop = 6 * scale;
   const paddingBottom = 10 * scale;
   const paddingX = 14 * scale;
@@ -131,7 +132,9 @@ const InlineTextEditorComponent = (
     overflow: 'hidden',
     background: 'transparent',
     caretColor: node.textColor,
-    zIndex: 30
+    zIndex: 30,
+    fontStyle: isLinkNode ? 'italic' : undefined,
+    textDecoration: isLinkNode ? 'underline' : undefined
   };
 
   const handleInput = () => {
@@ -173,11 +176,12 @@ const InlineTextEditorComponent = (
   return (
     <div
       ref={editorRef}
-      className="inline-text-editor"
+      className={`inline-text-editor ${isLinkNode ? 'inline-text-editor--link' : ''}`.trim()}
       style={style}
       contentEditable
       suppressContentEditableWarning
       spellCheck={false}
+      translate="no"
       role="textbox"
       aria-multiline="true"
       onInput={handleInput}

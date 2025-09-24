@@ -64,13 +64,14 @@ const textNodeDefaults = {
 };
 
 export const createNodeModel = (shape: NodeKind, position: Vec2, text?: string): NodeModel => {
-  if (shape === 'text') {
+  if (shape === 'text' || shape === 'link') {
+    const defaultText = shape === 'link' ? 'Link' : textNodeDefaults.text;
     return {
       id: nanoid(),
       shape,
       position: { ...position },
       size: { ...textNodeDefaults.size },
-      text: ensureHtmlContent(text ?? textNodeDefaults.text),
+      text: ensureHtmlContent(text ?? defaultText),
       textAlign: textNodeDefaults.textAlign,
       fontSize: textNodeDefaults.fontSize,
       fontWeight: textNodeDefaults.fontWeight,
@@ -109,7 +110,7 @@ export const createNodeModel = (shape: NodeKind, position: Vec2, text?: string):
 };
 
 export const getDefaultNodeSize = (shape: NodeKind) => {
-  if (shape === 'text') {
+  if (shape === 'text' || shape === 'link') {
     return { ...textNodeDefaults.size };
   }
   const key = Object.prototype.hasOwnProperty.call(defaultNodeSizes, shape)
