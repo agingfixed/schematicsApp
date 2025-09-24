@@ -9,6 +9,7 @@ import React, {
   useRef,
   useState
 } from 'react';
+import { nanoid } from 'nanoid';
 import {
   AttachedConnectorEndpoint,
   CanvasTransform,
@@ -17,6 +18,7 @@ import {
   ConnectorModel,
   NodeKind,
   NodeModel,
+  SelectionState,
   Tool,
   Vec2,
   isAttachedConnectorEndpoint
@@ -118,6 +120,9 @@ const PENDING_CONNECTOR_STYLE: ConnectorModel['style'] = {
   cornerRadius: 12
 };
 
+const MARQUEE_ACTIVATION_THRESHOLD = 2;
+const PASTE_OFFSET_STEP = 32;
+
 const NODE_CREATION_TOOLS: ReadonlyArray<NodeKind> = [
   'rectangle',
   'circle',
@@ -198,6 +203,75 @@ type PendingConnection =
     };
 
 type ConnectorSegmentAxis = 'horizontal' | 'vertical';
+
+interface MarqueeState {
+  pointerId: number;
+  originWorld: Vec2;
+  currentWorld: Vec2;
+  originScreen: Vec2;
+  currentScreen: Vec2;
+  additive: boolean;
+  baseSelection: SelectionState;
+  active: boolean;
+}
+
+interface MarqueeRect {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+interface ClipboardPayload {
+  nodes: NodeModel[];
+  connectors: ConnectorModel[];
+}
+
+const cloneNodeForClipboard = (node: NodeModel): NodeModel => ({
+  ...node,
+  position: { ...node.position },
+  size: { ...node.size },
+  stroke: { ...node.stroke },
+  link: node.link ? { ...node.link } : undefined
+});
+
+const cloneConnectorStyle = (style: ConnectorModel['style']): ConnectorModel['style'] => ({
+  ...style,
+  startArrow: style.startArrow ? { ...style.startArrow } : undefined,
+  endArrow: style.endArrow ? { ...style.endArrow } : undefined
+});
+
+const cloneConnectorForClipboard = (connector: ConnectorModel): ConnectorModel => ({
+  ...connector,
+  source: cloneConnectorEndpoint(connector.source),
+  target: cloneConnectorEndpoint(connector.target),
+  style: cloneConnectorStyle(connector.style),
+  labelStyle: connector.labelStyle ? { ...connector.labelStyle } : undefined,
+  points: connector.points?.map((point) => ({ ...point }))
+});
+
+const pointInBounds = (point: Vec2, bounds: { minX: number; minY: number; maxX: number; maxY: number }) =>
+  point.x >= bounds.minX &&
+  point.x <= bounds.maxX &&
+  point.y >= bounds.minY &&
+  point.y <= bounds.maxY;
+
+const getEndpointPosition = (
+  endpoint: ConnectorEndpoint,
+  nodes: NodeModel[]
+): Vec2 | null => {
+  if (isAttachedConnectorEndpoint(endpoint)) {
+    const node = nodes.find((item) => item.id === endpoint.nodeId);
+    if (!node) {
+      return null;
+    }
+    return getConnectorPortAnchor(node, endpoint.port);
+  }
+  if ('position' in endpoint) {
+    return { ...endpoint.position };
+  }
+  return null;
+};
 
 interface ConnectorEditStateBase {
   pointerId: number;
@@ -307,6 +381,10 @@ const CanvasComponent = (
   const connectionPointerRef = useRef<number | null>(null);
   const initialFitDoneRef = useRef(false);
   const connectorEditRef = useRef<ConnectorEditState | null>(null);
+  const marqueeStateRef = useRef<MarqueeState | null>(null);
+  const [marqueeRect, setMarqueeRect] = useState<MarqueeRect | null>(null);
+  const clipboardRef = useRef<ClipboardPayload | null>(null);
+  const lastPasteOffsetRef = useRef<Vec2>({ x: 0, y: 0 });
   const releasePointerCapture = useCallback((pointerId: number) => {
     const element = containerRef.current;
     if (element && element.hasPointerCapture(pointerId)) {
@@ -324,6 +402,7 @@ const CanvasComponent = (
   const setSelection = useSceneStore((state) => state.setSelection);
   const clearSelection = useSceneStore((state) => state.clearSelection);
   const addNode = useSceneStore((state) => state.addNode);
+  const addEntities = useSceneStore((state) => state.addEntities);
   const removeNode = useSceneStore((state) => state.removeNode);
   const beginTransaction = useSceneStore((state) => state.beginTransaction);
   const endTransaction = useSceneStore((state) => state.endTransaction);
@@ -494,6 +573,96 @@ const CanvasComponent = (
     },
     [addConnector, connectors, hasConnectorBetween, setSelection, updateConnector]
   );
+
+  const updateMarqueeSelection = useCallback(
+    (marquee: MarqueeState) => {
+      const bounds = {
+        minX: Math.min(marquee.originWorld.x, marquee.currentWorld.x),
+        minY: Math.min(marquee.originWorld.y, marquee.currentWorld.y),
+        maxX: Math.max(marquee.originWorld.x, marquee.currentWorld.x),
+        maxY: Math.max(marquee.originWorld.y, marquee.currentWorld.y)
+      };
+
+      const insideNodeIds = nodes
+        .filter(
+          (node) =>
+            node.position.x >= bounds.minX &&
+            node.position.y >= bounds.minY &&
+            node.position.x + node.size.width <= bounds.maxX &&
+            node.position.y + node.size.height <= bounds.maxY
+        )
+        .map((node) => node.id);
+
+      const combinedNodeIds = marquee.additive
+        ? Array.from(new Set([...marquee.baseSelection.nodeIds, ...insideNodeIds]))
+        : insideNodeIds;
+
+      const combinedNodeSet = new Set(combinedNodeIds);
+
+      const insideConnectorIds: string[] = [];
+      connectors.forEach((connector) => {
+        const sourceAttached = isAttachedConnectorEndpoint(connector.source);
+        const targetAttached = isAttachedConnectorEndpoint(connector.target);
+
+        if (sourceAttached && targetAttached) {
+          if (
+            combinedNodeSet.has(connector.source.nodeId) &&
+            combinedNodeSet.has(connector.target.nodeId)
+          ) {
+            insideConnectorIds.push(connector.id);
+            return;
+          }
+        }
+
+        const sourcePoint = getEndpointPosition(connector.source, nodes);
+        const targetPoint = getEndpointPosition(connector.target, nodes);
+        if (
+          sourcePoint &&
+          targetPoint &&
+          pointInBounds(sourcePoint, bounds) &&
+          pointInBounds(targetPoint, bounds)
+        ) {
+          insideConnectorIds.push(connector.id);
+        }
+      });
+
+      const combinedConnectorIds = marquee.additive
+        ? Array.from(new Set([...marquee.baseSelection.connectorIds, ...insideConnectorIds]))
+        : insideConnectorIds;
+
+      setSelection({ nodeIds: combinedNodeIds, connectorIds: combinedConnectorIds });
+    },
+    [connectors, nodes, setSelection]
+  );
+
+  const copySelection = useCallback(() => {
+    if (!selectedNodeIds.length && !selectedConnectorIds.length) {
+      clipboardRef.current = null;
+      return false;
+    }
+
+    const nodeLookup = new Map(nodes.map((node) => [node.id, node]));
+    const selectedNodes = selectedNodeIds
+      .map((id) => nodeLookup.get(id))
+      .filter((node): node is NodeModel => Boolean(node));
+
+    if (!selectedNodes.length) {
+      clipboardRef.current = null;
+      return false;
+    }
+
+    const connectorLookup = new Map(connectors.map((connector) => [connector.id, connector]));
+    const selectedConnectors = selectedConnectorIds
+      .map((id) => connectorLookup.get(id))
+      .filter((connector): connector is ConnectorModel => Boolean(connector));
+
+    clipboardRef.current = {
+      nodes: selectedNodes.map(cloneNodeForClipboard),
+      connectors: selectedConnectors.map(cloneConnectorForClipboard)
+    };
+    lastPasteOffsetRef.current = { x: 0, y: 0 };
+    return true;
+  }, [connectors, nodes, selectedConnectorIds, selectedNodeIds]);
 
   const getRelativePoint = (event: PointerEvent | React.PointerEvent) => {
     const rect = containerRef.current?.getBoundingClientRect();
@@ -773,6 +942,74 @@ const CanvasComponent = (
       inlineEditorRef.current?.commit();
     }
   }, [editingConnectorId, editingNodeId]);
+
+  const pasteClipboard = useCallback(() => {
+    const clipboard = clipboardRef.current;
+    if (!clipboard || !clipboard.nodes.length) {
+      return false;
+    }
+
+    commitEditingIfNeeded();
+
+    lastPasteOffsetRef.current = {
+      x: lastPasteOffsetRef.current.x + PASTE_OFFSET_STEP,
+      y: lastPasteOffsetRef.current.y + PASTE_OFFSET_STEP
+    };
+    const offset = lastPasteOffsetRef.current;
+
+    const nodeIdMap = new Map<string, string>();
+    const newNodes = clipboard.nodes.map((node) => {
+      const id = nanoid();
+      nodeIdMap.set(node.id, id);
+      const cloned = cloneNodeForClipboard(node);
+      cloned.id = id;
+      cloned.position = {
+        x: node.position.x + offset.x,
+        y: node.position.y + offset.y
+      };
+      return cloned;
+    });
+
+    const remapEndpoint = (endpoint: ConnectorEndpoint): ConnectorEndpoint | null => {
+      if (isAttachedConnectorEndpoint(endpoint)) {
+        const mappedId = nodeIdMap.get(endpoint.nodeId);
+        if (!mappedId) {
+          return null;
+        }
+        return { nodeId: mappedId, port: endpoint.port };
+      }
+      if ('position' in endpoint) {
+        return {
+          position: {
+            x: endpoint.position.x + offset.x,
+            y: endpoint.position.y + offset.y
+          }
+        };
+      }
+      return null;
+    };
+
+    const newConnectors: ConnectorModel[] = [];
+    clipboard.connectors.forEach((connector) => {
+      const nextSource = remapEndpoint(connector.source);
+      const nextTarget = remapEndpoint(connector.target);
+      if (!nextSource || !nextTarget) {
+        return;
+      }
+      const cloned = cloneConnectorForClipboard(connector);
+      cloned.id = nanoid();
+      cloned.source = nextSource;
+      cloned.target = nextTarget;
+      cloned.points = cloned.points?.map((point) => ({
+        x: point.x + offset.x,
+        y: point.y + offset.y
+      }));
+      newConnectors.push(cloned);
+    });
+
+    const selectionResult = addEntities({ nodes: newNodes, connectors: newConnectors });
+    return Boolean(selectionResult.nodeIds.length || selectionResult.connectorIds.length);
+  }, [addEntities, commitEditingIfNeeded]);
 
   const beginTextEditing = useCallback(
     (nodeId: string, point?: { x: number; y: number }) => {
@@ -1509,6 +1746,29 @@ const CanvasComponent = (
     [endTransaction, releasePointerCapture]
   );
 
+  const finalizeMarquee = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      const marquee = marqueeStateRef.current;
+      if (!marquee || marquee.pointerId !== event.pointerId) {
+        return null;
+      }
+
+      if (marquee.active) {
+        updateMarqueeSelection(marquee);
+      } else if (marquee.additive) {
+        setSelection(marquee.baseSelection);
+      } else {
+        setSelection({ nodeIds: [], connectorIds: [] });
+      }
+
+      marqueeStateRef.current = null;
+      setMarqueeRect(null);
+      releasePointerCapture(event.pointerId);
+      return marquee.active;
+    },
+    [releasePointerCapture, setSelection, updateMarqueeSelection]
+  );
+
   const finalizePan = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
       const panState = panStateRef.current;
@@ -1649,9 +1909,25 @@ const CanvasComponent = (
     commitEditingIfNeeded();
 
     if (tool === 'select') {
-      if (!event.shiftKey) {
-        clearSelection();
+      const selectionSnapshot = useSceneStore.getState().selection;
+      const additive = event.shiftKey;
+      if (!additive) {
+        setSelection({ nodeIds: [], connectorIds: [] });
       }
+      const worldPoint = getWorldPoint(event);
+      const screenPoint = getRelativePoint(event);
+      marqueeStateRef.current = {
+        pointerId: event.pointerId,
+        originWorld: worldPoint,
+        currentWorld: worldPoint,
+        originScreen: screenPoint,
+        currentScreen: screenPoint,
+        additive,
+        baseSelection: additive ? selectionSnapshot : { nodeIds: [], connectorIds: [] },
+        active: false
+      };
+      setMarqueeRect(null);
+      event.currentTarget.setPointerCapture(event.pointerId);
       return;
     }
 
@@ -1676,6 +1952,35 @@ const CanvasComponent = (
       event.preventDefault();
       event.stopPropagation();
       updateResizeDrag(event, resizeState);
+      return;
+    }
+
+    const marquee = marqueeStateRef.current;
+    if (marquee && marquee.pointerId === event.pointerId) {
+      const screenPoint = getRelativePoint(event);
+      const worldPoint = getWorldPoint(event);
+      marquee.currentWorld = worldPoint;
+      marquee.currentScreen = screenPoint;
+
+      const deltaX = screenPoint.x - marquee.originScreen.x;
+      const deltaY = screenPoint.y - marquee.originScreen.y;
+      const shouldActivate =
+        marquee.active ||
+        Math.abs(deltaX) > MARQUEE_ACTIVATION_THRESHOLD ||
+        Math.abs(deltaY) > MARQUEE_ACTIVATION_THRESHOLD;
+
+      if (shouldActivate) {
+        marquee.active = true;
+        event.preventDefault();
+        event.stopPropagation();
+        setMarqueeRect({
+          left: Math.min(marquee.originScreen.x, screenPoint.x),
+          top: Math.min(marquee.originScreen.y, screenPoint.y),
+          width: Math.abs(deltaX),
+          height: Math.abs(deltaY)
+        });
+        updateMarqueeSelection(marquee);
+      }
       return;
     }
 
@@ -1746,6 +2051,7 @@ const CanvasComponent = (
 
     let handled = false;
     const finalizers = [
+      finalizeMarquee,
       finalizeResizeDrag,
       finalizePan,
       finalizeNodeDrag,
@@ -2691,36 +2997,53 @@ const CanvasComponent = (
         }
       }
 
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'b') {
-        if (singleNodeSelected && !editingNodeId) {
-          event.preventDefault();
-          const nextWeight = singleNodeSelected.fontWeight >= 700 ? 600 : 700;
-          applyStyles([singleNodeSelected.id], { fontWeight: nextWeight });
-        }
-        return;
-      }
-
-      if ((event.metaKey || event.ctrlKey) && event.shiftKey) {
-        const key = event.key.toLowerCase();
-        if (singleNodeSelected && !editingNodeId) {
-          if (key === 'l' || key === 'c' || key === 'r') {
-            event.preventDefault();
-            const align = key === 'l' ? 'left' : key === 'c' ? 'center' : 'right';
-            applyStyles([singleNodeSelected.id], { textAlign: align });
-            return;
-          }
-        }
-      }
-
       if (event.metaKey || event.ctrlKey) {
-        if (!event.shiftKey && singleNodeSelected && !editingNodeId) {
-          if (event.key === '=' || event.key === '+') {
+        const key = event.key.toLowerCase();
+
+        if (key === 'c') {
+          if (tool === 'select' && !editingNodeId) {
+            const copied = copySelection();
+            if (copied) {
+              event.preventDefault();
+            }
+          }
+          return;
+        }
+
+        if (key === 'v') {
+          if (tool === 'select' && !editingNodeId) {
+            event.preventDefault();
+            pasteClipboard();
+          }
+          return;
+        }
+
+        if (key === 'b') {
+          if (singleNodeSelected && !editingNodeId) {
+            event.preventDefault();
+            const nextWeight = singleNodeSelected.fontWeight >= 700 ? 600 : 700;
+            applyStyles([singleNodeSelected.id], { fontWeight: nextWeight });
+          }
+          return;
+        }
+
+        if (event.shiftKey) {
+          if (singleNodeSelected && !editingNodeId) {
+            if (key === 'l' || key === 'c' || key === 'r') {
+              event.preventDefault();
+              const align = key === 'l' ? 'left' : key === 'c' ? 'center' : 'right';
+              applyStyles([singleNodeSelected.id], { textAlign: align });
+              return;
+            }
+          }
+        } else if (singleNodeSelected && !editingNodeId) {
+          if (key === '=' || key === '+') {
             event.preventDefault();
             const next = Math.min(200, singleNodeSelected.fontSize + 1);
             applyStyles([singleNodeSelected.id], { fontSize: next });
             return;
           }
-          if (event.key === '-' || event.key === '_') {
+          if (key === '-' || key === '_') {
             event.preventDefault();
             const next = Math.max(8, singleNodeSelected.fontSize - 1);
             applyStyles([singleNodeSelected.id], { fontSize: next });
@@ -2780,16 +3103,20 @@ const CanvasComponent = (
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [
     nodes,
+    connectors,
     clearSelection,
     setSelection,
     handleDeleteSelection,
     selectedNodeIds,
     selectedNode,
+    selectedConnectorIds,
     tool,
     applyStyles,
     editingNodeId,
     beginTextEditing,
-    commitEditingIfNeeded
+    commitEditingIfNeeded,
+    copySelection,
+    pasteClipboard
   ]);
 
   const gridStyle = useMemo(() => {
@@ -2993,6 +3320,17 @@ const CanvasComponent = (
         </g>
       </svg>
       <div className="canvas-overlays" aria-hidden>
+        {marqueeRect && (
+          <div
+            className="canvas-marquee"
+            style={{
+              left: marqueeRect.left,
+              top: marqueeRect.top,
+              width: marqueeRect.width,
+              height: marqueeRect.height
+            }}
+          />
+        )}
         <svg className="canvas-guides" aria-hidden>
           {guideLines.map((guide) => (
             <line
