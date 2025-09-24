@@ -11,10 +11,9 @@ import {
 const EPSILON = 1e-6;
 const DEFAULT_STUB_LENGTH = 48;
 const MAX_PREVIEW_SNAP = 1e-3;
-
 export type ConnectorAxis = 'horizontal' | 'vertical' | 'diagonal';
 
-type ConnectorDirection = 'up' | 'down' | 'left' | 'right' | 'none';
+export type ConnectorDirection = 'up' | 'down' | 'left' | 'right' | 'none';
 
 type ResolvedEndpoint = {
   point: Vec2;
@@ -27,6 +26,12 @@ const directionForPort: Record<CardinalConnectorPort, ConnectorDirection> = {
   bottom: 'down',
   left: 'left'
 };
+
+export const getConnectorPortDirection = (port: CardinalConnectorPort): ConnectorDirection =>
+  directionForPort[port];
+
+export const getConnectorStubLength = (connector: ConnectorModel): number =>
+  connector.style.strokeWidth ? Math.max(36, connector.style.strokeWidth * 12) : DEFAULT_STUB_LENGTH;
 
 const clonePoint = (point: Vec2): Vec2 => ({ x: point.x, y: point.y });
 
@@ -51,7 +56,6 @@ const getNodeCenter = (node: NodeModel): Vec2 => ({
   x: node.position.x + node.size.width / 2,
   y: node.position.y + node.size.height / 2
 });
-
 export const CARDINAL_PORTS: CardinalConnectorPort[] = ['top', 'right', 'bottom', 'left'];
 
 const CARDINAL_PORT_LOOKUP = new Set<string>(CARDINAL_PORTS);
@@ -156,37 +160,129 @@ const buildDefaultWaypoints = (
     return [];
   }
 
-  const stubLength = connector.style.strokeWidth ? Math.max(36, connector.style.strokeWidth * 12) : DEFAULT_STUB_LENGTH;
-  const startStub = shouldAddStub(start.direction)
-    ? offsetPoint(start.point, start.direction, stubLength)
-    : clonePoint(start.point);
-  const endStub = shouldAddStub(end.direction)
-    ? offsetPoint(end.point, end.direction, stubLength)
-    : clonePoint(end.point);
+  const stubLength = getConnectorStubLength(connector);
+  const startHasStub = shouldAddStub(start.direction);
+  const endHasStub = shouldAddStub(end.direction);
+  const startStub = startHasStub ? offsetPoint(start.point, start.direction, stubLength) : clonePoint(start.point);
+  const endStub = endHasStub ? offsetPoint(end.point, end.direction, stubLength) : clonePoint(end.point);
 
   const waypoints: Vec2[] = [];
 
-  if (shouldAddStub(start.direction)) {
+  if (startHasStub) {
     waypoints.push(startStub);
   }
 
-  const bridgeNeeded =
-    !nearlyEqual(startStub.x, endStub.x) && !nearlyEqual(startStub.y, endStub.y);
+  const routeStart = startHasStub ? startStub : start.point;
+  const routeEnd = endHasStub ? endStub : end.point;
+
+  const bridgeNeeded = !nearlyEqual(routeStart.x, routeEnd.x) && !nearlyEqual(routeStart.y, routeEnd.y);
 
   if (bridgeNeeded) {
-    const horizontalFirst = Math.abs(endStub.x - startStub.x) >= Math.abs(endStub.y - startStub.y);
+    const horizontalFirst =
+      start.direction === 'left' || start.direction === 'right'
+        ? true
+        : start.direction === 'up' || start.direction === 'down'
+        ? false
+        : end.direction === 'up' || end.direction === 'down'
+        ? true
+        : end.direction === 'left' || end.direction === 'right'
+        ? false
+        : Math.abs(routeEnd.x - routeStart.x) >= Math.abs(routeEnd.y - routeStart.y);
+
     if (horizontalFirst) {
-      waypoints.push({ x: endStub.x, y: startStub.y });
+      waypoints.push({ x: routeEnd.x, y: routeStart.y });
     } else {
-      waypoints.push({ x: startStub.x, y: endStub.y });
+      waypoints.push({ x: routeStart.x, y: routeEnd.y });
     }
   }
 
-  if (shouldAddStub(end.direction)) {
+  if (endHasStub) {
     waypoints.push(endStub);
   }
 
   return waypoints.map(clonePoint);
+};
+
+const alignWaypointsToEndpoints = (
+  start: ResolvedEndpoint,
+  end: ResolvedEndpoint,
+  waypoints: Vec2[]
+): Vec2[] => {
+  if (!waypoints.length) {
+    return [];
+  }
+
+  const aligned = waypoints.map(clonePoint);
+
+  if (shouldAddStub(start.direction) && aligned[0]) {
+    const first = aligned[0];
+    if (start.direction === 'left' || start.direction === 'right') {
+      first.y = start.point.y;
+      if (start.direction === 'right' && first.x < start.point.x) {
+        first.x = start.point.x;
+      } else if (start.direction === 'left' && first.x > start.point.x) {
+        first.x = start.point.x;
+      }
+    } else {
+      first.x = start.point.x;
+      if (start.direction === 'down' && first.y < start.point.y) {
+        first.y = start.point.y;
+      } else if (start.direction === 'up' && first.y > start.point.y) {
+        first.y = start.point.y;
+      }
+    }
+  }
+
+  if (shouldAddStub(end.direction)) {
+    const lastIndex = aligned.length - 1;
+    if (lastIndex >= 0) {
+      const last = aligned[lastIndex];
+      if (end.direction === 'left' || end.direction === 'right') {
+        last.y = end.point.y;
+        if (end.direction === 'right' && last.x < end.point.x) {
+          last.x = end.point.x;
+        } else if (end.direction === 'left' && last.x > end.point.x) {
+          last.x = end.point.x;
+        }
+      } else {
+        last.x = end.point.x;
+        if (end.direction === 'down' && last.y < end.point.y) {
+          last.y = end.point.y;
+        } else if (end.direction === 'up' && last.y > end.point.y) {
+          last.y = end.point.y;
+        }
+      }
+    }
+  }
+
+  return aligned;
+};
+
+const getPerpendicularSign = (
+  orientation: 'horizontal' | 'vertical',
+  startDirection: ConnectorDirection,
+  endDirection: ConnectorDirection
+): number => {
+  const pick = (direction: ConnectorDirection) => {
+    if (orientation === 'horizontal') {
+      if (direction === 'up') {
+        return -1;
+      }
+      if (direction === 'down') {
+        return 1;
+      }
+    } else {
+      if (direction === 'left') {
+        return -1;
+      }
+      if (direction === 'right') {
+        return 1;
+      }
+    }
+    return 0;
+  };
+
+  return pick(startDirection) || pick(endDirection) || 1;
 };
 
 const stripDuplicateWaypoints = (waypoints: Vec2[]): Vec2[] => {
@@ -220,7 +316,8 @@ const mergeColinear = (points: Vec2[]): Vec2[] => {
     const next = points[index + 1];
     const horizontal = nearlyEqual(previous.y, current.y) && nearlyEqual(current.y, next.y);
     const vertical = nearlyEqual(previous.x, current.x) && nearlyEqual(current.x, next.x);
-    if (horizontal || vertical) {
+    const isEndpointAdjacent = merged.length === 1 || index === points.length - 2;
+    if ((horizontal || vertical) && !isEndpointAdjacent) {
       continue;
     }
     merged.push(clonePoint(current));
@@ -229,8 +326,343 @@ const mergeColinear = (points: Vec2[]): Vec2[] => {
   return merged;
 };
 
-export const tidyOrthogonalWaypoints = (start: Vec2, waypoints: Vec2[], end: Vec2): Vec2[] =>
-  mergeColinear([start, ...stripDuplicateWaypoints(waypoints), end]).slice(1, -1);
+const dedupePoints = (points: Vec2[]): Vec2[] => {
+  if (!points.length) {
+    return [];
+  }
+  const deduped: Vec2[] = [clonePoint(points[0])];
+  for (let index = 1; index < points.length; index += 1) {
+    const current = points[index];
+    const previous = deduped[deduped.length - 1];
+    if (nearlyEqual(previous.x, current.x) && nearlyEqual(previous.y, current.y)) {
+      continue;
+    }
+    deduped.push(clonePoint(current));
+  }
+  return deduped;
+};
+
+type OrthogonalAxis = 'horizontal' | 'vertical';
+
+const axisBetween = (start: Vec2, end: Vec2): OrthogonalAxis | null => {
+  if (nearlyEqual(start.x, end.x)) {
+    return 'vertical';
+  }
+  if (nearlyEqual(start.y, end.y)) {
+    return 'horizontal';
+  }
+  return null;
+};
+
+const removeAxisBacktracks = (points: Vec2[]): Vec2[] => {
+  if (points.length <= 2) {
+    return points.map(clonePoint);
+  }
+
+  const cleaned: Vec2[] = [clonePoint(points[0])];
+  for (let index = 1; index < points.length - 1; index += 1) {
+    const prev = cleaned[cleaned.length - 1];
+    const current = points[index];
+    const next = points[index + 1];
+    const prevAxis = axisBetween(prev, current);
+    const nextAxis = axisBetween(current, next);
+    const isFirstInterior = cleaned.length === 1;
+    const isLastInterior = index === points.length - 2;
+
+    if (prevAxis && nextAxis && prevAxis === nextAxis) {
+      const prevDelta = prevAxis === 'horizontal' ? current.x - prev.x : current.y - prev.y;
+      const nextDelta = nextAxis === 'horizontal' ? next.x - current.x : next.y - current.y;
+      const isFold =
+        prevDelta !== 0 && nextDelta !== 0 && Math.sign(prevDelta) !== Math.sign(nextDelta);
+      if (isFold || (!isFirstInterior && !isLastInterior)) {
+        continue;
+      }
+    }
+
+    cleaned.push(clonePoint(current));
+  }
+
+  cleaned.push(clonePoint(points[points.length - 1]));
+  return cleaned;
+};
+
+const MIN_DETOUR_SPAN = 12;
+
+const removeTightDetours = (points: Vec2[]): Vec2[] => {
+  if (points.length <= 3) {
+    return points.map(clonePoint);
+  }
+
+  const result = points.map(clonePoint);
+  let index = 1;
+  while (index < result.length - 2) {
+    const a = result[index - 1];
+    const b = result[index];
+    const c = result[index + 1];
+    const d = result[index + 2];
+    const axisAB = axisBetween(a, b);
+    const axisBC = axisBetween(b, c);
+    const axisCD = axisBetween(c, d);
+
+    if (axisAB && axisBC && axisCD && axisAB === axisCD && axisBC !== axisAB) {
+      const abDelta = axisAB === 'horizontal' ? b.x - a.x : b.y - a.y;
+      const cdDelta = axisCD === 'horizontal' ? d.x - c.x : d.y - c.y;
+      if (abDelta !== 0 && cdDelta !== 0 && Math.sign(abDelta) !== Math.sign(cdDelta)) {
+        const separation =
+          axisBC === 'horizontal' ? Math.abs(c.x - b.x) : Math.abs(c.y - b.y);
+        if (separation > 0 && separation <= MIN_DETOUR_SPAN) {
+          const pivot: Vec2 =
+            axisBC === 'vertical'
+              ? { x: d.x, y: b.y }
+              : { x: b.x, y: d.y };
+          const pivotDelta = axisAB === 'horizontal' ? pivot.x - a.x : pivot.y - a.y;
+          const pivotSign = Math.sign(pivotDelta);
+          const abSign = Math.sign(abDelta);
+          const nearStart = index === 1;
+          if (!nearStart || pivotSign === 0 || abSign === 0 || pivotSign === abSign) {
+            result.splice(index, 2, pivot);
+            if (index > 1) {
+              index -= 1;
+            }
+            continue;
+          }
+        }
+      }
+    }
+
+    index += 1;
+  }
+
+  return result;
+};
+
+export const tidyOrthogonalWaypoints = (start: Vec2, waypoints: Vec2[], end: Vec2): Vec2[] => {
+  const combined = [start, ...stripDuplicateWaypoints(waypoints), end];
+  let cleaned = dedupePoints(combined);
+  cleaned = removeAxisBacktracks(cleaned);
+  cleaned = dedupePoints(cleaned);
+  cleaned = removeTightDetours(cleaned);
+  cleaned = dedupePoints(cleaned);
+  cleaned = removeAxisBacktracks(cleaned);
+  cleaned = dedupePoints(cleaned);
+  cleaned = mergeColinear(cleaned);
+  cleaned = dedupePoints(cleaned);
+  return cleaned.slice(1, -1);
+};
+
+const directionToAxis = (direction: ConnectorDirection): OrthogonalAxis | null => {
+  if (direction === 'left' || direction === 'right') {
+    return 'horizontal';
+  }
+  if (direction === 'up' || direction === 'down') {
+    return 'vertical';
+  }
+  return null;
+};
+
+const MIN_FORCED_STUB = 12;
+const MAX_FORCED_STUB = 96;
+
+const getEnforcedStubLength = (connector: ConnectorModel): number => {
+  const length = getConnectorStubLength(connector);
+  if (!Number.isFinite(length) || length <= 0) {
+    return MIN_FORCED_STUB;
+  }
+  return Math.max(MIN_FORCED_STUB, Math.min(length, MAX_FORCED_STUB));
+};
+
+const enforceEndpointStubBounds = (
+  connector: ConnectorModel,
+  start: ResolvedEndpoint,
+  end: ResolvedEndpoint,
+  waypoints: Vec2[]
+): Vec2[] => {
+  if (!waypoints.length) {
+    return [];
+  }
+
+  const adjusted = waypoints.map(clonePoint);
+  const stubLength = getEnforcedStubLength(connector);
+
+  if (shouldAddStub(start.direction)) {
+    const first = adjusted[0];
+    if (start.direction === 'right') {
+      if (first.x <= start.point.x) {
+        first.x = start.point.x + stubLength;
+      }
+    } else if (start.direction === 'left') {
+      if (first.x >= start.point.x) {
+        first.x = start.point.x - stubLength;
+      }
+    } else if (start.direction === 'down') {
+      if (first.y <= start.point.y) {
+        first.y = start.point.y + stubLength;
+      }
+    } else if (start.direction === 'up') {
+      if (first.y >= start.point.y) {
+        first.y = start.point.y - stubLength;
+      }
+    }
+    adjusted[0] = first;
+  }
+
+  if (shouldAddStub(end.direction)) {
+    const lastIndex = adjusted.length - 1;
+    const last = adjusted[lastIndex];
+    if (end.direction === 'left') {
+      if (last.x >= end.point.x) {
+        last.x = end.point.x - stubLength;
+      }
+    } else if (end.direction === 'right') {
+      if (last.x <= end.point.x) {
+        last.x = end.point.x + stubLength;
+      }
+    } else if (end.direction === 'up') {
+      if (last.y >= end.point.y) {
+        last.y = end.point.y - stubLength;
+      }
+    } else if (end.direction === 'down') {
+      if (last.y <= end.point.y) {
+        last.y = end.point.y + stubLength;
+      }
+    }
+    adjusted[lastIndex] = last;
+  }
+
+  return adjusted;
+};
+
+const enforceOrientationWithParity = (
+  start: ResolvedEndpoint,
+  waypoints: Vec2[],
+  end: ResolvedEndpoint
+): Vec2[] => {
+  if (!waypoints.length) {
+    return [];
+  }
+
+  const oriented: Vec2[] = [];
+  let previous = clonePoint(start.point);
+  let orientation = directionToAxis(start.direction);
+  if (!orientation) {
+    const probe = waypoints[0] ?? end.point;
+    orientation =
+      Math.abs(probe.x - previous.x) >= Math.abs(probe.y - previous.y)
+        ? 'horizontal'
+        : 'vertical';
+  }
+
+  for (let index = 0; index < waypoints.length; index += 1) {
+    const original = waypoints[index];
+    const current = { x: original.x, y: original.y };
+    if (orientation === 'horizontal') {
+      current.y = previous.y;
+    } else {
+      current.x = previous.x;
+    }
+    oriented.push(current);
+    previous = current;
+    orientation = orientation === 'horizontal' ? 'vertical' : 'horizontal';
+  }
+
+  const desiredFinalAxis =
+    directionToAxis(end.direction) ??
+    (Math.abs(previous.x - end.point.x) >= Math.abs(previous.y - end.point.y)
+      ? 'horizontal'
+      : 'vertical');
+
+  if (orientation !== desiredFinalAxis) {
+    const pivot =
+      orientation === 'horizontal'
+        ? { x: end.point.x, y: previous.y }
+        : { x: previous.x, y: end.point.y };
+    oriented.push(pivot);
+    previous = pivot;
+    orientation = orientation === 'horizontal' ? 'vertical' : 'horizontal';
+  }
+
+  if (oriented.length) {
+    const lastIndex = oriented.length - 1;
+    const last = { ...oriented[lastIndex] };
+    if (orientation === 'horizontal') {
+      last.y = end.point.y;
+    } else {
+      last.x = end.point.x;
+    }
+    oriented[lastIndex] = last;
+  }
+
+  return oriented.map(clonePoint);
+};
+
+const normalizeElbowWaypoints = (
+  connector: ConnectorModel,
+  start: ResolvedEndpoint,
+  alignedWaypoints: Vec2[],
+  end: ResolvedEndpoint
+): Vec2[] => {
+  if (!alignedWaypoints.length) {
+    return [];
+  }
+
+  const stubAdjusted = enforceEndpointStubBounds(connector, start, end, alignedWaypoints);
+  const tidied = tidyOrthogonalWaypoints(start.point, stubAdjusted, end.point);
+  const base = tidied.length
+    ? tidied
+    : buildDefaultWaypoints(connector, start, end);
+  if (!base.length) {
+    return base;
+  }
+
+  return enforceOrientationWithParity(start, base, end);
+};
+
+export const buildStraightConnectorBend = (
+  start: Vec2,
+  startDirection: ConnectorDirection,
+  end: Vec2,
+  endDirection: ConnectorDirection,
+  stubLength: number
+): Vec2[] => {
+  const orientation: 'horizontal' | 'vertical' =
+    Math.abs(start.y - end.y) <= Math.abs(start.x - end.x) ? 'horizontal' : 'vertical';
+
+  const magnitude = Math.max(12, Number.isFinite(stubLength) ? Math.abs(stubLength) : DEFAULT_STUB_LENGTH);
+  const startHasStub = shouldAddStub(startDirection);
+  const endHasStub = shouldAddStub(endDirection);
+  const startStub = startHasStub ? offsetPoint(start, startDirection, magnitude) : clonePoint(start);
+  const endStub = endHasStub ? offsetPoint(end, endDirection, magnitude) : clonePoint(end);
+
+  const sign = getPerpendicularSign(orientation, startDirection, endDirection);
+  const offset = magnitude * (sign === 0 ? 1 : sign);
+
+  const waypoints: Vec2[] = [];
+  if (startHasStub) {
+    waypoints.push(clonePoint(startStub));
+  }
+
+  if (orientation === 'horizontal') {
+    const referenceY = startHasStub ? startStub.y : start.y;
+    const pivotY = referenceY + offset;
+    const firstX = startHasStub ? startStub.x : start.x;
+    const lastX = endHasStub ? endStub.x : end.x;
+    waypoints.push({ x: firstX, y: pivotY });
+    waypoints.push({ x: lastX, y: pivotY });
+  } else {
+    const referenceX = startHasStub ? startStub.x : start.x;
+    const pivotX = referenceX + offset;
+    const firstY = startHasStub ? startStub.y : start.y;
+    const lastY = endHasStub ? endStub.y : end.y;
+    waypoints.push({ x: pivotX, y: firstY });
+    waypoints.push({ x: pivotX, y: lastY });
+  }
+
+  if (endHasStub) {
+    waypoints.push(clonePoint(endStub));
+  }
+
+  return tidyOrthogonalWaypoints(start, waypoints, end);
+};
 
 export interface ConnectorSegment {
   start: Vec2;
@@ -268,11 +700,24 @@ export const getConnectorPath = (
   const resolvedTarget = resolveEndpoint(connector.target, targetNode, nodes);
 
   const baseWaypoints = connector.points?.map(clonePoint) ?? [];
-  const waypoints = baseWaypoints.length
-    ? stripDuplicateWaypoints(baseWaypoints)
+  const alignedWaypoints = baseWaypoints.length
+    ? alignWaypointsToEndpoints(
+        resolvedSource,
+        resolvedTarget,
+        stripDuplicateWaypoints(baseWaypoints)
+      )
     : buildDefaultWaypoints(connector, resolvedSource, resolvedTarget);
 
-  const points = [resolvedSource.point, ...waypoints.map(clonePoint), resolvedTarget.point];
+  const normalizedWaypoints =
+    connector.mode === 'elbow'
+      ? normalizeElbowWaypoints(connector, resolvedSource, alignedWaypoints, resolvedTarget)
+      : alignedWaypoints.map(clonePoint);
+
+  const points = [
+    resolvedSource.point,
+    ...normalizedWaypoints.map(clonePoint),
+    resolvedTarget.point
+  ];
   const merged = mergeColinear(points);
 
   const segments: ConnectorSegment[] = [];
