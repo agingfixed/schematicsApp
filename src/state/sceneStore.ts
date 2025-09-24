@@ -65,6 +65,10 @@ interface SceneStoreState {
   editingNodeId: string | null;
 }
 
+export interface UpdateConnectorOptions {
+  reroute?: boolean;
+}
+
 interface SceneStoreActions {
   setTool: (tool: Tool) => void;
   addNode: (type: NodeKind, position: Vec2) => NodeModel;
@@ -76,7 +80,11 @@ interface SceneStoreActions {
   ) => void;
   removeNode: (id: string) => void;
   addConnector: (source: ConnectorEndpoint, target: ConnectorEndpoint) => ConnectorModel | null;
-  updateConnector: (id: string, patch: Partial<ConnectorModel>) => void;
+  updateConnector: (
+    id: string,
+    patch: Partial<ConnectorModel>,
+    options?: UpdateConnectorOptions
+  ) => void;
   removeConnector: (id: string) => void;
   setSelection: (selection: SelectionState) => void;
   clearSelection: () => void;
@@ -434,8 +442,9 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
 
     return connector;
   },
-  updateConnector: (id, patch) =>
+  updateConnector: (id, patch, options) =>
     set((current) => {
+      const { reroute = true } = options ?? {};
       const scene = cloneScene(current.scene);
       const index = scene.connectors.findIndex((item) => item.id === id);
       if (index === -1) {
@@ -472,7 +481,7 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
 
       Object.assign(nextConnector, rest);
 
-      if (points) {
+      if (points && reroute) {
         const sourceNode = isAttachedConnectorEndpoint(nextConnector.source)
           ? scene.nodes.find((node) => node.id === nextConnector.source.nodeId)
           : undefined;
