@@ -81,6 +81,7 @@ import { InlineTextEditor, InlineTextEditorHandle } from './InlineTextEditor';
 import { useCommands } from '../state/commands';
 import { useFloatingMenuStore } from '../state/menuStore';
 import { CaretPoint } from '../utils/text';
+import { ensureHttpProtocol } from '../utils/url';
 import '../styles/canvas.css';
 
 const MIN_SCALE = 0.2;
@@ -365,6 +366,7 @@ const CanvasComponent = (
     url: string;
     moved: boolean;
   } | null>(null);
+  const linkActivationTimerRef = useRef<number | null>(null);
   const lastClickRef = useRef<{ nodeId: string; time: number } | null>(null);
   const lastConnectorClickRef = useRef<{ connectorId: string; time: number } | null>(null);
   const pendingConnectorEditRef = useRef<{
@@ -396,6 +398,13 @@ const CanvasComponent = (
 
   const setSelectionToolbarInteracting = useCallback((active: boolean) => {
     selectionToolbarInteractionRef.current = active;
+  }, []);
+
+  const clearLinkActivationTimer = useCallback(() => {
+    if (linkActivationTimerRef.current !== null) {
+      window.clearTimeout(linkActivationTimerRef.current);
+      linkActivationTimerRef.current = null;
+    }
   }, []);
 
   const hasConnectorBetween = useCallback(
@@ -508,6 +517,12 @@ const CanvasComponent = (
     }
     return nodes.find((node) => node.id === selectedNodeIds[0]) ?? null;
   }, [nodes, selectedNodeIds]);
+
+  useEffect(() => {
+    return () => {
+      clearLinkActivationTimer();
+    };
+  }, [clearLinkActivationTimer]);
 
   const selectedConnector = useMemo(() => {
     if (selectedConnectorIds.length !== 1) {
@@ -761,11 +776,12 @@ const CanvasComponent = (
 
   const beginTextEditing = useCallback(
     (nodeId: string, point?: { x: number; y: number }) => {
+      clearLinkActivationTimer();
       editingEntryPointRef.current = point ?? null;
       pendingTextEditRef.current = null;
       setEditingNode(nodeId);
     },
-    [setEditingNode]
+    [clearLinkActivationTimer, setEditingNode]
   );
 
   const handleTextCommit = useCallback(
@@ -773,8 +789,8 @@ const CanvasComponent = (
       if (editingNode) {
         setText(editingNode.id, value);
         if (editingNode.shape === 'link') {
-          const url = metadata?.linkUrl?.trim() ?? '';
-          setNodeLink(editingNode.id, url.length ? url : null);
+          const normalizedUrl = ensureHttpProtocol(metadata?.linkUrl ?? '');
+          setNodeLink(editingNode.id, normalizedUrl ? normalizedUrl : null);
         }
       }
       editingEntryPointRef.current = null;
@@ -1767,16 +1783,31 @@ const CanvasComponent = (
           x: textEditRequest.clientX,
           y: textEditRequest.clientY
         });
+        handled = true;
+        clearLinkActivationTimer();
       }
     }
 
-    if (linkActivation && tool === 'select') {
-      const moved = linkActivation.moved;
-      if (!moved) {
+    if (linkActivation) {
+      clearLinkActivationTimer();
+    }
+
+    if (!handled && linkActivation && tool === 'select') {
+      if (!linkActivation.moved) {
         const targetNode = nodes.find((item) => item.id === linkActivation.nodeId);
-        const url = (targetNode?.link?.url ?? linkActivation.url).trim();
-        if (url) {
-          window.open(url, '_blank', 'noopener,noreferrer');
+        const normalizedUrl = ensureHttpProtocol(targetNode?.link?.url ?? linkActivation.url ?? '');
+        if (
+          targetNode?.shape === 'link' &&
+          normalizedUrl &&
+          normalizedUrl !== (targetNode.link?.url ?? '')
+        ) {
+          setNodeLink(targetNode.id, normalizedUrl);
+        }
+        if (normalizedUrl) {
+          linkActivationTimerRef.current = window.setTimeout(() => {
+            window.open(normalizedUrl, '_blank', 'noopener,noreferrer');
+            linkActivationTimerRef.current = null;
+          }, DOUBLE_CLICK_DELAY);
         }
       }
     }
@@ -1784,6 +1815,7 @@ const CanvasComponent = (
 
   const handleNodePointerDown = (event: React.PointerEvent, node: NodeModel) => {
     setLastPointerPosition(getRelativePoint(event));
+    clearLinkActivationTimer();
     const isLinkNode = node.shape === 'link';
     linkActivationRef.current = null;
     if (tool === 'connector') {
@@ -1835,7 +1867,6 @@ const CanvasComponent = (
       !!lastClick && lastClick.nodeId === node.id && now - lastClick.time < DOUBLE_CLICK_DELAY;
 
     const shouldPrepareTextEdit =
-      !isLinkNode &&
       !event.shiftKey &&
       !event.altKey &&
       !event.metaKey &&
@@ -1862,9 +1893,10 @@ const CanvasComponent = (
       !event.altKey &&
       !event.metaKey &&
       !event.ctrlKey &&
-      event.detail === 1
+      event.detail === 1 &&
+      !shouldPrepareTextEdit
     ) {
-      const url = (node.link?.url ?? '').trim();
+      const url = ensureHttpProtocol(node.link?.url ?? '');
       if (url) {
         linkActivationRef.current = {
           nodeId: node.id,
@@ -1934,6 +1966,7 @@ const CanvasComponent = (
     }
     event.stopPropagation();
     event.preventDefault();
+    clearLinkActivationTimer();
     linkActivationRef.current = null;
     pendingTextEditRef.current = null;
     if (editingNodeId && editingNodeId !== node.id) {
