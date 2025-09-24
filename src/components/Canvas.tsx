@@ -121,7 +121,8 @@ const NODE_CREATION_TOOLS: ReadonlyArray<NodeKind> = [
   'ellipse',
   'triangle',
   'diamond',
-  'text'
+  'text',
+  'link'
 ] as const;
 
 const isNodeCreationTool = (tool: Tool): tool is NodeKind =>
@@ -334,6 +335,12 @@ const CanvasComponent = (
     pointerId: number;
     clientX: number;
     clientY: number;
+  } | null>(null);
+  const linkActivationRef = useRef<{
+    nodeId: string;
+    pointerId: number;
+    url: string;
+    moved: boolean;
   } | null>(null);
   const lastClickRef = useRef<{ nodeId: string; time: number } | null>(null);
   const lastConnectorClickRef = useRef<{ connectorId: string; time: number } | null>(null);
@@ -1189,6 +1196,9 @@ const CanvasComponent = (
       if (Math.abs(delta.x) > 0.0001 || Math.abs(delta.y) > 0.0001) {
         batchMove(dragState.nodeIds, delta);
         dragState.moved = true;
+        if (linkActivationRef.current && linkActivationRef.current.pointerId === event.pointerId) {
+          linkActivationRef.current.moved = true;
+        }
       }
 
       dragState.translation = appliedTranslation;
@@ -1493,6 +1503,14 @@ const CanvasComponent = (
       pendingTextEditRef.current = null;
     }
 
+    const linkActivation =
+      linkActivationRef.current && linkActivationRef.current.pointerId === event.pointerId
+        ? { ...linkActivationRef.current }
+        : null;
+    if (linkActivationRef.current && linkActivationRef.current.pointerId === event.pointerId) {
+      linkActivationRef.current = null;
+    }
+
     let connectorEditRequest: { connectorId: string; entryPoint: CaretPoint | null } | null = null;
     const pendingConnector = pendingConnectorEditRef.current;
     if (pendingConnector && pendingConnector.pointerId === event.pointerId) {
@@ -1610,10 +1628,23 @@ const CanvasComponent = (
         });
       }
     }
+
+    if (linkActivation && tool === 'select') {
+      const moved = linkActivation.moved;
+      if (!moved) {
+        const targetNode = nodes.find((item) => item.id === linkActivation.nodeId);
+        const url = (targetNode?.link?.url ?? linkActivation.url).trim();
+        if (url) {
+          window.open(url, '_blank', 'noopener,noreferrer');
+        }
+      }
+    }
   };
 
   const handleNodePointerDown = (event: React.PointerEvent, node: NodeModel) => {
     setLastPointerPosition(getRelativePoint(event));
+    const isLinkNode = node.shape === 'link';
+    linkActivationRef.current = null;
     if (tool === 'connector') {
       if (event.button !== 0) {
         return;
@@ -1663,6 +1694,7 @@ const CanvasComponent = (
       !!lastClick && lastClick.nodeId === node.id && now - lastClick.time < DOUBLE_CLICK_DELAY;
 
     const shouldPrepareTextEdit =
+      !isLinkNode &&
       !event.shiftKey &&
       !event.altKey &&
       !event.metaKey &&
@@ -1681,6 +1713,26 @@ const CanvasComponent = (
     }
 
     lastClickRef.current = { nodeId: node.id, time: now };
+
+    if (
+      isLinkNode &&
+      event.button === 0 &&
+      !event.shiftKey &&
+      !event.altKey &&
+      !event.metaKey &&
+      !event.ctrlKey &&
+      event.detail === 1
+    ) {
+      const url = (node.link?.url ?? '').trim();
+      if (url) {
+        linkActivationRef.current = {
+          nodeId: node.id,
+          pointerId: event.pointerId,
+          url,
+          moved: false
+        };
+      }
+    }
 
     commitEditingIfNeeded();
 
@@ -1741,6 +1793,7 @@ const CanvasComponent = (
     }
     event.stopPropagation();
     event.preventDefault();
+    linkActivationRef.current = null;
     pendingTextEditRef.current = null;
     if (editingNodeId && editingNodeId !== node.id) {
       commitEditingIfNeeded();
