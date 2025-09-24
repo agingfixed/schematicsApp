@@ -161,6 +161,7 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
   const [textColorValue, setTextColorValue] = useState(node.textColor);
   const setNodeLink = useSceneStore((state) => state.setNodeLink);
   const [linkAddressValue, setLinkAddressValue] = useState(node.link?.url ?? '');
+  const linkUrl = (node.link?.url ?? '').trim();
 
   const {
     menuState,
@@ -977,6 +978,20 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
                   </label>
                 </div>
               </>
+            )}
+            {isLinkNode && linkUrl && (
+              <div className="selection-toolbar__group selection-toolbar__group--link">
+                <span className="selection-toolbar__link-preview-label">Link</span>
+                <a
+                  className="selection-toolbar__link-preview"
+                  href={linkUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  translate="no"
+                >
+                  {linkUrl}
+                </a>
+              </div>
             )}
           </>
         )}
