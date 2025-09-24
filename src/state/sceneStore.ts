@@ -75,6 +75,7 @@ interface SceneStoreActions {
   updateNode: (id: string, patch: Partial<NodeModel>) => void;
   moveNode: (id: string, position: Vec2) => void;
   batchMove: (ids: string[], delta: Vec2) => void;
+  addEntities: (entities: { nodes: NodeModel[]; connectors: ConnectorModel[] }) => SelectionState;
   resizeNodes: (
     updates: Array<{ id: string; position: Vec2; size: { width: number; height: number } }>
   ) => void;
@@ -218,6 +219,58 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
       tool,
       ...(tool !== 'select' && state.editingNodeId ? { editingNodeId: null } : {})
     })),
+  addEntities: ({ nodes, connectors }) => {
+    let selection: SelectionState = { nodeIds: [], connectorIds: [] };
+    set((current) => {
+      if (!nodes.length && !connectors.length) {
+        return {};
+      }
+
+      const scene = cloneScene(current.scene);
+
+      const addedNodeIds: string[] = [];
+      nodes.forEach((node) => {
+        const clone: NodeModel = {
+          ...node,
+          position: { ...node.position },
+          size: { ...node.size },
+          stroke: { ...node.stroke },
+          link: node.link ? { ...node.link } : undefined
+        };
+        scene.nodes.push(clone);
+        addedNodeIds.push(clone.id);
+      });
+
+      const addedConnectorIds: string[] = [];
+      connectors.forEach((connector) => {
+        const nextConnector: ConnectorModel = {
+          ...connector,
+          source: cloneConnectorEndpoint(connector.source),
+          target: cloneConnectorEndpoint(connector.target),
+          style: {
+            ...connector.style,
+            startArrow: connector.style.startArrow ? { ...connector.style.startArrow } : undefined,
+            endArrow: connector.style.endArrow ? { ...connector.style.endArrow } : undefined
+          },
+          labelStyle: connector.labelStyle ? { ...connector.labelStyle } : undefined,
+          points: connector.points?.map((point) => ({ ...point }))
+        };
+        scene.connectors.push(nextConnector);
+        addedConnectorIds.push(nextConnector.id);
+      });
+
+      selection = { nodeIds: addedNodeIds, connectorIds: addedConnectorIds };
+
+      return {
+        ...withSceneChange(current, scene),
+        selection,
+        tool: 'select',
+        editingNodeId: null
+      };
+    });
+
+    return selection;
+  },
   addNode: (type, position) => {
     const state = get();
     const shouldSnapToGrid = state.snap.enabled && state.snap.snapToGrid && state.gridVisible;
