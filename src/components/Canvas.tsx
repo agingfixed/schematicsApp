@@ -38,9 +38,12 @@ import {
   CARDINAL_PORTS,
   cloneConnectorEndpoint,
   buildRoundedConnectorPath,
+  buildStraightConnectorBend,
   getConnectorPath,
   getConnectorPortAnchor,
+  getConnectorPortDirection,
   getConnectorPortPositions,
+  getConnectorStubLength,
   getNearestConnectorPort,
   getNormalAtRatio,
   getPointAtRatio,
@@ -220,6 +223,8 @@ interface ConnectorJointDragState extends ConnectorEditStateBase {
   grabOffset: Vec2;
   prevAxis: ConnectorSegmentAxis | null;
   nextAxis: ConnectorSegmentAxis | null;
+  origin: Vec2;
+  axisLock: ConnectorSegmentAxis | null;
 }
 
 type ConnectorEditState = ConnectorSegmentDragState | ConnectorJointDragState;
@@ -830,16 +835,9 @@ const CanvasComponent = (
       if (mode === connector.mode) {
         return;
       }
-      let stylePatch: Partial<ConnectorModel['style']> | undefined;
-      if (mode === 'straight') {
-        stylePatch = { avoidNodes: false };
-      } else if (connector.mode === 'straight' && connector.style.avoidNodes === false) {
-        stylePatch = { avoidNodes: true };
-      }
       updateConnector(connector.id, {
         mode,
-        points: [],
-        ...(stylePatch ? { style: stylePatch } : {})
+        points: []
       });
     },
     [updateConnector]
@@ -1296,10 +1294,54 @@ const CanvasComponent = (
         if (!path[pathIndex]) {
           return true;
         }
-        const point = {
+        let point = {
           x: worldPoint.x - edit.grabOffset.x,
           y: worldPoint.y - edit.grabOffset.y
         };
+
+        const origin = edit.origin;
+        const allowHorizontal = edit.prevAxis === 'horizontal' || edit.nextAxis === 'horizontal';
+        const allowVertical = edit.prevAxis === 'vertical' || edit.nextAxis === 'vertical';
+        let lock = edit.axisLock;
+
+        if (!lock) {
+          if (allowHorizontal && !allowVertical) {
+            lock = 'horizontal';
+          } else if (!allowHorizontal && allowVertical) {
+            lock = 'vertical';
+          } else if (allowHorizontal && allowVertical) {
+            const deltaX = Math.abs(point.x - origin.x);
+            const deltaY = Math.abs(point.y - origin.y);
+            lock = deltaX >= deltaY ? 'horizontal' : 'vertical';
+          } else {
+            const deltaX = Math.abs(point.x - origin.x);
+            const deltaY = Math.abs(point.y - origin.y);
+            lock = deltaX >= deltaY ? 'horizontal' : 'vertical';
+          }
+          edit.axisLock = lock;
+        }
+
+        if (lock === 'horizontal') {
+          if (allowHorizontal) {
+            point = { ...point, y: origin.y };
+          } else if (allowVertical) {
+            lock = 'vertical';
+            edit.axisLock = lock;
+            point = { ...point, x: origin.x };
+          } else {
+            point = { x: origin.x, y: origin.y };
+          }
+        } else if (lock === 'vertical') {
+          if (allowVertical) {
+            point = { ...point, x: origin.x };
+          } else if (allowHorizontal) {
+            lock = 'horizontal';
+            edit.axisLock = lock;
+            point = { ...point, y: origin.y };
+          } else {
+            point = { x: origin.x, y: origin.y };
+          }
+        }
 
         const prev = path[pathIndex - 1];
         const next = path[pathIndex + 1];
@@ -2076,13 +2118,48 @@ const CanvasComponent = (
 
     const sourceNode = resolveEndpointNode(connector.source);
     const targetNode = resolveEndpointNode(connector.target);
-    const geometry = getConnectorPath(connector, sourceNode, targetNode, nodes);
+    let geometry = getConnectorPath(connector, sourceNode, targetNode, nodes);
     if (geometry.points.length < 2) {
       return;
     }
 
     const worldPoint = getWorldPoint(event);
-    const closest = findClosestPointOnPolyline(worldPoint, geometry.points);
+    const originalWaypoints = connector.points?.map((point) => ({ ...point })) ?? [];
+    let closest = findClosestPointOnPolyline(worldPoint, geometry.points);
+    let seededWaypoints: Vec2[] | null = null;
+
+    const segmentsShareAxis =
+      geometry.segments.length > 0 &&
+      geometry.segments.every(
+        (segment) => segment.axis !== 'diagonal' && segment.axis === geometry.segments[0].axis
+      );
+
+    if (
+      segmentsShareAxis &&
+      isAttachedConnectorEndpoint(connector.source) &&
+      isAttachedConnectorEndpoint(connector.target)
+    ) {
+      const startDirection = getConnectorPortDirection(connector.source.port);
+      const endDirection = getConnectorPortDirection(connector.target.port);
+      const stubLength = getConnectorStubLength(connector);
+      const seed = buildStraightConnectorBend(
+        geometry.start,
+        startDirection,
+        geometry.end,
+        endDirection,
+        stubLength
+      );
+      if (seed.length) {
+        seededWaypoints = seed.map((point) => ({ ...point }));
+        const seededConnector: ConnectorModel = {
+          ...connector,
+          points: seededWaypoints.map((point) => ({ ...point }))
+        };
+        geometry = getConnectorPath(seededConnector, sourceNode, targetNode, nodes);
+        closest = findClosestPointOnPolyline(worldPoint, geometry.points);
+      }
+    }
+
     const segmentIndex = closest.index;
     if (segmentIndex <= 0 || segmentIndex >= geometry.points.length - 2) {
       return;
@@ -2093,6 +2170,10 @@ const CanvasComponent = (
     const axis = inferSegmentAxis(segmentStart, segmentEnd);
 
     beginTransaction();
+
+    if (seededWaypoints) {
+      updateConnector(connector.id, { points: seededWaypoints }, { reroute: false });
+    }
 
     const pointerValue = axis === 'horizontal' ? worldPoint.y : worldPoint.x;
     const segmentValue = axis === 'horizontal' ? segmentStart.y : segmentStart.x;
@@ -2108,7 +2189,7 @@ const CanvasComponent = (
       start: { ...geometry.start },
       end: { ...geometry.end },
       baseWaypoints: geometry.waypoints.map((point) => ({ ...point })),
-      originalWaypoints: connector.points?.map((point) => ({ ...point })) ?? [],
+      originalWaypoints,
       previewWaypoints: geometry.waypoints.map((point) => ({ ...point })),
       previewPoints: geometry.points.map((point) => ({ ...point })),
       moved: false
@@ -2170,6 +2251,8 @@ const CanvasComponent = (
       grabOffset,
       prevAxis,
       nextAxis,
+      origin: { ...waypoint },
+      axisLock: null,
       start: { ...geometry.start },
       end: { ...geometry.end },
       baseWaypoints: geometry.waypoints.map((point) => ({ ...point })),
