@@ -57,17 +57,13 @@
   transition: stroke 0.2s ease, stroke-width 0.2s ease;
 }
 
-.diagram-node__image-group {
-  pointer-events: none;
-}
-
 .diagram-node__image-frame {
   fill: rgba(15, 23, 42, 0.85);
   stroke: rgba(30, 41, 59, 0.6);
 }
 
 .diagram-node__image {
-  pointer-events: none;
+  pointer-events: auto;
 }
 
 .diagram-node__image-placeholder rect {
