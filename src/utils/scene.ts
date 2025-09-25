@@ -221,5 +221,4 @@ export const centerOfBounds = (bounds: Bounds): Vec2 => ({
 export const getNodeById = (scene: SceneContent, id: string): NodeModel | undefined =>
   scene.nodes.find((node) => node.id === id);
 
-export const connectorArrowId = (type: 'arrow' | 'dot', suffix: 'start' | 'end') =>
-  `${type}-${suffix}`;
+export const connectorArrowId = (type: 'arrow' | 'dot') => `${type}-start`;
