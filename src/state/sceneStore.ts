@@ -114,9 +114,16 @@ const defaultConnectorStyle: ConnectorModel['style'] = {
   strokeWidth: 2,
   dashed: false,
   startArrow: { shape: 'none', fill: 'filled' },
+  endArrow: { shape: 'none', fill: 'filled' },
   arrowSize: 1,
   cornerRadius: 12
 };
+
+const cloneConnectorStyle = (style: ConnectorModel['style']): ConnectorModel['style'] => ({
+  ...style,
+  startArrow: style.startArrow ? { ...style.startArrow } : undefined,
+  endArrow: style.endArrow ? { ...style.endArrow } : undefined
+});
 
 const defaultConnectorLabelStyle: ConnectorLabelStyle = {
   fontSize: 14,
@@ -137,7 +144,7 @@ const createInitialScene = (): SceneContent => {
       mode: 'elbow',
       source: { nodeId: start.id, port: 'right' },
       target: { nodeId: collect.id, port: 'left' },
-      style: { ...defaultConnectorStyle },
+      style: cloneConnectorStyle(defaultConnectorStyle),
       label: 'Begin',
       labelPosition: 0.5,
       labelOffset: 18,
@@ -148,7 +155,7 @@ const createInitialScene = (): SceneContent => {
       mode: 'elbow',
       source: { nodeId: collect.id, port: 'right' },
       target: { nodeId: decision.id, port: 'left' },
-      style: { ...defaultConnectorStyle },
+      style: cloneConnectorStyle(defaultConnectorStyle),
       labelPosition: 0.5,
       labelOffset: 18,
       labelStyle: { ...defaultConnectorLabelStyle }
@@ -158,7 +165,7 @@ const createInitialScene = (): SceneContent => {
       mode: 'elbow',
       source: { nodeId: decision.id, port: 'right' },
       target: { nodeId: done.id, port: 'left' },
-      style: { ...defaultConnectorStyle },
+      style: cloneConnectorStyle(defaultConnectorStyle),
       label: 'Yes',
       labelPosition: 0.5,
       labelOffset: 18,
@@ -248,10 +255,7 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
           ...connector,
           source: cloneConnectorEndpoint(connector.source),
           target: cloneConnectorEndpoint(connector.target),
-          style: {
-            ...connector.style,
-            startArrow: connector.style.startArrow ? { ...connector.style.startArrow } : undefined
-          },
+          style: cloneConnectorStyle(connector.style),
           labelStyle: connector.labelStyle ? { ...connector.labelStyle } : undefined,
           points: connector.points?.map((point) => ({ ...point }))
         };
@@ -474,7 +478,7 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
       mode: 'elbow',
       source,
       target,
-      style: { ...defaultConnectorStyle },
+      style: cloneConnectorStyle(defaultConnectorStyle),
       labelPosition: 0.5,
       labelOffset: 18,
       labelStyle: { ...defaultConnectorLabelStyle }
@@ -485,7 +489,8 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
       scene.connectors.push({
         ...connector,
         source: cloneConnectorEndpoint(connector.source),
-        target: cloneConnectorEndpoint(connector.target)
+        target: cloneConnectorEndpoint(connector.target),
+        style: cloneConnectorStyle(connector.style)
       });
       return {
         ...withSceneChange(current, scene),
@@ -511,7 +516,7 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
         ...existing,
         source: cloneConnectorEndpoint(existing.source),
         target: cloneConnectorEndpoint(existing.target),
-        style: { ...existing.style },
+        style: cloneConnectorStyle(existing.style),
         labelStyle: existing.labelStyle ? { ...existing.labelStyle } : undefined,
         points: existing.points?.map((point) => ({ ...point }))
       };
@@ -519,7 +524,14 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
       const { style, points, labelStyle, source, target, ...rest } = patch;
 
       if (style) {
-        nextConnector.style = { ...nextConnector.style, ...style };
+        const { startArrow, endArrow, ...restStyle } = style;
+        nextConnector.style = { ...nextConnector.style, ...restStyle };
+        if (startArrow !== undefined) {
+          nextConnector.style.startArrow = startArrow ? { ...startArrow } : undefined;
+        }
+        if (endArrow !== undefined) {
+          nextConnector.style.endArrow = endArrow ? { ...endArrow } : undefined;
+        }
       }
       if (labelStyle !== undefined) {
         nextConnector.labelStyle = labelStyle ? { ...labelStyle } : undefined;

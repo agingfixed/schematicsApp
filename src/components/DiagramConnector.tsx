@@ -289,10 +289,15 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
   const endpointColor = connector.style.stroke;
   const arrowSize = Math.max(0.6, connector.style.arrowSize ?? 1);
   const startMarkerId = useMemo(() => `connector-${connector.id}-start`, [connector.id]);
+  const endMarkerId = useMemo(() => `connector-${connector.id}-end`, [connector.id]);
 
   const startArrowShape = connector.style.startArrow?.shape ?? 'none';
   const startArrowFill =
     startArrowShape === 'line-arrow' ? 'outlined' : connector.style.startArrow?.fill ?? 'filled';
+
+  const endArrowShape = connector.style.endArrow?.shape ?? 'none';
+  const endArrowFill =
+    endArrowShape === 'line-arrow' ? 'outlined' : connector.style.endArrow?.fill ?? 'filled';
 
   const createMarker = (
     markerId: string,
@@ -346,6 +351,7 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
   };
 
   const startMarker = createMarker(startMarkerId, startArrowShape, startArrowFill, 'start');
+  const endMarker = createMarker(endMarkerId, endArrowShape, endArrowFill, 'end');
 
   const handleLabelInput = (event: React.FormEvent<HTMLDivElement>) => {
     setDraft(event.currentTarget.textContent ?? '');
@@ -459,6 +465,7 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
   const labelBackground = connector.labelStyle?.background ?? 'rgba(15,23,42,0.85)';
 
   const markerStartUrl = startArrowShape !== 'none' ? `url(#${startMarkerId})` : undefined;
+  const markerEndUrl = endArrowShape !== 'none' ? `url(#${endMarkerId})` : undefined;
 
   const trimmedLabel = connector.label?.trim() ?? '';
   const hasLabel = Boolean(trimmedLabel) || labelEditing;
@@ -490,7 +497,10 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
         ['--connector-width' as string]: `${connector.style.strokeWidth}`
       } as React.CSSProperties}
     >
-      <defs>{startMarker}</defs>
+      <defs>
+        {startMarker}
+        {endMarker}
+      </defs>
       <path className="diagram-connector__hit" d={hitPathData} strokeWidth={28} onPointerDown={onPointerDown} />
       {segments.map((segment) => {
         const isHovered = hoveredSegment === segment.index;
@@ -543,6 +553,7 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
         strokeWidth={connector.style.strokeWidth}
         strokeDasharray={connector.style.dashed ? '12 8' : undefined}
         markerStart={markerStartUrl}
+        markerEnd={markerEndUrl}
         onPointerDown={onPointerDown}
       />
       {selected && (
