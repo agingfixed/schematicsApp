@@ -134,7 +134,6 @@ const createInitialScene = (): SceneContent => {
   const connectors: ConnectorModel[] = [
     {
       id: nanoid(),
-      mode: 'elbow',
       source: { nodeId: start.id, port: 'right' },
       target: { nodeId: collect.id, port: 'left' },
       style: { ...defaultConnectorStyle },
@@ -145,7 +144,6 @@ const createInitialScene = (): SceneContent => {
     },
     {
       id: nanoid(),
-      mode: 'elbow',
       source: { nodeId: collect.id, port: 'right' },
       target: { nodeId: decision.id, port: 'left' },
       style: { ...defaultConnectorStyle },
@@ -155,7 +153,6 @@ const createInitialScene = (): SceneContent => {
     },
     {
       id: nanoid(),
-      mode: 'elbow',
       source: { nodeId: decision.id, port: 'right' },
       target: { nodeId: done.id, port: 'left' },
       style: { ...defaultConnectorStyle },
@@ -469,16 +466,15 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
       return existing;
     }
 
-    const connector: ConnectorModel = {
-      id: nanoid(),
-      mode: 'elbow',
-      source,
-      target,
-      style: { ...defaultConnectorStyle },
-      labelPosition: 0.5,
-      labelOffset: 18,
-      labelStyle: { ...defaultConnectorLabelStyle }
-    };
+      const connector: ConnectorModel = {
+        id: nanoid(),
+        source,
+        target,
+        style: { ...defaultConnectorStyle },
+        labelPosition: 0.5,
+        labelOffset: 18,
+        labelStyle: { ...defaultConnectorLabelStyle }
+      };
 
     set((current) => {
       const scene = cloneScene(current.scene);

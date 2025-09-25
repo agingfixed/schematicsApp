@@ -45,8 +45,6 @@ export interface NodeModel {
   image?: NodeImageData;
 }
 
-export type ConnectorMode = 'elbow' | 'straight';
-
 export type CardinalConnectorPort = 'top' | 'right' | 'bottom' | 'left';
 
 export interface AttachedConnectorEndpoint {
@@ -101,7 +99,6 @@ export interface ConnectorStyle {
 
 export interface ConnectorModel {
   id: string;
-  mode: ConnectorMode;
   source: ConnectorEndpoint;
   target: ConnectorEndpoint;
   points?: Vec2[];
