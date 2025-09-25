@@ -126,14 +126,3 @@
   min-width: calc(92px * var(--menu-scale));
 }
 
-.connector-toolbar__actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: calc(8px * var(--menu-scale));
-  justify-content: flex-start;
-}
-
-.connector-toolbar__actions .connector-toolbar__button {
-  flex: 1 1 calc(100px * var(--menu-scale));
-  min-width: calc(96px * var(--menu-scale));
-}

@@ -13,8 +13,6 @@ interface ConnectorToolbarProps {
   isVisible: boolean;
   onStyleChange: (patch: Partial<ConnectorModel['style']>) => void;
   onModeChange: (mode: ConnectorModel['mode']) => void;
-  onFlipDirection: () => void;
-  onTidyPath: () => void;
   pointerPosition: { x: number; y: number } | null;
 }
 
@@ -58,8 +56,6 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
   isVisible,
   onStyleChange,
   onModeChange,
-  onFlipDirection,
-  onTidyPath,
   pointerPosition
 }) => {
   const toolbarRef = useRef<HTMLDivElement>(null);
@@ -307,17 +303,6 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
                 />
               </label>
             )}
-          </div>
-        </section>
-        <section className="connector-toolbar__panel connector-toolbar__panel--actions">
-          <h3 className="connector-toolbar__panel-title">Actions</h3>
-          <div className="connector-toolbar__actions">
-            <button type="button" className="connector-toolbar__button" onClick={onFlipDirection}>
-              Flip
-            </button>
-            <button type="button" className="connector-toolbar__button" onClick={onTidyPath}>
-              Tidy
-            </button>
           </div>
         </section>
       </div>
