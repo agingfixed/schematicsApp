@@ -285,7 +285,10 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
     startArrowShape === 'line-arrow' ? 'outlined' : connector.style.startArrow?.fill ?? 'filled';
   const endArrowFill =
     endArrowShape === 'line-arrow' ? 'outlined' : connector.style.endArrow?.fill ?? 'filled';
-  const startRefX = markerRefXForShape(startArrowShape, 'start');
+  const startRefX =
+    startArrowShape === 'circle'
+      ? markerRefXForShape(startArrowShape, 'start')
+      : markerRefXForShape(startArrowShape, 'end');
   const endRefX = markerRefXForShape(endArrowShape, 'end');
   const startVisual = markerVisualsForShape(startArrowShape, startArrowFill, arrowStroke);
   const endVisual = markerVisualsForShape(endArrowShape, endArrowFill, arrowStroke);
@@ -300,7 +303,7 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
       markerHeight={12 * arrowSize}
       refX={startRefX}
       refY={6}
-      orient="auto"
+      orient="auto-start-reverse"
       markerUnits="strokeWidth"
     >
       {startArrowShape === 'circle' ? (
@@ -314,7 +317,7 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
         />
       ) : (
         <path
-          d={arrowPathForShape(startArrowShape, 'start') ?? ''}
+          d={arrowPathForShape(startArrowShape, 'end') ?? ''}
           fill={startVisual.fill}
           stroke={startVisual.stroke}
           strokeWidth={startVisual.strokeWidth}
