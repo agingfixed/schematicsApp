@@ -28,6 +28,30 @@ const SelectCursorIcon: React.FC = () => (
   </svg>
 );
 
+const ImageToolIcon: React.FC = () => (
+  <svg className="toolbar__icon-image" viewBox="0 0 24 24" aria-hidden>
+    <rect
+      x={3}
+      y={5}
+      width={18}
+      height={14}
+      rx={3}
+      fill="rgba(148, 163, 184, 0.35)"
+      stroke="#38bdf8"
+      strokeWidth={1.6}
+    />
+    <circle cx={9} cy={11} r={2.2} fill="#38bdf8" />
+    <path
+      d="M6 17.5L10.25 12.6a1.2 1.2 0 0 1 1.85-.02l1.7 1.94 2.1-2.32a1.2 1.2 0 0 1 1.8.02L21 16.5"
+      stroke="#38bdf8"
+      strokeWidth={1.6}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      fill="none"
+    />
+  </svg>
+);
+
 const nodeToolOptions = [
   { value: 'circle', label: 'Circle' },
   { value: 'ellipse', label: 'Ellipse' },
@@ -52,6 +76,7 @@ const toolButtons: Array<{
   { id: 'pan', label: 'Pan', icon: '✋', shortcut: 'Space', tooltip: 'Pan' },
   { id: 'text', label: 'Text box', icon: 'T', shortcut: 'T', tooltip: 'Text box' },
   { id: 'link', label: 'Link', icon: '🔗', tooltip: 'Link' },
+  { id: 'image', label: 'Image', icon: <ImageToolIcon />, tooltip: 'Image' },
   { id: 'connector', label: 'Connector', icon: '↦', shortcut: 'L', tooltip: 'Connector' }
 ];
 

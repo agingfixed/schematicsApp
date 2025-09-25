@@ -29,7 +29,7 @@ const STROKE_MIN = 0;
 const STROKE_MAX = 20;
 const TOOLBAR_GAP = 12;
 
-const shapeOptions: Array<{ value: Exclude<NodeKind, 'text' | 'link'>; label: string }> = [
+const shapeOptions: Array<{ value: Exclude<NodeKind, 'text' | 'link' | 'image'>; label: string }> = [
   { value: 'circle', label: 'Circle' },
   { value: 'ellipse', label: 'Ellipse' },
   { value: 'rectangle', label: 'Rectangle' },
