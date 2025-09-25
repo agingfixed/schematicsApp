@@ -181,9 +181,42 @@ test('straight connectors connect ports directly', () => {
   const connector = createConnector('straight', 'right', 'left');
 
   const path = getConnectorPath(connector, source, target, [source, target]);
-  assert.strictEqual(path.points.length, 2);
-  assert.deepStrictEqual(path.points[0], getConnectorPortPositions(source).right);
-  assert.deepStrictEqual(path.points[1], getConnectorPortPositions(target).left);
+  const sourcePort = getConnectorPortPositions(source).right;
+  const targetPort = getConnectorPortPositions(target).left;
+
+  assert.strictEqual(path.points.length, 4);
+  assert.deepStrictEqual(path.points[0], sourcePort);
+  assert.deepStrictEqual(path.points[path.points.length - 1], targetPort);
+
+  const startStub = path.points[1];
+  assert.ok(Math.abs(startStub.y - sourcePort.y) < 1e-3, 'expected start stub to stay horizontal');
+  assert.ok(startStub.x > sourcePort.x, 'expected start stub to extend outward from the node');
+
+  const endStub = path.points[path.points.length - 2];
+  assert.ok(Math.abs(endStub.y - targetPort.y) < 1e-3, 'expected end stub to stay horizontal');
+  assert.ok(endStub.x < targetPort.x, 'expected end stub to extend outward from the node');
+});
+
+test('straight connectors keep vertical stubs aligned to node edges', () => {
+  const source = createNode('source', { x: 200, y: 0 });
+  const target = createNode('target', { x: 200, y: 320 });
+  const connector = createConnector('straight', 'top', 'bottom');
+
+  const path = getConnectorPath(connector, source, target, [source, target]);
+  const sourcePort = getConnectorPortPositions(source).top;
+  const targetPort = getConnectorPortPositions(target).bottom;
+
+  assert.strictEqual(path.points.length, 4);
+  assert.deepStrictEqual(path.points[0], sourcePort);
+  assert.deepStrictEqual(path.points[path.points.length - 1], targetPort);
+
+  const startStub = path.points[1];
+  assert.ok(Math.abs(startStub.x - sourcePort.x) < 1e-3, 'expected start stub to stay vertical');
+  assert.ok(startStub.y < sourcePort.y, 'expected top port stub to extend outward from the node');
+
+  const endStub = path.points[path.points.length - 2];
+  assert.ok(Math.abs(endStub.x - targetPort.x) < 1e-3, 'expected end stub to stay vertical');
+  assert.ok(endStub.y > targetPort.y, 'expected bottom port stub to extend outward from the node');
 });
 
 test('tidyOrthogonalWaypoints removes redundant points', () => {
