@@ -41,6 +41,9 @@ const defaultConnectorStyle: Mutable<ConnectorModel['style']> = {
   strokeWidth: 2,
   dashed: false,
   startArrow: { shape: 'none', fill: 'filled' },
+  stopArrow: { shape: 'none', fill: 'filled' },
+  startArrowSize: 1,
+  stopArrowSize: 1,
   arrowSize: 1,
   cornerRadius: 12
 };
@@ -54,7 +57,13 @@ const createConnector = (
   mode,
   source: { nodeId: 'source', port: sourcePort },
   target: { nodeId: 'target', port: targetPort },
-  style: { ...defaultConnectorStyle },
+  style: {
+    ...defaultConnectorStyle,
+    startArrow: defaultConnectorStyle.startArrow
+      ? { ...defaultConnectorStyle.startArrow }
+      : undefined,
+    stopArrow: defaultConnectorStyle.stopArrow ? { ...defaultConnectorStyle.stopArrow } : undefined
+  },
   labelPosition: 0.5,
   labelOffset: 18
 });

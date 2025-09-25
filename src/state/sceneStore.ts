@@ -114,9 +114,20 @@ const defaultConnectorStyle: ConnectorModel['style'] = {
   strokeWidth: 2,
   dashed: false,
   startArrow: { shape: 'none', fill: 'filled' },
+  stopArrow: { shape: 'none', fill: 'filled' },
+  startArrowSize: 1,
+  stopArrowSize: 1,
   arrowSize: 1,
   cornerRadius: 12
 };
+
+const cloneDefaultConnectorStyle = (): ConnectorModel['style'] => ({
+  ...defaultConnectorStyle,
+  startArrow: defaultConnectorStyle.startArrow
+    ? { ...defaultConnectorStyle.startArrow }
+    : undefined,
+  stopArrow: defaultConnectorStyle.stopArrow ? { ...defaultConnectorStyle.stopArrow } : undefined
+});
 
 const defaultConnectorLabelStyle: ConnectorLabelStyle = {
   fontSize: 14,
@@ -137,7 +148,7 @@ const createInitialScene = (): SceneContent => {
       mode: 'elbow',
       source: { nodeId: start.id, port: 'right' },
       target: { nodeId: collect.id, port: 'left' },
-      style: { ...defaultConnectorStyle },
+      style: cloneDefaultConnectorStyle(),
       label: 'Begin',
       labelPosition: 0.5,
       labelOffset: 18,
@@ -148,7 +159,7 @@ const createInitialScene = (): SceneContent => {
       mode: 'elbow',
       source: { nodeId: collect.id, port: 'right' },
       target: { nodeId: decision.id, port: 'left' },
-      style: { ...defaultConnectorStyle },
+      style: cloneDefaultConnectorStyle(),
       labelPosition: 0.5,
       labelOffset: 18,
       labelStyle: { ...defaultConnectorLabelStyle }
@@ -158,7 +169,7 @@ const createInitialScene = (): SceneContent => {
       mode: 'elbow',
       source: { nodeId: decision.id, port: 'right' },
       target: { nodeId: done.id, port: 'left' },
-      style: { ...defaultConnectorStyle },
+      style: cloneDefaultConnectorStyle(),
       label: 'Yes',
       labelPosition: 0.5,
       labelOffset: 18,
@@ -474,7 +485,7 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
       mode: 'elbow',
       source,
       target,
-      style: { ...defaultConnectorStyle },
+      style: cloneDefaultConnectorStyle(),
       labelPosition: 0.5,
       labelOffset: 18,
       labelStyle: { ...defaultConnectorLabelStyle }
@@ -511,7 +522,11 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
         ...existing,
         source: cloneConnectorEndpoint(existing.source),
         target: cloneConnectorEndpoint(existing.target),
-        style: { ...existing.style },
+        style: {
+          ...existing.style,
+          startArrow: existing.style.startArrow ? { ...existing.style.startArrow } : undefined,
+          stopArrow: existing.style.stopArrow ? { ...existing.style.stopArrow } : undefined
+        },
         labelStyle: existing.labelStyle ? { ...existing.labelStyle } : undefined,
         points: existing.points?.map((point) => ({ ...point }))
       };
@@ -519,7 +534,14 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
       const { style, points, labelStyle, source, target, ...rest } = patch;
 
       if (style) {
-        nextConnector.style = { ...nextConnector.style, ...style };
+        const { startArrow, stopArrow, ...styleRest } = style;
+        nextConnector.style = { ...nextConnector.style, ...styleRest };
+        if (startArrow !== undefined) {
+          nextConnector.style.startArrow = startArrow ? { ...startArrow } : undefined;
+        }
+        if (stopArrow !== undefined) {
+          nextConnector.style.stopArrow = stopArrow ? { ...stopArrow } : undefined;
+        }
       }
       if (labelStyle !== undefined) {
         nextConnector.labelStyle = labelStyle ? { ...labelStyle } : undefined;

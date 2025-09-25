@@ -118,6 +118,9 @@ const PENDING_CONNECTOR_STYLE: ConnectorModel['style'] = {
   strokeWidth: 2,
   dashed: false,
   startArrow: { shape: 'none', fill: 'filled' },
+  stopArrow: { shape: 'none', fill: 'filled' },
+  startArrowSize: 1,
+  stopArrowSize: 1,
   arrowSize: 1,
   cornerRadius: 12
 };
@@ -240,7 +243,8 @@ const cloneNodeForClipboard = (node: NodeModel): NodeModel => ({
 
 const cloneConnectorStyle = (style: ConnectorModel['style']): ConnectorModel['style'] => ({
   ...style,
-  startArrow: style.startArrow ? { ...style.startArrow } : undefined
+  startArrow: style.startArrow ? { ...style.startArrow } : undefined,
+  stopArrow: style.stopArrow ? { ...style.stopArrow } : undefined
 });
 
 const cloneConnectorForClipboard = (connector: ConnectorModel): ConnectorModel => ({
@@ -3203,14 +3207,14 @@ const CanvasComponent = (
               source: movingEndpoint,
               target: fixedEndpoint,
               points: [],
-              style: { ...connector.style }
+              style: cloneConnectorStyle(connector.style)
             }
           : {
               ...connector,
               source: fixedEndpoint,
               target: movingEndpoint,
               points: [],
-              style: { ...connector.style }
+              style: cloneConnectorStyle(connector.style)
             };
 
       return createPreview(previewConnector);
@@ -3227,7 +3231,7 @@ const CanvasComponent = (
       source: cloneConnectorEndpoint(pendingConnection.source),
       target: targetEndpoint,
       points: [],
-      style: { ...PENDING_CONNECTOR_STYLE }
+      style: cloneConnectorStyle(PENDING_CONNECTOR_STYLE)
     };
 
     return createPreview(previewConnector);
