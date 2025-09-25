@@ -21,7 +21,8 @@ import {
   cloneScene,
   createNodeModel,
   getNodeById,
-  getSceneBounds
+  getSceneBounds,
+  type CreateNodeOptions
 } from '../utils/scene';
 import { ensureHtmlContent } from '../utils/text';
 import { cloneConnectorEndpoint, getConnectorPath } from '../utils/connector';
@@ -71,7 +72,7 @@ export interface UpdateConnectorOptions {
 
 interface SceneStoreActions {
   setTool: (tool: Tool) => void;
-  addNode: (type: NodeKind, position: Vec2) => NodeModel;
+  addNode: (type: NodeKind, position: Vec2, options?: CreateNodeOptions) => NodeModel;
   updateNode: (id: string, patch: Partial<NodeModel>) => void;
   moveNode: (id: string, position: Vec2) => void;
   batchMove: (ids: string[], delta: Vec2) => void;
@@ -125,10 +126,10 @@ const defaultConnectorLabelStyle: ConnectorLabelStyle = {
 };
 
 const createInitialScene = (): SceneContent => {
-  const start = createNodeModel('circle', { x: -380, y: -140 }, 'Start');
-  const collect = createNodeModel('rectangle', { x: -40, y: -180 }, 'Collect Input');
-  const decision = createNodeModel('diamond', { x: 320, y: -200 }, 'Valid?');
-  const done = createNodeModel('ellipse', { x: 700, y: -160 }, 'Archive');
+  const start = createNodeModel('circle', { x: -380, y: -140 }, { text: 'Start' });
+  const collect = createNodeModel('rectangle', { x: -40, y: -180 }, { text: 'Collect Input' });
+  const decision = createNodeModel('diamond', { x: 320, y: -200 }, { text: 'Valid?' });
+  const done = createNodeModel('ellipse', { x: 700, y: -160 }, { text: 'Archive' });
 
   const connectors: ConnectorModel[] = [
     {
@@ -234,7 +235,8 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
           position: { ...node.position },
           size: { ...node.size },
           stroke: { ...node.stroke },
-          link: node.link ? { ...node.link } : undefined
+          link: node.link ? { ...node.link } : undefined,
+          image: node.image ? { ...node.image } : undefined
         };
         scene.nodes.push(clone);
         addedNodeIds.push(clone.id);
@@ -269,7 +271,7 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
 
     return selection;
   },
-  addNode: (type, position) => {
+  addNode: (type, position, options) => {
     const state = get();
     const shouldSnapToGrid = state.snap.enabled && state.snap.snapToGrid && state.gridVisible;
     const snappedPosition = shouldSnapToGrid
@@ -279,7 +281,7 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
         }
       : position;
 
-    const node = createNodeModel(type, snappedPosition);
+    const node = createNodeModel(type, snappedPosition, options);
 
     set((current) => {
       const scene = cloneScene(current.scene);
@@ -302,7 +304,7 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
         return {};
       }
 
-      const { position, size, stroke, link, ...rest } = patch;
+      const { position, size, stroke, link, image, ...rest } = patch;
 
       if (position) {
         node.position = { ...node.position, ...position };
@@ -315,6 +317,9 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
       }
       if (link !== undefined) {
         node.link = link ? { ...link } : undefined;
+      }
+      if (image !== undefined) {
+        node.image = image ? { ...image } : undefined;
       }
 
       Object.assign(node, rest);
@@ -761,6 +766,10 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
 
         if (node.shape === shape) {
           return;
+        }
+
+        if (node.shape === 'image' && shape !== 'image') {
+          node.image = undefined;
         }
 
         node.shape = shape;

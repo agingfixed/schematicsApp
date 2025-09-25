@@ -1,5 +1,11 @@
 export type NodeShape = 'rectangle' | 'circle' | 'ellipse' | 'triangle' | 'diamond';
-export type NodeKind = NodeShape | 'text' | 'link';
+export interface NodeImageData {
+  src: string;
+  naturalWidth: number;
+  naturalHeight: number;
+}
+
+export type NodeKind = NodeShape | 'text' | 'link' | 'image';
 
 export interface Vec2 {
   x: number;
@@ -36,6 +42,7 @@ export interface NodeModel {
   cornerRadius?: number;
   link?: NodeLink;
   shadow?: boolean;
+  image?: NodeImageData;
 }
 
 export type ConnectorMode = 'elbow' | 'straight';
@@ -126,7 +133,8 @@ export type Tool =
   | 'diamond'
   | 'connector'
   | 'text'
-  | 'link';
+  | 'link'
+  | 'image';
 
 export interface CanvasTransform {
   x: number;

@@ -1,6 +1,7 @@
 import { nanoid } from 'nanoid';
 import {
   CanvasTransform,
+  NodeImageData,
   NodeKind,
   NodeModel,
   NodeShape,
@@ -63,7 +64,22 @@ const textNodeDefaults = {
   stroke: { color: 'transparent', width: 1 }
 };
 
-export const createNodeModel = (shape: NodeKind, position: Vec2, text?: string): NodeModel => {
+const imageNodeDefaults = {
+  size: { width: 320, height: 220 },
+  stroke: { color: 'rgba(15, 23, 42, 0.65)', width: 1 }
+};
+
+export interface CreateNodeOptions {
+  text?: string;
+  image?: NodeImageData;
+  size?: { width: number; height: number };
+}
+
+export const createNodeModel = (
+  shape: NodeKind,
+  position: Vec2,
+  options: CreateNodeOptions = {}
+): NodeModel => {
   if (shape === 'text' || shape === 'link') {
     const defaultText = shape === 'link' ? 'Link' : textNodeDefaults.text;
     return {
@@ -71,7 +87,7 @@ export const createNodeModel = (shape: NodeKind, position: Vec2, text?: string):
       shape,
       position: { ...position },
       size: { ...textNodeDefaults.size },
-      text: ensureHtmlContent(text ?? defaultText),
+      text: ensureHtmlContent(options.text ?? defaultText),
       textAlign: textNodeDefaults.textAlign,
       fontSize: textNodeDefaults.fontSize,
       fontWeight: textNodeDefaults.fontWeight,
@@ -79,6 +95,25 @@ export const createNodeModel = (shape: NodeKind, position: Vec2, text?: string):
       fill: textNodeDefaults.fill,
       fillOpacity: textNodeDefaults.fillOpacity,
       stroke: { ...textNodeDefaults.stroke }
+    };
+  }
+
+  if (shape === 'image') {
+    const size = options.size ?? { ...imageNodeDefaults.size };
+    return {
+      id: nanoid(),
+      shape,
+      position: { ...position },
+      size: { ...size },
+      text: '',
+      textAlign: 'center',
+      fontSize: 18,
+      fontWeight: 600,
+      textColor: '#e2e8f0',
+      fill: '#0f172a',
+      fillOpacity: 1,
+      stroke: { ...imageNodeDefaults.stroke },
+      image: options.image ? { ...options.image } : undefined
     };
   }
 
@@ -92,7 +127,7 @@ export const createNodeModel = (shape: NodeKind, position: Vec2, text?: string):
     shape: kind,
     position: { ...position },
     size: { ...size },
-    text: ensureHtmlContent(text ?? defaultLabel(kind)),
+    text: ensureHtmlContent(options.text ?? defaultLabel(kind)),
     textAlign: 'center',
     fontSize: 18,
     fontWeight: 600,
@@ -113,6 +148,9 @@ export const getDefaultNodeSize = (shape: NodeKind) => {
   if (shape === 'text' || shape === 'link') {
     return { ...textNodeDefaults.size };
   }
+  if (shape === 'image') {
+    return { ...imageNodeDefaults.size };
+  }
   const key = Object.prototype.hasOwnProperty.call(defaultNodeSizes, shape)
     ? (shape as NodeShape)
     : 'rectangle';
@@ -130,7 +168,8 @@ export const cloneScene = (scene: SceneContent): SceneContent => ({
     size: { ...node.size },
     stroke: { ...node.stroke },
     textColor: node.textColor,
-    link: node.link ? { ...node.link } : undefined
+    link: node.link ? { ...node.link } : undefined,
+    image: node.image ? { ...node.image } : undefined
   })),
   connectors: scene.connectors.map((connector) => ({
     ...connector,
