@@ -51,6 +51,10 @@ const arrowPathForShape = (shape: ArrowShape, orientation: 'start' | 'end'): str
       return orientation === 'end'
         ? 'M12 1 L0 6 L12 11 Z'
         : 'M0 1 L12 6 L0 11 Z';
+    case 'triangle-inward':
+      return orientation === 'end'
+        ? 'M12 1 L0 6 L12 11 Z'
+        : 'M0 1 L12 6 L0 11 Z';
     case 'arrow':
       return orientation === 'end'
         ? 'M0 1 L12 6 L0 11 Z'
@@ -71,11 +75,15 @@ const arrowPathForShape = (shape: ArrowShape, orientation: 'start' | 'end'): str
 };
 
 const markerRefXForShape = (shape: ArrowShape, orientation: 'start' | 'end'): number => {
+  if (shape === 'circle') {
+    return 6;
+  }
+
   if (orientation === 'start') {
     return 0;
   }
 
-  if (shape === 'triangle') {
+  if (shape === 'triangle' || shape === 'triangle-inward') {
     return 0;
   }
 
@@ -91,7 +99,7 @@ const markerVisualsForShape = (
     return { fill: 'transparent', stroke: strokeColor, strokeWidth: 1.5 };
   }
 
-  if (shape === 'triangle' || shape === 'arrow') {
+  if (shape === 'arrow') {
     return { fill: strokeColor, stroke: 'none', strokeWidth: 0 };
   }
 
@@ -321,7 +329,7 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
           />
         ) : (
           <path
-            d={arrowPathForShape(shape, 'end') ?? ''}
+            d={arrowPathForShape(shape, orientation) ?? ''}
             fill={visuals.fill}
             stroke={visuals.stroke}
             strokeWidth={visuals.strokeWidth}
