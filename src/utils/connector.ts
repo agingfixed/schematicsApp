@@ -9,7 +9,8 @@ import {
 } from '../types/scene';
 
 const EPSILON = 1e-6;
-const DEFAULT_STUB_LENGTH = 48;
+const MIN_STUB_LENGTH = 36;
+const BASE_ARROW_STUB_LENGTH = 24;
 const MAX_PREVIEW_SNAP = 1e-3;
 export type ConnectorAxis = 'horizontal' | 'vertical' | 'diagonal';
 
@@ -30,8 +31,10 @@ const directionForPort: Record<CardinalConnectorPort, ConnectorDirection> = {
 export const getConnectorPortDirection = (port: CardinalConnectorPort): ConnectorDirection =>
   directionForPort[port];
 
-export const getConnectorStubLength = (connector: ConnectorModel): number =>
-  connector.style.strokeWidth ? Math.max(36, connector.style.strokeWidth * 12) : DEFAULT_STUB_LENGTH;
+export const getConnectorStubLength = (connector: ConnectorModel): number => {
+  const arrowSize = connector.style.arrowSize ?? 1;
+  return Math.max(MIN_STUB_LENGTH, arrowSize * BASE_ARROW_STUB_LENGTH);
+};
 
 const clonePoint = (point: Vec2): Vec2 => ({ x: point.x, y: point.y });
 
