@@ -285,81 +285,60 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
     startArrowShape === 'line-arrow' ? 'outlined' : connector.style.startArrow?.fill ?? 'filled';
   const endArrowFill =
     endArrowShape === 'line-arrow' ? 'outlined' : connector.style.endArrow?.fill ?? 'filled';
-  const startRefX =
-    startArrowShape === 'circle'
-      ? markerRefXForShape(startArrowShape, 'start')
-      : markerRefXForShape(startArrowShape, 'end');
-  const endRefX = markerRefXForShape(endArrowShape, 'end');
-  const startVisual = markerVisualsForShape(startArrowShape, startArrowFill, arrowStroke);
-  const endVisual = markerVisualsForShape(endArrowShape, endArrowFill, arrowStroke);
-  const startLineCap = startArrowShape === 'line-arrow' ? 'round' : 'butt';
-  const endLineCap = endArrowShape === 'line-arrow' ? 'round' : 'butt';
 
-  const startMarker = startArrowShape !== 'none' && (
-    <marker
-      id={startMarkerId}
-      viewBox="0 0 12 12"
-      markerWidth={12 * arrowSize}
-      markerHeight={12 * arrowSize}
-      refX={startRefX}
-      refY={6}
-      orient="auto-start-reverse"
-      markerUnits="strokeWidth"
-    >
-      {startArrowShape === 'circle' ? (
-        <circle
-          cx={6}
-          cy={6}
-          r={4}
-          fill={startVisual.fill}
-          stroke={startVisual.stroke}
-          strokeWidth={startVisual.strokeWidth}
-        />
-      ) : (
-        <path
-          d={arrowPathForShape(startArrowShape, 'end') ?? ''}
-          fill={startVisual.fill}
-          stroke={startVisual.stroke}
-          strokeWidth={startVisual.strokeWidth}
-          strokeLinecap={startLineCap}
-          strokeLinejoin="round"
-        />
-      )}
-    </marker>
-  );
+  const createMarker = (
+    markerId: string,
+    shape: ArrowShape,
+    fill: 'filled' | 'outlined',
+    orientation: 'start' | 'end'
+  ) => {
+    if (shape === 'none') {
+      return null;
+    }
 
-  const endMarker = endArrowShape !== 'none' && (
-    <marker
-      id={endMarkerId}
-      viewBox="0 0 12 12"
-      markerWidth={12 * arrowSize}
-      markerHeight={12 * arrowSize}
-      refX={endRefX}
-      refY={6}
-      orient="auto"
-      markerUnits="strokeWidth"
-    >
-      {endArrowShape === 'circle' ? (
-        <circle
-          cx={6}
-          cy={6}
-          r={4}
-          fill={endVisual.fill}
-          stroke={endVisual.stroke}
-          strokeWidth={endVisual.strokeWidth}
-        />
-      ) : (
-        <path
-          d={arrowPathForShape(endArrowShape, 'end') ?? ''}
-          fill={endVisual.fill}
-          stroke={endVisual.stroke}
-          strokeWidth={endVisual.strokeWidth}
-          strokeLinecap={endLineCap}
-          strokeLinejoin="round"
-        />
-      )}
-    </marker>
-  );
+    const refX =
+      shape === 'circle'
+        ? markerRefXForShape(shape, orientation)
+        : markerRefXForShape(shape, 'end');
+    const visuals = markerVisualsForShape(shape, fill, arrowStroke);
+    const lineCap = shape === 'line-arrow' ? 'round' : 'butt';
+
+    return (
+      <marker
+        id={markerId}
+        viewBox="0 0 12 12"
+        markerWidth={12 * arrowSize}
+        markerHeight={12 * arrowSize}
+        refX={refX}
+        refY={6}
+        orient="auto-start-reverse"
+        markerUnits="strokeWidth"
+      >
+        {shape === 'circle' ? (
+          <circle
+            cx={6}
+            cy={6}
+            r={4}
+            fill={visuals.fill}
+            stroke={visuals.stroke}
+            strokeWidth={visuals.strokeWidth}
+          />
+        ) : (
+          <path
+            d={arrowPathForShape(shape, 'end') ?? ''}
+            fill={visuals.fill}
+            stroke={visuals.stroke}
+            strokeWidth={visuals.strokeWidth}
+            strokeLinecap={lineCap}
+            strokeLinejoin="round"
+          />
+        )}
+      </marker>
+    );
+  };
+
+  const startMarker = createMarker(startMarkerId, startArrowShape, startArrowFill, 'start');
+  const endMarker = createMarker(endMarkerId, endArrowShape, endArrowFill, 'end');
 
   const handleLabelInput = (event: React.FormEvent<HTMLDivElement>) => {
     setDraft(event.currentTarget.textContent ?? '');
