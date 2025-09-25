@@ -54,11 +54,11 @@ const arrowPathForShape = (shape: ArrowShape, orientation: 'start' | 'end'): str
     case 'triangle-inward':
       return orientation === 'end'
         ? 'M12 1 L0 6 L12 11 Z'
-        : 'M0 1 L12 6 L0 11 Z';
+        : 'M12 1 L0 6 L12 11 Z';
     case 'arrow':
       return orientation === 'end'
         ? 'M0 1 L12 6 L0 11 Z'
-        : 'M12 1 L0 6 L12 11 Z';
+        : 'M0 1 L12 6 L0 11 Z';
     case 'line-arrow':
       return orientation === 'end'
         ? 'M0 1 L12 6 L0 11'
