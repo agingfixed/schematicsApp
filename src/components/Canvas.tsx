@@ -1148,37 +1148,6 @@ const CanvasComponent = (
     [updateConnector]
   );
 
-  const handleConnectorTidy = useCallback(
-    (connector: ConnectorModel) => {
-      const sourceNode = resolveEndpointNode(connector.source);
-      const targetNode = resolveEndpointNode(connector.target);
-      const geometry = getConnectorPath(connector, sourceNode, targetNode, nodes);
-      if (connector.mode === 'elbow') {
-        const waypoints = tidyOrthogonalWaypoints(geometry.start, geometry.waypoints, geometry.end);
-        updateConnector(connector.id, { points: waypoints });
-      } else {
-        updateConnector(connector.id, { points: [] });
-      }
-    },
-    [resolveEndpointNode, updateConnector]
-  );
-
-  const handleConnectorFlip = useCallback(
-    (connector: ConnectorModel) => {
-      const reversedPoints = connector.points
-        ? [...connector.points].reverse().map((point) => ({ ...point }))
-        : [];
-      updateConnector(connector.id, {
-        source: cloneConnectorEndpoint(connector.target),
-        target: cloneConnectorEndpoint(connector.source),
-        points: reversedPoints,
-        labelPosition:
-          connector.labelPosition !== undefined ? 1 - connector.labelPosition : connector.labelPosition
-      });
-    },
-    [updateConnector]
-  );
-
   useEffect(() => {
     setGlobalTransform(transform);
     onTransformChange?.(transform);
@@ -3482,8 +3451,6 @@ const CanvasComponent = (
           isVisible={tool === 'select' && !isPanning && !editingConnectorId}
           onStyleChange={(patch) => handleConnectorStyleChange(selectedConnector, patch)}
           onModeChange={(mode) => handleConnectorModeChange(selectedConnector, mode)}
-          onFlipDirection={() => handleConnectorFlip(selectedConnector)}
-          onTidyPath={() => handleConnectorTidy(selectedConnector)}
           pointerPosition={lastPointerPosition}
         />
       )}
