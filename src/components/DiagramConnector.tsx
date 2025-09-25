@@ -288,6 +288,7 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
   const arrowStroke = connector.style.stroke;
   const endpointColor = connector.style.stroke;
   const arrowSize = Math.max(0.6, connector.style.arrowSize ?? 1);
+  const markerSize = 24 * arrowSize;
   const startMarkerId = useMemo(() => `connector-${connector.id}-start`, [connector.id]);
 
   const startArrowShape = connector.style.startArrow?.shape ?? 'none';
@@ -315,12 +316,12 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
       <marker
         id={markerId}
         viewBox="0 0 12 12"
-        markerWidth={12 * arrowSize}
-        markerHeight={12 * arrowSize}
+        markerWidth={markerSize}
+        markerHeight={markerSize}
         refX={refX}
         refY={6}
         orient="auto-start-reverse"
-        markerUnits="strokeWidth"
+        markerUnits="userSpaceOnUse"
       >
         {shape === 'circle' ? (
           <circle
