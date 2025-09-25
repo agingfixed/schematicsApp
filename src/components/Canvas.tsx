@@ -40,7 +40,6 @@ import {
   CARDINAL_PORTS,
   cloneConnectorEndpoint,
   buildRoundedConnectorPath,
-  buildStraightConnectorBend,
   getConnectorPath,
   getConnectorPortAnchor,
   getConnectorPortDirection,
@@ -1123,19 +1122,6 @@ const CanvasComponent = (
   const handleConnectorStyleChange = useCallback(
     (connector: ConnectorModel, patch: Partial<ConnectorModel['style']>) => {
       updateConnector(connector.id, { style: patch });
-    },
-    [updateConnector]
-  );
-
-  const handleConnectorModeChange = useCallback(
-    (connector: ConnectorModel, mode: ConnectorModel['mode']) => {
-      if (mode === connector.mode) {
-        return;
-      }
-      updateConnector(connector.id, {
-        mode,
-        points: []
-      });
     },
     [updateConnector]
   );
@@ -2478,7 +2464,7 @@ const CanvasComponent = (
       lastConnectorClickRef.current = null;
     }
 
-    if (!willBeSingleSelected || connector.mode !== 'elbow') {
+    if (!willBeSingleSelected) {
       return;
     }
 
@@ -2493,38 +2479,6 @@ const CanvasComponent = (
     const originalWaypoints = connector.points?.map((point) => ({ ...point })) ?? [];
     let closest = findClosestPointOnPolyline(worldPoint, geometry.points);
     let seededWaypoints: Vec2[] | null = null;
-
-    const segmentsShareAxis =
-      geometry.segments.length > 0 &&
-      geometry.segments.every(
-        (segment) => segment.axis !== 'diagonal' && segment.axis === geometry.segments[0].axis
-      );
-
-    if (
-      segmentsShareAxis &&
-      isAttachedConnectorEndpoint(connector.source) &&
-      isAttachedConnectorEndpoint(connector.target)
-    ) {
-      const startDirection = getConnectorPortDirection(connector.source.port);
-      const endDirection = getConnectorPortDirection(connector.target.port);
-      const stubLength = getConnectorStubLength(connector);
-      const seed = buildStraightConnectorBend(
-        geometry.start,
-        startDirection,
-        geometry.end,
-        endDirection,
-        stubLength
-      );
-      if (seed.length) {
-        seededWaypoints = seed.map((point) => ({ ...point }));
-        const seededConnector: ConnectorModel = {
-          ...connector,
-          points: seededWaypoints.map((point) => ({ ...point }))
-        };
-        geometry = getConnectorPath(seededConnector, sourceNode, targetNode, nodes);
-        closest = findClosestPointOnPolyline(worldPoint, geometry.points);
-      }
-    }
 
     const segmentIndex = closest.index;
     if (segmentIndex <= 0 || segmentIndex >= geometry.points.length - 2) {
@@ -2579,10 +2533,6 @@ const CanvasComponent = (
 
     if (!selectedConnectorIds.includes(connector.id)) {
       setSelection({ nodeIds: [], connectorIds: [connector.id] });
-    }
-
-    if (connector.mode !== 'elbow') {
-      return;
     }
 
     const sourceNode = resolveEndpointNode(connector.source);
@@ -3173,7 +3123,7 @@ const CanvasComponent = (
       const sourceNode = resolveEndpointNode(model.source);
       const targetNode = resolveEndpointNode(model.target);
       const geometry = getConnectorPath(model, sourceNode, targetNode, nodes);
-      const radius = model.mode === 'elbow' ? model.style.cornerRadius ?? 12 : 0;
+      const radius = model.style.cornerRadius ?? 12;
       const path = buildRoundedConnectorPath(geometry.points, radius);
       if (!path) {
         return null;
@@ -3223,7 +3173,6 @@ const CanvasComponent = (
 
     const previewConnector: ConnectorModel = {
       id: 'pending',
-      mode: 'elbow',
       source: cloneConnectorEndpoint(pendingConnection.source),
       target: targetEndpoint,
       points: [],
@@ -3450,7 +3399,6 @@ const CanvasComponent = (
           viewportSize={viewport}
           isVisible={tool === 'select' && !isPanning && !editingConnectorId}
           onStyleChange={(patch) => handleConnectorStyleChange(selectedConnector, patch)}
-          onModeChange={(mode) => handleConnectorModeChange(selectedConnector, mode)}
           pointerPosition={lastPointerPosition}
         />
       )}

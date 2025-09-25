@@ -168,29 +168,27 @@ const buildDefaultWaypoints = (
     waypoints.push(startStub);
   }
 
-  if (connector.mode !== 'straight') {
-    const routeStart = startHasStub ? startStub : start.point;
-    const routeEnd = endHasStub ? endStub : end.point;
+  const routeStart = startHasStub ? startStub : start.point;
+  const routeEnd = endHasStub ? endStub : end.point;
 
-    const bridgeNeeded = !nearlyEqual(routeStart.x, routeEnd.x) && !nearlyEqual(routeStart.y, routeEnd.y);
+  const bridgeNeeded = !nearlyEqual(routeStart.x, routeEnd.x) && !nearlyEqual(routeStart.y, routeEnd.y);
 
-    if (bridgeNeeded) {
-      const horizontalFirst =
-        start.direction === 'left' || start.direction === 'right'
-          ? true
-          : start.direction === 'up' || start.direction === 'down'
-          ? false
-          : end.direction === 'up' || end.direction === 'down'
-          ? true
-          : end.direction === 'left' || end.direction === 'right'
-          ? false
-          : Math.abs(routeEnd.x - routeStart.x) >= Math.abs(routeEnd.y - routeStart.y);
+  if (bridgeNeeded) {
+    const horizontalFirst =
+      start.direction === 'left' || start.direction === 'right'
+        ? true
+        : start.direction === 'up' || start.direction === 'down'
+        ? false
+        : end.direction === 'up' || end.direction === 'down'
+        ? true
+        : end.direction === 'left' || end.direction === 'right'
+        ? false
+        : Math.abs(routeEnd.x - routeStart.x) >= Math.abs(routeEnd.y - routeStart.y);
 
-      if (horizontalFirst) {
-        waypoints.push({ x: routeEnd.x, y: routeStart.y });
-      } else {
-        waypoints.push({ x: routeStart.x, y: routeEnd.y });
-      }
+    if (horizontalFirst) {
+      waypoints.push({ x: routeEnd.x, y: routeStart.y });
+    } else {
+      waypoints.push({ x: routeStart.x, y: routeEnd.y });
     }
   }
 
@@ -615,53 +613,6 @@ const normalizeElbowWaypoints = (
   return enforceOrientationWithParity(start, base, end);
 };
 
-export const buildStraightConnectorBend = (
-  start: Vec2,
-  startDirection: ConnectorDirection,
-  end: Vec2,
-  endDirection: ConnectorDirection,
-  stubLength: number
-): Vec2[] => {
-  const orientation: 'horizontal' | 'vertical' =
-    Math.abs(start.y - end.y) <= Math.abs(start.x - end.x) ? 'horizontal' : 'vertical';
-
-  const magnitude = Math.max(12, Number.isFinite(stubLength) ? Math.abs(stubLength) : DEFAULT_STUB_LENGTH);
-  const startHasStub = shouldAddStub(startDirection);
-  const endHasStub = shouldAddStub(endDirection);
-  const startStub = startHasStub ? offsetPoint(start, startDirection, magnitude) : clonePoint(start);
-  const endStub = endHasStub ? offsetPoint(end, endDirection, magnitude) : clonePoint(end);
-
-  const sign = getPerpendicularSign(orientation, startDirection, endDirection);
-  const offset = magnitude * (sign === 0 ? 1 : sign);
-
-  const waypoints: Vec2[] = [];
-  if (startHasStub) {
-    waypoints.push(clonePoint(startStub));
-  }
-
-  if (orientation === 'horizontal') {
-    const referenceY = startHasStub ? startStub.y : start.y;
-    const pivotY = referenceY + offset;
-    const firstX = startHasStub ? startStub.x : start.x;
-    const lastX = endHasStub ? endStub.x : end.x;
-    waypoints.push({ x: firstX, y: pivotY });
-    waypoints.push({ x: lastX, y: pivotY });
-  } else {
-    const referenceX = startHasStub ? startStub.x : start.x;
-    const pivotX = referenceX + offset;
-    const firstY = startHasStub ? startStub.y : start.y;
-    const lastY = endHasStub ? endStub.y : end.y;
-    waypoints.push({ x: pivotX, y: firstY });
-    waypoints.push({ x: pivotX, y: lastY });
-  }
-
-  if (endHasStub) {
-    waypoints.push(clonePoint(endStub));
-  }
-
-  return tidyOrthogonalWaypoints(start, waypoints, end);
-};
-
 export interface ConnectorSegment {
   start: Vec2;
   end: Vec2;
@@ -706,10 +657,12 @@ export const getConnectorPath = (
       )
     : buildDefaultWaypoints(connector, resolvedSource, resolvedTarget);
 
-  const normalizedWaypoints =
-    connector.mode === 'elbow'
-      ? normalizeElbowWaypoints(connector, resolvedSource, alignedWaypoints, resolvedTarget)
-      : alignedWaypoints.map(clonePoint);
+  const normalizedWaypoints = normalizeElbowWaypoints(
+    connector,
+    resolvedSource,
+    alignedWaypoints,
+    resolvedTarget
+  );
 
   const points = [
     resolvedSource.point,

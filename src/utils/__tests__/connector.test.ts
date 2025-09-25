@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import {
   CARDINAL_PORTS,
   cloneConnectorEndpoint,
-  buildStraightConnectorBend,
   findClosestPointOnPolyline,
   getConnectorPath,
   getConnectorPortPositions,
@@ -46,12 +45,10 @@ const defaultConnectorStyle: Mutable<ConnectorModel['style']> = {
 };
 
 const createConnector = (
-  mode: ConnectorModel['mode'],
   sourcePort: CardinalConnectorPort,
   targetPort: CardinalConnectorPort
 ): ConnectorModel => ({
   id: 'connector',
-  mode,
   source: { nodeId: 'source', port: sourcePort },
   target: { nodeId: 'target', port: targetPort },
   style: { ...defaultConnectorStyle },
@@ -90,10 +87,10 @@ test('cloneConnectorEndpoint returns independent copies', () => {
   }
 });
 
-test('elbow connectors create orthogonal paths with outward stubs', () => {
+test('connectors create orthogonal paths with outward stubs', () => {
   const source = createNode('source', { x: 0, y: 0 });
   const target = createNode('target', { x: 320, y: 120 });
-  const connector = createConnector('elbow', 'right', 'left');
+  const connector = createConnector('right', 'left');
 
   const path = getConnectorPath(connector, source, target, [source, target]);
   assert.ok(path.points.length >= 4, 'expected elbow connectors to include intermediate waypoints');
@@ -111,10 +108,10 @@ test('elbow connectors create orthogonal paths with outward stubs', () => {
   }
 });
 
-test('aligned elbow connectors preserve outward stubs', () => {
+test('aligned connectors preserve outward stubs', () => {
   const source = createNode('source', { x: 0, y: 120 });
   const target = createNode('target', { x: 320, y: 120 });
-  const connector = createConnector('elbow', 'right', 'left');
+  const connector = createConnector('right', 'left');
 
   const path = getConnectorPath(connector, source, target, [source, target]);
   assert.strictEqual(path.points.length, 4, 'expected preserved stubs around aligned nodes');
@@ -126,10 +123,10 @@ test('aligned elbow connectors preserve outward stubs', () => {
   assert.ok(endStub.x < path.end.x);
 });
 
-test('manual elbow waypoints stay aligned to endpoints', () => {
+test('manual waypoints stay aligned to endpoints', () => {
   const originalSource = createNode('source', { x: 0, y: 0 });
   const originalTarget = createNode('target', { x: 320, y: 200 });
-  const connector = createConnector('elbow', 'right', 'left');
+  const connector = createConnector('right', 'left');
   connector.points = [
     { x: 200, y: originalSource.position.y },
     { x: 200, y: originalTarget.position.y }
@@ -148,10 +145,10 @@ test('manual elbow waypoints stay aligned to endpoints', () => {
   assert.ok(last.x <= path.end.x, 'last waypoint should remain outward from the node');
 });
 
-test('elbow connectors keep right angles when endpoints move', () => {
+test('connectors keep right angles when endpoints move', () => {
   const seedSource = createNode('source', { x: 0, y: 0 });
   const seedTarget = createNode('target', { x: 320, y: 200 });
-  const connector = createConnector('elbow', 'right', 'left');
+  const connector = createConnector('right', 'left');
 
   const seededPath = getConnectorPath(connector, seedSource, seedTarget, [seedSource, seedTarget]);
   connector.points = seededPath.waypoints.map((point) => ({ ...point }));
@@ -172,50 +169,6 @@ test('elbow connectors keep right angles when endpoints move', () => {
       'segments must remain horizontal or vertical after moving attached nodes'
     );
   }
-});
-
-test('straight connectors connect ports directly', () => {
-  const source = createNode('source', { x: 0, y: 0 });
-  const target = createNode('target', { x: 320, y: 200 });
-  const connector = createConnector('straight', 'right', 'left');
-
-  const path = getConnectorPath(connector, source, target, [source, target]);
-  const sourcePort = getConnectorPortPositions(source).right;
-  const targetPort = getConnectorPortPositions(target).left;
-
-  assert.strictEqual(path.points.length, 4);
-  assert.deepStrictEqual(path.points[0], sourcePort);
-  assert.deepStrictEqual(path.points[path.points.length - 1], targetPort);
-
-  const startStub = path.points[1];
-  assert.ok(Math.abs(startStub.y - sourcePort.y) < 1e-3, 'expected start stub to stay horizontal');
-  assert.ok(startStub.x > sourcePort.x, 'expected start stub to extend outward from the node');
-
-  const endStub = path.points[path.points.length - 2];
-  assert.ok(Math.abs(endStub.y - targetPort.y) < 1e-3, 'expected end stub to stay horizontal');
-  assert.ok(endStub.x < targetPort.x, 'expected end stub to extend outward from the node');
-});
-
-test('straight connectors keep vertical stubs aligned to node edges', () => {
-  const source = createNode('source', { x: 200, y: 0 });
-  const target = createNode('target', { x: 200, y: 320 });
-  const connector = createConnector('straight', 'top', 'bottom');
-
-  const path = getConnectorPath(connector, source, target, [source, target]);
-  const sourcePort = getConnectorPortPositions(source).top;
-  const targetPort = getConnectorPortPositions(target).bottom;
-
-  assert.strictEqual(path.points.length, 4);
-  assert.deepStrictEqual(path.points[0], sourcePort);
-  assert.deepStrictEqual(path.points[path.points.length - 1], targetPort);
-
-  const startStub = path.points[1];
-  assert.ok(Math.abs(startStub.x - sourcePort.x) < 1e-3, 'expected start stub to stay vertical');
-  assert.ok(startStub.y < sourcePort.y, 'expected top port stub to extend outward from the node');
-
-  const endStub = path.points[path.points.length - 2];
-  assert.ok(Math.abs(endStub.x - targetPort.x) < 1e-3, 'expected end stub to stay vertical');
-  assert.ok(endStub.y > targetPort.y, 'expected bottom port stub to extend outward from the node');
 });
 
 test('tidyOrthogonalWaypoints removes redundant points', () => {
@@ -284,21 +237,6 @@ test('tidyOrthogonalWaypoints collapses tight detours', () => {
     const secondAxis = Math.abs(b.x - c.x) < 1e-3 ? 'vertical' : 'horizontal';
     assert.ok(firstAxis !== secondAxis, 'turns should remain orthogonal');
   }
-});
-
-test('buildStraightConnectorBend produces three right-angle turns', () => {
-  const start = { x: 100, y: 180 };
-  const end = { x: 420, y: 180 };
-  const waypoints = buildStraightConnectorBend(start, 'right', end, 'left', 60);
-
-  assert.strictEqual(waypoints.length, 4);
-  const [stubStart, pivotA, pivotB, stubEnd] = waypoints;
-  assert.ok(Math.abs(stubStart.y - start.y) < 1e-3);
-  assert.ok(stubStart.x > start.x);
-  assert.ok(Math.abs(pivotA.x - stubStart.x) < 1e-3);
-  assert.ok(Math.abs(pivotB.y - pivotA.y) < 1e-3);
-  assert.ok(Math.abs(stubEnd.y - end.y) < 1e-3);
-  assert.ok(stubEnd.x < end.x);
 });
 
 test('closest point on polyline identifies the nearest segment', () => {
