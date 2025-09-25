@@ -39,7 +39,8 @@
 }
 
 .diagram-node {
-  transition: transform 0.12s ease;
+  transition: none;
+  /* Disable transform easing so dragged nodes track the pointer precisely. */
 }
 
 .diagram-node__shadow {
