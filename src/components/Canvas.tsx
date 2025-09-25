@@ -691,11 +691,11 @@ const CanvasComponent = (
   };
 
   const selectedNode = useMemo(() => {
-    if (selectedNodeIds.length !== 1) {
+    if (selectedNodeIds.length !== 1 || selectedConnectorIds.length > 0) {
       return null;
     }
     return nodes.find((node) => node.id === selectedNodeIds[0]) ?? null;
-  }, [nodes, selectedNodeIds]);
+  }, [nodes, selectedNodeIds, selectedConnectorIds.length]);
 
   useEffect(() => {
     return () => {
@@ -704,11 +704,11 @@ const CanvasComponent = (
   }, [clearLinkActivationTimer]);
 
   const selectedConnector = useMemo(() => {
-    if (selectedConnectorIds.length !== 1) {
+    if (selectedConnectorIds.length !== 1 || selectedNodeIds.length > 0) {
       return null;
     }
     return connectors.find((item) => item.id === selectedConnectorIds[0]) ?? null;
-  }, [connectors, selectedConnectorIds]);
+  }, [connectors, selectedConnectorIds, selectedNodeIds.length]);
 
   useEffect(() => {
     const hasMenu = Boolean(selectedConnector) || Boolean(selectedNode);
