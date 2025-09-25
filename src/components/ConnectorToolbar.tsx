@@ -12,7 +12,6 @@ interface ConnectorToolbarProps {
   viewportSize: { width: number; height: number };
   isVisible: boolean;
   onStyleChange: (patch: Partial<ConnectorModel['style']>) => void;
-  onModeChange: (mode: ConnectorModel['mode']) => void;
   pointerPosition: { x: number; y: number } | null;
 }
 
@@ -30,11 +29,6 @@ const arrowOptions = [
 const fillOptions = [
   { value: 'filled', label: 'Filled' },
   { value: 'outlined', label: 'Outlined' }
-] as const;
-
-const modeOptions = [
-  { value: 'elbow', label: 'Elbow' },
-  { value: 'straight', label: 'Straight' }
 ] as const;
 
 const getLockedFillForShape = (
@@ -55,7 +49,6 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
   viewportSize,
   isVisible,
   onStyleChange,
-  onModeChange,
   pointerPosition
 }) => {
   const toolbarRef = useRef<HTMLDivElement>(null);
@@ -232,6 +225,17 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
             >
               {connector.style.dashed ? 'Dashed' : 'Solid'}
             </button>
+            <label className="connector-toolbar__field connector-toolbar__field--block">
+              <span>Corner</span>
+              <input
+                type="range"
+                min={0}
+                max={80}
+                step={1}
+                value={connector.style.cornerRadius ?? 12}
+                onChange={handleCornerRadiusChange}
+              />
+            </label>
           </div>
         </section>
         <section className="connector-toolbar__panel connector-toolbar__panel--start">
@@ -272,37 +276,6 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
                 ))}
               </select>
             </label>
-          </div>
-        </section>
-        <section className="connector-toolbar__panel connector-toolbar__panel--geometry">
-          <h3 className="connector-toolbar__panel-title">Geometry</h3>
-          <div className="connector-toolbar__section connector-toolbar__section--geometry">
-            <label className="connector-toolbar__field">
-              <span>Mode</span>
-              <select
-                value={connector.mode}
-                onChange={(event) => onModeChange(event.target.value as ConnectorModel['mode'])}
-              >
-                {modeOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {connector.mode === 'elbow' && (
-              <label className="connector-toolbar__field connector-toolbar__field--block">
-                <span>Corner</span>
-                <input
-                  type="range"
-                  min={0}
-                  max={80}
-                  step={1}
-                  value={connector.style.cornerRadius ?? 12}
-                  onChange={handleCornerRadiusChange}
-                />
-              </label>
-            )}
           </div>
         </section>
       </div>

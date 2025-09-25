@@ -230,7 +230,7 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
     [previewGeometry, connector, source, target, nodes]
   );
 
-  const cornerRadius = connector.mode === 'elbow' ? connector.style.cornerRadius ?? 12 : 0;
+  const cornerRadius = connector.style.cornerRadius ?? 12;
 
   const pathData = useMemo(
     () => buildRoundedConnectorPath(geometry.points, cornerRadius),
@@ -497,7 +497,7 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
         const cursor = segment.axis === 'horizontal' ? 'ns-resize' : 'ew-resize';
         const length = Math.hypot(segment.end.x - segment.start.x, segment.end.y - segment.start.y);
         const showHandle =
-          selected && connector.mode === 'elbow' && length >= 6 && Number.isFinite(length);
+          selected && length >= 6 && Number.isFinite(length);
         const centerX = (segment.start.x + segment.end.x) / 2;
         const centerY = (segment.start.y + segment.end.y) / 2;
         return (
@@ -597,7 +597,7 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
           </g>
         </>
       )}
-      {selected && connector.mode === 'elbow' &&
+      {selected &&
         geometry.points.slice(1, geometry.points.length - 1).map((point, index) => {
           const previous = geometry.points[index];
           const next = geometry.points[index + 2];
