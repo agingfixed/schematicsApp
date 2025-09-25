@@ -115,7 +115,6 @@ const PENDING_CONNECTOR_STYLE: ConnectorModel['style'] = {
   strokeWidth: 2,
   dashed: false,
   startArrow: { shape: 'none', fill: 'filled' },
-  endArrow: { shape: 'arrow', fill: 'filled' },
   arrowSize: 1,
   cornerRadius: 12
 };
@@ -237,8 +236,7 @@ const cloneNodeForClipboard = (node: NodeModel): NodeModel => ({
 
 const cloneConnectorStyle = (style: ConnectorModel['style']): ConnectorModel['style'] => ({
   ...style,
-  startArrow: style.startArrow ? { ...style.startArrow } : undefined,
-  endArrow: style.endArrow ? { ...style.endArrow } : undefined
+  startArrow: style.startArrow ? { ...style.startArrow } : undefined
 });
 
 const cloneConnectorForClipboard = (connector: ConnectorModel): ConnectorModel => ({
