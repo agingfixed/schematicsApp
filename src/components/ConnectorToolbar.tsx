@@ -18,7 +18,7 @@ interface ConnectorToolbarProps {
 
 const TOOLBAR_OFFSET = 14;
 
-const arrowOptions = [
+const startArrowOptions = [
   { value: 'none', label: 'None' },
   { value: 'arrow', label: 'Arrow' },
   { value: 'triangle-inward', label: 'Triangle (Inward)' },
@@ -27,7 +27,21 @@ const arrowOptions = [
   { value: 'circle', label: 'Circle' }
 ] as const;
 
-const fillOptions = [
+const startFillOptions = [
+  { value: 'filled', label: 'Filled' },
+  { value: 'outlined', label: 'Outlined' }
+] as const;
+
+const stopArrowOptions = [
+  { value: 'none', label: 'None' },
+  { value: 'arrow', label: 'Arrow' },
+  { value: 'triangle-inward', label: 'Triangle (Inward)' },
+  { value: 'line-arrow', label: 'Line Arrow' },
+  { value: 'diamond', label: 'Diamond' },
+  { value: 'circle', label: 'Circle' }
+] as const;
+
+const stopFillOptions = [
   { value: 'filled', label: 'Filled' },
   { value: 'outlined', label: 'Outlined' }
 ] as const;
@@ -298,7 +312,7 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
             <label className="connector-toolbar__field">
               <span>Shape</span>
               <select value={startShape} onChange={handleStartArrowShapeChange}>
-                {arrowOptions.map((option) => (
+                {startArrowOptions.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
                   </option>
@@ -312,7 +326,7 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
                 onChange={handleStartArrowFillChange}
                 disabled={startFillDisabled}
               >
-                {fillOptions.map((option) => (
+                {startFillOptions.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
                   </option>
@@ -338,7 +352,7 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
             <label className="connector-toolbar__field">
               <span>Shape</span>
               <select value={stopShape} onChange={handleStopArrowShapeChange}>
-                {arrowOptions.map((option) => (
+                {stopArrowOptions.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
                   </option>
@@ -352,7 +366,7 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
                 onChange={handleStopArrowFillChange}
                 disabled={stopFillDisabled}
               >
-                {fillOptions.map((option) => (
+                {stopFillOptions.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
                   </option>

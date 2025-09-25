@@ -354,7 +354,8 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
     return { anchor: point, center, normal, segmentIndex };
   }, [geometry, labelPosition, labelRadius, labelOffset, labelAngle, hasCustomAngle]);
 
-  const arrowStroke = connector.style.stroke;
+  const startMarkerStrokeColor = connector.style.stroke;
+  const stopMarkerStrokeColor = connector.style.stroke;
   const endpointColor = connector.style.stroke;
   const startArrowSize = Math.max(
     0.6,
@@ -386,7 +387,7 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
       shape === 'circle'
         ? startMarkerRefXForShape(shape, orientation)
         : startMarkerRefXForShape(shape, 'end');
-    const visuals = startMarkerVisualsForShape(shape, fill, arrowStroke);
+    const visuals = startMarkerVisualsForShape(shape, fill, startMarkerStrokeColor);
     const lineCap = shape === 'line-arrow' ? 'round' : 'butt';
 
     return (
@@ -433,12 +434,16 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
       return null;
     }
 
-    const refX =
+    const stopRefX =
       shape === 'circle'
         ? stopMarkerRefXForShape(shape, orientation)
         : stopMarkerRefXForShape(shape, 'end');
-    const visuals = stopMarkerVisualsForShape(shape, fill, arrowStroke);
-    const lineCap = shape === 'line-arrow' ? 'round' : 'butt';
+    const stopMarkerVisualDetails = stopMarkerVisualsForShape(
+      shape,
+      fill,
+      stopMarkerStrokeColor
+    );
+    const stopLineCap = shape === 'line-arrow' ? 'round' : 'butt';
 
     return (
       <marker
@@ -446,7 +451,7 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
         viewBox="0 0 12 12"
         markerWidth={12 * stopArrowSize}
         markerHeight={12 * stopArrowSize}
-        refX={refX}
+        refX={stopRefX}
         refY={6}
         orient="auto-start-reverse"
         markerUnits="strokeWidth"
@@ -456,17 +461,17 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
             cx={6}
             cy={6}
             r={4}
-            fill={visuals.fill}
-            stroke={visuals.stroke}
-            strokeWidth={visuals.strokeWidth}
+            fill={stopMarkerVisualDetails.fill}
+            stroke={stopMarkerVisualDetails.stroke}
+            strokeWidth={stopMarkerVisualDetails.strokeWidth}
           />
         ) : (
           <path
             d={stopArrowPathForShape(shape, orientation) ?? ''}
-            fill={visuals.fill}
-            stroke={visuals.stroke}
-            strokeWidth={visuals.strokeWidth}
-            strokeLinecap={lineCap}
+            fill={stopMarkerVisualDetails.fill}
+            stroke={stopMarkerVisualDetails.stroke}
+            strokeWidth={stopMarkerVisualDetails.strokeWidth}
+            strokeLinecap={stopLineCap}
             strokeLinejoin="round"
           />
         )}
