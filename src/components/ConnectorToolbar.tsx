@@ -22,8 +22,8 @@ const TOOLBAR_OFFSET = 14;
 
 const arrowOptions = [
   { value: 'none', label: 'None' },
-  { value: 'triangle', label: 'Triangle (Inward)' },
   { value: 'arrow', label: 'Arrow' },
+  { value: 'triangle-inward', label: 'Triangle (Inward)' },
   { value: 'line-arrow', label: 'Line Arrow' },
   { value: 'diamond', label: 'Diamond' },
   { value: 'circle', label: 'Circle' }
@@ -45,7 +45,7 @@ const getLockedFillForShape = (
   if (shape === 'line-arrow') {
     return 'outlined';
   }
-  if (shape === 'triangle' || shape === 'arrow') {
+  if (shape === 'arrow') {
     return 'filled';
   }
   return null;
