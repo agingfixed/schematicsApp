@@ -79,11 +79,15 @@ const markerRefXForShape = (shape: ArrowShape, orientation: 'start' | 'end'): nu
     return 6;
   }
 
+  if (shape === 'triangle-inward') {
+    return 12;
+  }
+
   if (orientation === 'start') {
     return 0;
   }
 
-  if (shape === 'triangle' || shape === 'triangle-inward') {
+  if (shape === 'triangle') {
     return 0;
   }
 
