@@ -133,7 +133,10 @@ export const DiagramNode: React.FC<DiagramNodeProps> = ({
   const handleLabelPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement;
     if (target.closest('a')) {
-      event.stopPropagation();
+      if (event.detail === 1) {
+        event.stopPropagation();
+      }
+      return;
     }
   };
 

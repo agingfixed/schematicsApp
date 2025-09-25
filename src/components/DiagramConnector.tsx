@@ -277,86 +277,63 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
   const endpointColor = connector.style.stroke;
   const arrowSize = Math.max(0.6, connector.style.arrowSize ?? 1);
   const startMarkerId = useMemo(() => `connector-${connector.id}-start`, [connector.id]);
-  const endMarkerId = useMemo(() => `connector-${connector.id}-end`, [connector.id]);
 
   const startArrowShape = connector.style.startArrow?.shape ?? 'none';
-  const endArrowShape = connector.style.endArrow?.shape ?? 'none';
   const startArrowFill =
     startArrowShape === 'line-arrow' ? 'outlined' : connector.style.startArrow?.fill ?? 'filled';
-  const endArrowFill =
-    endArrowShape === 'line-arrow' ? 'outlined' : connector.style.endArrow?.fill ?? 'filled';
-  const startRefX = markerRefXForShape(startArrowShape, 'start');
-  const endRefX = markerRefXForShape(endArrowShape, 'end');
-  const startVisual = markerVisualsForShape(startArrowShape, startArrowFill, arrowStroke);
-  const endVisual = markerVisualsForShape(endArrowShape, endArrowFill, arrowStroke);
-  const startLineCap = startArrowShape === 'line-arrow' ? 'round' : 'butt';
-  const endLineCap = endArrowShape === 'line-arrow' ? 'round' : 'butt';
 
-  const startMarker = startArrowShape !== 'none' && (
-    <marker
-      id={startMarkerId}
-      viewBox="0 0 12 12"
-      markerWidth={12 * arrowSize}
-      markerHeight={12 * arrowSize}
-      refX={startRefX}
-      refY={6}
-      orient="auto"
-      markerUnits="strokeWidth"
-    >
-      {startArrowShape === 'circle' ? (
-        <circle
-          cx={6}
-          cy={6}
-          r={4}
-          fill={startVisual.fill}
-          stroke={startVisual.stroke}
-          strokeWidth={startVisual.strokeWidth}
-        />
-      ) : (
-        <path
-          d={arrowPathForShape(startArrowShape, 'start') ?? ''}
-          fill={startVisual.fill}
-          stroke={startVisual.stroke}
-          strokeWidth={startVisual.strokeWidth}
-          strokeLinecap={startLineCap}
-          strokeLinejoin="round"
-        />
-      )}
-    </marker>
-  );
+  const createMarker = (
+    markerId: string,
+    shape: ArrowShape,
+    fill: 'filled' | 'outlined',
+    orientation: 'start' | 'end'
+  ) => {
+    if (shape === 'none') {
+      return null;
+    }
 
-  const endMarker = endArrowShape !== 'none' && (
-    <marker
-      id={endMarkerId}
-      viewBox="0 0 12 12"
-      markerWidth={12 * arrowSize}
-      markerHeight={12 * arrowSize}
-      refX={endRefX}
-      refY={6}
-      orient="auto"
-      markerUnits="strokeWidth"
-    >
-      {endArrowShape === 'circle' ? (
-        <circle
-          cx={6}
-          cy={6}
-          r={4}
-          fill={endVisual.fill}
-          stroke={endVisual.stroke}
-          strokeWidth={endVisual.strokeWidth}
-        />
-      ) : (
-        <path
-          d={arrowPathForShape(endArrowShape, 'end') ?? ''}
-          fill={endVisual.fill}
-          stroke={endVisual.stroke}
-          strokeWidth={endVisual.strokeWidth}
-          strokeLinecap={endLineCap}
-          strokeLinejoin="round"
-        />
-      )}
-    </marker>
-  );
+    const refX =
+      shape === 'circle'
+        ? markerRefXForShape(shape, orientation)
+        : markerRefXForShape(shape, 'end');
+    const visuals = markerVisualsForShape(shape, fill, arrowStroke);
+    const lineCap = shape === 'line-arrow' ? 'round' : 'butt';
+
+    return (
+      <marker
+        id={markerId}
+        viewBox="0 0 12 12"
+        markerWidth={12 * arrowSize}
+        markerHeight={12 * arrowSize}
+        refX={refX}
+        refY={6}
+        orient="auto-start-reverse"
+        markerUnits="strokeWidth"
+      >
+        {shape === 'circle' ? (
+          <circle
+            cx={6}
+            cy={6}
+            r={4}
+            fill={visuals.fill}
+            stroke={visuals.stroke}
+            strokeWidth={visuals.strokeWidth}
+          />
+        ) : (
+          <path
+            d={arrowPathForShape(shape, 'end') ?? ''}
+            fill={visuals.fill}
+            stroke={visuals.stroke}
+            strokeWidth={visuals.strokeWidth}
+            strokeLinecap={lineCap}
+            strokeLinejoin="round"
+          />
+        )}
+      </marker>
+    );
+  };
+
+  const startMarker = createMarker(startMarkerId, startArrowShape, startArrowFill, 'start');
 
   const handleLabelInput = (event: React.FormEvent<HTMLDivElement>) => {
     setDraft(event.currentTarget.textContent ?? '');
@@ -470,7 +447,6 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
   const labelBackground = connector.labelStyle?.background ?? 'rgba(15,23,42,0.85)';
 
   const markerStartUrl = startArrowShape !== 'none' ? `url(#${startMarkerId})` : undefined;
-  const markerEndUrl = endArrowShape !== 'none' ? `url(#${endMarkerId})` : undefined;
 
   const trimmedLabel = connector.label?.trim() ?? '';
   const hasLabel = Boolean(trimmedLabel) || labelEditing;
@@ -502,10 +478,7 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
         ['--connector-width' as string]: `${connector.style.strokeWidth}`
       } as React.CSSProperties}
     >
-      <defs>
-        {startMarker}
-        {endMarker}
-      </defs>
+      <defs>{startMarker}</defs>
       <path className="diagram-connector__hit" d={hitPathData} strokeWidth={28} onPointerDown={onPointerDown} />
       {segments.map((segment) => {
         const isHovered = hoveredSegment === segment.index;
@@ -558,7 +531,6 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
         strokeWidth={connector.style.strokeWidth}
         strokeDasharray={connector.style.dashed ? '12 8' : undefined}
         markerStart={markerStartUrl}
-        markerEnd={markerEndUrl}
         onPointerDown={onPointerDown}
       />
       {selected && (
