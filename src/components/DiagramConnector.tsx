@@ -45,22 +45,18 @@ const clampLabelOffset = (value: number) =>
 const clampLabelRadius = (value: number) =>
   Math.max(0, Math.min(MAX_LABEL_DISTANCE, Math.abs(value)));
 
-const arrowPathForShape = (shape: ArrowShape, orientation: 'start' | 'end'): string | null => {
+const startArrowPathForShape = (shape: ArrowShape): string | null => {
   switch (shape) {
     case 'triangle':
       return 'M0 1 L12 6 L0 11 Z';
     case 'triangle-inward':
-      return orientation === 'end'
-        ? 'M12 1 L0 6 L12 11 Z'
-        : 'M12 1 L0 6 L12 11 Z';
+      return 'M12 1 L0 6 L12 11 Z';
     case 'arrow':
       return 'M0 1 L12 6 L0 11 Z';
     case 'line-arrow':
       return 'M0 1 L12 6 L0 11';
     case 'diamond':
-      return orientation === 'end'
-        ? 'M0 6 L6 0 L12 6 L6 12 Z'
-        : 'M12 6 L6 0 L0 6 L6 12 Z';
+      return 'M12 6 L6 0 L0 6 L6 12 Z';
     case 'circle':
       return 'M6 0 A6 6 0 1 1 5.999 0 Z';
     default:
@@ -68,7 +64,25 @@ const arrowPathForShape = (shape: ArrowShape, orientation: 'start' | 'end'): str
   }
 };
 
-const markerRefXForShape = (shape: ArrowShape, orientation: 'start' | 'end'): number => {
+const endArrowPathForShape = (shape: ArrowShape): string | null => {
+  switch (shape) {
+    case 'triangle':
+    case 'arrow':
+      return 'M0 1 L12 6 L0 11 Z';
+    case 'triangle-inward':
+      return 'M12 1 L0 6 L12 11 Z';
+    case 'line-arrow':
+      return 'M0 1 L12 6 L0 11';
+    case 'diamond':
+      return 'M12 6 L6 0 L0 6 L6 12 Z';
+    case 'circle':
+      return 'M6 0 A6 6 0 1 1 5.999 0 Z';
+    default:
+      return null;
+  }
+};
+
+const startMarkerRefXForShape = (shape: ArrowShape): number => {
   if (shape === 'circle') {
     return 6;
   }
@@ -77,8 +91,16 @@ const markerRefXForShape = (shape: ArrowShape, orientation: 'start' | 'end'): nu
     return 12;
   }
 
-  if (orientation === 'start') {
-    return 0;
+  return 0;
+};
+
+const endMarkerRefXForShape = (shape: ArrowShape): number => {
+  if (shape === 'circle') {
+    return 6;
+  }
+
+  if (shape === 'triangle-inward') {
+    return 12;
   }
 
   if (shape === 'triangle') {
@@ -304,9 +326,13 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
     }
 
     const refX =
-      shape === 'circle'
-        ? markerRefXForShape(shape, orientation)
-        : markerRefXForShape(shape, 'end');
+      orientation === 'start'
+        ? startMarkerRefXForShape(shape)
+        : endMarkerRefXForShape(shape);
+    const pathData =
+      orientation === 'start'
+        ? startArrowPathForShape(shape)
+        : endArrowPathForShape(shape);
     const visuals = markerVisualsForShape(shape, fill, arrowStroke);
     const lineCap = shape === 'line-arrow' ? 'round' : 'butt';
 
@@ -332,7 +358,7 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
           />
         ) : (
           <path
-            d={arrowPathForShape(shape, orientation) ?? ''}
+            d={pathData ?? ''}
             fill={visuals.fill}
             stroke={visuals.stroke}
             strokeWidth={visuals.strokeWidth}
