@@ -475,7 +475,7 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
   };
 
   const startMarker = createStartMarker(startMarkerId, startArrowShape, startArrowFill, 'start');
-  const stopMarker = createStopMarker(stopMarkerId, stopArrowShape, stopArrowFill, 'end');
+  const stopMarker = createStopMarker(stopMarkerId, stopArrowShape, stopArrowFill, 'start');
 
   const handleLabelInput = (event: React.FormEvent<HTMLDivElement>) => {
     setDraft(event.currentTarget.textContent ?? '');
