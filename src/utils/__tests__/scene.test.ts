@@ -4,7 +4,15 @@ import { createNodeModel } from '../scene';
 import type { NodeKind } from '../../types/scene';
 
 test('createNodeModel creates nodes with positive sizes for each shape', () => {
-  const shapes: NodeKind[] = ['rectangle', 'circle', 'ellipse', 'triangle', 'diamond', 'text'];
+  const shapes: NodeKind[] = [
+    'rectangle',
+    'circle',
+    'ellipse',
+    'triangle',
+    'diamond',
+    'text',
+    'image'
+  ];
   for (const shape of shapes) {
     const node = createNodeModel(shape, { x: 0, y: 0 });
     assert.strictEqual(node.shape, shape);

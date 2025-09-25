@@ -68,6 +68,8 @@ const renderShape = (
     case 'text':
     case 'link':
       return <rect width={width} height={height} rx={8} {...common} />;
+    case 'image':
+      return <rect width={width} height={height} rx={16} {...common} />;
     default:
       return <rect width={width} height={height} rx={8} {...common} />;
   }
@@ -92,6 +94,8 @@ export const DiagramNode: React.FC<DiagramNodeProps> = ({
     strokeWidth: node.stroke.width,
     className: 'diagram-node__shape'
   });
+
+  const isImageNode = node.shape === 'image';
 
   const outlineStroke = selected ? '#60a5fa' : hovered ? 'rgba(148, 163, 184, 0.4)' : 'transparent';
   const outlineElement = renderShape(node, {
@@ -127,7 +131,9 @@ export const DiagramNode: React.FC<DiagramNodeProps> = ({
   };
   const nodeClassName = `diagram-node ${selected ? 'is-selected' : ''} ${
     hovered ? 'is-hovered' : ''
-  } ${isTextualNode ? 'diagram-node--text' : ''} ${isLinkNode ? 'diagram-node--link' : ''}`.trim();
+  } ${isTextualNode ? 'diagram-node--text' : ''} ${
+    isLinkNode ? 'diagram-node--link' : ''
+  } ${isImageNode ? 'diagram-node--image' : ''}`.trim();
   const showShadow = !isTextualNode;
 
   const handleLabelPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -163,7 +169,10 @@ export const DiagramNode: React.FC<DiagramNodeProps> = ({
           />
         </g>
       )}
-      {shapeElement}
+      {!isImageNode && shapeElement}
+      {isImageNode && (
+        <DiagramNodeImage node={node} />
+      )}
       {outlineElement}
       {tool === 'connector' && (
         <g className="diagram-node__connector-handles">
@@ -179,20 +188,62 @@ export const DiagramNode: React.FC<DiagramNodeProps> = ({
           ))}
         </g>
       )}
-      <foreignObject
-        x={12}
-        y={8}
-        width={Math.max(24, node.size.width - 24)}
-        height={Math.max(24, node.size.height - 20)}
-      >
-        <div
-          className={labelClassName}
-          style={labelStyle}
-          translate="no"
-          onPointerDown={handleLabelPointerDown}
-          dangerouslySetInnerHTML={{ __html: node.text }}
+      {!isImageNode && (
+        <foreignObject
+          x={12}
+          y={8}
+          width={Math.max(24, node.size.width - 24)}
+          height={Math.max(24, node.size.height - 20)}
+        >
+          <div
+            className={labelClassName}
+            style={labelStyle}
+            translate="no"
+            onPointerDown={handleLabelPointerDown}
+            dangerouslySetInnerHTML={{ __html: node.text }}
+          />
+        </foreignObject>
+      )}
+    </g>
+  );
+};
+
+const DiagramNodeImage: React.FC<{ node: NodeModel }> = ({ node }) => {
+  const clipId = `diagram-node-image-${node.id}`;
+  const width = node.size.width;
+  const height = node.size.height;
+
+  return (
+    <g className="diagram-node__image-group">
+      <defs>
+        <clipPath id={clipId}>
+          <rect width={width} height={height} rx={16} ry={16} />
+        </clipPath>
+      </defs>
+      <rect
+        className="diagram-node__image-frame"
+        width={width}
+        height={height}
+        rx={16}
+        ry={16}
+      />
+      {node.image ? (
+        <image
+          className="diagram-node__image"
+          href={node.image.src}
+          width={width}
+          height={height}
+          preserveAspectRatio="xMidYMid meet"
+          clipPath={`url(#${clipId})`}
         />
-      </foreignObject>
+      ) : (
+        <g className="diagram-node__image-placeholder" clipPath={`url(#${clipId})`}>
+          <rect width={width} height={height} rx={16} ry={16} />
+          <text x={width / 2} y={height / 2} dominantBaseline="middle" textAnchor="middle">
+            Image
+          </text>
+        </g>
+      )}
     </g>
   );
 };

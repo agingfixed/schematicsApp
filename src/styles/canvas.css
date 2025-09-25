@@ -57,6 +57,31 @@
   transition: stroke 0.2s ease, stroke-width 0.2s ease;
 }
 
+.diagram-node__image-group {
+  pointer-events: none;
+}
+
+.diagram-node__image-frame {
+  fill: rgba(15, 23, 42, 0.85);
+  stroke: rgba(30, 41, 59, 0.6);
+}
+
+.diagram-node__image {
+  pointer-events: none;
+}
+
+.diagram-node__image-placeholder rect {
+  fill: rgba(15, 23, 42, 0.9);
+}
+
+.diagram-node__image-placeholder text {
+  fill: #cbd5f5;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .diagram-node.is-selected .diagram-node__outline {
   filter: drop-shadow(0 0 12px rgba(96, 165, 250, 0.5));
 }
@@ -135,6 +160,10 @@
 }
 
 .diagram-node--text .diagram-node__shadow {
+  display: none;
+}
+
+.diagram-node--image .diagram-node__label {
   display: none;
 }
 

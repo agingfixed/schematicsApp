@@ -84,6 +84,7 @@ import { useCommands } from '../state/commands';
 import { useFloatingMenuStore } from '../state/menuStore';
 import { CaretPoint } from '../utils/text';
 import { ensureHttpProtocol } from '../utils/url';
+import { getImageDimensions, readFileAsDataUrl } from '../utils/image';
 import '../styles/canvas.css';
 
 const MIN_SCALE = 0.2;
@@ -100,6 +101,8 @@ const DEFAULT_CONNECTOR_LABEL_STYLE = {
   color: '#f8fafc',
   background: 'rgba(15,23,42,0.85)'
 };
+const IMAGE_MAX_DIMENSION = 520;
+const IMAGE_MIN_DIMENSION = 64;
 const PORT_VISIBILITY_DISTANCE = 72;
 const PORT_SNAP_DISTANCE = 12;
 const PORT_TIE_DISTANCE = 0.25;
@@ -129,7 +132,8 @@ const NODE_CREATION_TOOLS: ReadonlyArray<NodeKind> = [
   'triangle',
   'diamond',
   'text',
-  'link'
+  'link',
+  'image'
 ] as const;
 
 const isNodeCreationTool = (tool: Tool): tool is NodeKind =>
@@ -458,6 +462,8 @@ const CanvasComponent = (
   const connectorLabelEntryPointRef = useRef<CaretPoint | null>(null);
   const clearFloatingMenuPlacement = useFloatingMenuStore((state) => state.clearSharedPlacement);
   const hadFloatingMenuRef = useRef(false);
+  const imageFileInputRef = useRef<HTMLInputElement | null>(null);
+  const pendingImagePointRef = useRef<Vec2 | null>(null);
 
   const isConnectorLabelToolbarInteracting = useCallback(
     () => connectorLabelToolbarInteractionRef.current,
@@ -476,6 +482,12 @@ const CanvasComponent = (
   const setSelectionToolbarInteracting = useCallback((active: boolean) => {
     selectionToolbarInteractionRef.current = active;
   }, []);
+
+  useEffect(() => {
+    if (tool !== 'image') {
+      pendingImagePointRef.current = null;
+    }
+  }, [tool]);
 
   const clearLinkActivationTimer = useCallback(() => {
     if (linkActivationTimerRef.current !== null) {
@@ -1038,6 +1050,40 @@ const CanvasComponent = (
     editingEntryPointRef.current = null;
     setEditingNode(null);
   }, [setEditingNode]);
+
+  const handleImageFileChange = useCallback(
+    async (event: React.ChangeEvent<HTMLInputElement>) => {
+      const worldPoint = pendingImagePointRef.current;
+      const file = event.target.files?.[0] ?? null;
+      event.target.value = '';
+
+      if (!worldPoint || !file) {
+        pendingImagePointRef.current = null;
+        return;
+      }
+
+      try {
+        const dataUrl = await readFileAsDataUrl(file);
+        const { width, height } = await getImageDimensions(dataUrl);
+        const fitted = fitImageWithinBounds(width, height);
+        const position = {
+          x: worldPoint.x - fitted.width / 2,
+          y: worldPoint.y - fitted.height / 2
+        };
+
+        addNode('image', position, {
+          size: fitted,
+          image: { src: dataUrl, naturalWidth: width, naturalHeight: height }
+        });
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.error('Failed to create image node', error);
+      } finally {
+        pendingImagePointRef.current = null;
+      }
+    },
+    [addNode]
+  );
 
   const handleConnectorLabelCommit = useCallback(
     (connectorId: string, value: string) => {
@@ -1933,6 +1979,17 @@ const CanvasComponent = (
       return;
     }
 
+    if (tool === 'image') {
+      const worldPoint = getWorldPoint(event);
+      pendingImagePointRef.current = worldPoint;
+      const input = imageFileInputRef.current;
+      if (input) {
+        input.value = '';
+        window.requestAnimationFrame(() => input.click());
+      }
+      return;
+    }
+
     const worldPoint = getWorldPoint(event);
     const { width, height } = getDefaultSizeForTool(tool);
     const position = {
@@ -2266,6 +2323,9 @@ const CanvasComponent = (
 
   const handleNodeDoubleClick = (event: React.MouseEvent<SVGGElement>, node: NodeModel) => {
     if (tool !== 'select') {
+      return;
+    }
+    if (node.shape !== 'text' && node.shape !== 'link') {
       return;
     }
     event.stopPropagation();
@@ -3213,6 +3273,13 @@ const CanvasComponent = (
       onPointerUp={handlePointerUp}
       onWheel={handleWheel}
     >
+      <input
+        ref={imageFileInputRef}
+        type="file"
+        accept="image/*"
+        hidden
+        onChange={handleImageFileChange}
+      />
       <div className="canvas-grid" style={gridStyle} />
       <svg className="canvas-svg">
         <defs>
@@ -3459,6 +3526,33 @@ const CanvasComponent = (
       )}
     </div>
   );
+};
+
+const fitImageWithinBounds = (width: number, height: number) => {
+  const safeWidth = Number.isFinite(width) && width > 0 ? width : IMAGE_MIN_DIMENSION;
+  const safeHeight = Number.isFinite(height) && height > 0 ? height : IMAGE_MIN_DIMENSION;
+  const largestEdge = Math.max(safeWidth, safeHeight, 1);
+  const smallestEdge = Math.max(Math.min(safeWidth, safeHeight), 1);
+
+  let scale = largestEdge > IMAGE_MAX_DIMENSION ? IMAGE_MAX_DIMENSION / largestEdge : 1;
+  let scaledWidth = Math.max(1, Math.round(safeWidth * scale));
+  let scaledHeight = Math.max(1, Math.round(safeHeight * scale));
+
+  const scaledLargest = Math.max(scaledWidth, scaledHeight);
+  if (scaledLargest < IMAGE_MIN_DIMENSION) {
+    const minScale = IMAGE_MIN_DIMENSION / Math.max(scaledLargest, 1);
+    scale *= minScale;
+    scaledWidth = Math.max(1, Math.round(safeWidth * scale));
+    scaledHeight = Math.max(1, Math.round(safeHeight * scale));
+  }
+
+  if (smallestEdge === largestEdge && scaledWidth !== scaledHeight) {
+    const size = Math.max(scaledWidth, scaledHeight);
+    scaledWidth = size;
+    scaledHeight = size;
+  }
+
+  return { width: scaledWidth, height: scaledHeight };
 };
 
 const createTransformToFit = (
