@@ -175,6 +175,12 @@ export const cloneScene = (scene: SceneContent): SceneContent => ({
     ...connector,
     source: cloneConnectorEndpoint(connector.source),
     target: cloneConnectorEndpoint(connector.target),
+    style: {
+      ...connector.style,
+      startArrow: connector.style.startArrow ? { ...connector.style.startArrow } : undefined,
+      endArrow: connector.style.endArrow ? { ...connector.style.endArrow } : undefined
+    },
+    labelStyle: connector.labelStyle ? { ...connector.labelStyle } : undefined,
     points: connector.points?.map((point) => ({ ...point }))
   }))
 });
