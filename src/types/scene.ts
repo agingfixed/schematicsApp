@@ -95,6 +95,8 @@ export interface ConnectorStyle {
   startArrow?: ConnectorArrowStyle;
   endArrow?: ConnectorArrowStyle;
   arrowSize?: number;
+  startArrowSize?: number;
+  endArrowSize?: number;
   cornerRadius?: number;
 }
 

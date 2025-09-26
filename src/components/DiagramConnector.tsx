@@ -287,8 +287,16 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
 
   const arrowStroke = connector.style.stroke;
   const endpointColor = connector.style.stroke;
-  const arrowSize = Math.max(0.6, connector.style.arrowSize ?? 1);
-  const markerSize = 24 * arrowSize;
+  const startArrowSize = Math.max(
+    0.6,
+    connector.style.startArrowSize ?? connector.style.arrowSize ?? 1
+  );
+  const endArrowSize = Math.max(
+    0.6,
+    connector.style.endArrowSize ?? connector.style.arrowSize ?? 1
+  );
+  const startMarkerSize = 24 * startArrowSize;
+  const endMarkerSize = 24 * endArrowSize;
   const startMarkerId = useMemo(() => `connector-${connector.id}-start`, [connector.id]);
   const endMarkerId = useMemo(() => `connector-${connector.id}-end`, [connector.id]);
 
@@ -304,7 +312,8 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
     markerId: string,
     shape: ArrowShape,
     fill: 'filled' | 'outlined',
-    orientation: 'start' | 'end'
+    orientation: 'start' | 'end',
+    markerSize: number
   ) => {
     if (shape === 'none') {
       return null;
@@ -351,8 +360,14 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
     );
   };
 
-  const startMarker = createMarker(startMarkerId, startArrowShape, startArrowFill, 'start');
-  const endMarker = createMarker(endMarkerId, endArrowShape, endArrowFill, 'end');
+  const startMarker = createMarker(
+    startMarkerId,
+    startArrowShape,
+    startArrowFill,
+    'start',
+    startMarkerSize
+  );
+  const endMarker = createMarker(endMarkerId, endArrowShape, endArrowFill, 'end', endMarkerSize);
 
   const handleLabelInput = (event: React.FormEvent<HTMLDivElement>) => {
     setDraft(event.currentTarget.textContent ?? '');

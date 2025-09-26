@@ -7,6 +7,7 @@ import {
   getConnectorPath,
   getConnectorPortPositions,
   isCardinalConnectorPortValue,
+  getConnectorStubLength,
   tidyOrthogonalWaypoints
 } from '../connector';
 import type { CardinalConnectorPort, ConnectorModel, NodeModel, Vec2 } from '../../types/scene';
@@ -42,6 +43,8 @@ const defaultConnectorStyle: Mutable<ConnectorModel['style']> = {
   startArrow: { shape: 'none', fill: 'filled' },
   endArrow: { shape: 'none', fill: 'filled' },
   arrowSize: 1,
+  startArrowSize: 1,
+  endArrowSize: 1,
   cornerRadius: 12
 };
 
@@ -124,32 +127,41 @@ test('aligned connectors preserve outward stubs', () => {
   assert.ok(endStub.x < path.end.x);
 });
 
-test('connector stub length is controlled by arrow size instead of stroke width', () => {
-  const source = createNode('source', { x: 0, y: 120 });
-  const target = createNode('target', { x: 320, y: 120 });
-
+test('connector stub length is controlled by endpoint arrow size instead of stroke width', () => {
   const thinConnector = createConnector('right', 'left');
-  thinConnector.style.arrowSize = 1;
+  thinConnector.style.startArrowSize = 1;
+  thinConnector.style.endArrowSize = 1;
 
   const thickConnector = createConnector('right', 'left');
   thickConnector.style.strokeWidth = 8;
-  thickConnector.style.arrowSize = 1;
+  thickConnector.style.startArrowSize = 1;
+  thickConnector.style.endArrowSize = 1;
 
-  const largeArrowConnector = createConnector('right', 'left');
-  largeArrowConnector.style.arrowSize = 2;
+  const largeStartArrowConnector = createConnector('right', 'left');
+  largeStartArrowConnector.style.startArrowSize = 2;
+  largeStartArrowConnector.style.endArrowSize = 1;
 
-  const thinPath = getConnectorPath(thinConnector, source, target, [source, target]);
-  const thickPath = getConnectorPath(thickConnector, source, target, [source, target]);
-  const largeArrowPath = getConnectorPath(largeArrowConnector, source, target, [source, target]);
+  const largeEndArrowConnector = createConnector('right', 'left');
+  largeEndArrowConnector.style.startArrowSize = 1;
+  largeEndArrowConnector.style.endArrowSize = 2;
 
-  const stubLength = thinPath.points[1].x - thinPath.points[0].x;
-  const thickStubLength = thickPath.points[1].x - thickPath.points[0].x;
-  const largeArrowStubLength = largeArrowPath.points[1].x - largeArrowPath.points[0].x;
+  const baseStartStub = getConnectorStubLength(thinConnector, 'start');
+  const thickStartStub = getConnectorStubLength(thickConnector, 'start');
+  const largeStartStub = getConnectorStubLength(largeStartArrowConnector, 'start');
 
-  assert.ok(Math.abs(stubLength - thickStubLength) < 1e-6, 'stroke width should not affect stub length');
+  const baseEndStub = getConnectorStubLength(thinConnector, 'end');
+  const thickEndStub = getConnectorStubLength(thickConnector, 'end');
+  const largeEndStub = getConnectorStubLength(largeEndArrowConnector, 'end');
+
+  assert.ok(Math.abs(baseStartStub - thickStartStub) < 1e-6);
   assert.ok(
-    largeArrowStubLength > stubLength,
-    'increasing arrow size should expand stub length to preserve spacing'
+    largeStartStub > baseStartStub,
+    'increasing start arrow size should expand the computed start stub length'
+  );
+  assert.ok(Math.abs(baseEndStub - thickEndStub) < 1e-6);
+  assert.ok(
+    largeEndStub > baseEndStub,
+    'increasing end arrow size should expand the computed end stub length'
   );
 });
 

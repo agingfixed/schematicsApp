@@ -119,6 +119,8 @@ const PENDING_CONNECTOR_STYLE: ConnectorModel['style'] = {
   startArrow: { shape: 'none', fill: 'filled' },
   endArrow: { shape: 'none', fill: 'filled' },
   arrowSize: 1,
+  startArrowSize: 1,
+  endArrowSize: 1,
   cornerRadius: 12
 };
 

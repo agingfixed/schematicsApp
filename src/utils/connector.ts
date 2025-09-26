@@ -31,9 +31,15 @@ const directionForPort: Record<CardinalConnectorPort, ConnectorDirection> = {
 export const getConnectorPortDirection = (port: CardinalConnectorPort): ConnectorDirection =>
   directionForPort[port];
 
-export const getConnectorStubLength = (connector: ConnectorModel): number => {
-  const arrowSize = connector.style.arrowSize ?? 1;
-  return Math.max(MIN_STUB_LENGTH, arrowSize * BASE_ARROW_STUB_LENGTH);
+export const getConnectorStubLength = (
+  connector: ConnectorModel,
+  endpoint: 'start' | 'end'
+): number => {
+  const size =
+    endpoint === 'start'
+      ? connector.style.startArrowSize ?? connector.style.arrowSize ?? 1
+      : connector.style.endArrowSize ?? connector.style.arrowSize ?? 1;
+  return Math.max(MIN_STUB_LENGTH, size * BASE_ARROW_STUB_LENGTH);
 };
 
 const clonePoint = (point: Vec2): Vec2 => ({ x: point.x, y: point.y });
@@ -159,11 +165,16 @@ const buildDefaultWaypoints = (
   start: ResolvedEndpoint,
   end: ResolvedEndpoint
 ): Vec2[] => {
-  const stubLength = getConnectorStubLength(connector);
+  const startStubLength = getConnectorStubLength(connector, 'start');
+  const endStubLength = getConnectorStubLength(connector, 'end');
   const startHasStub = shouldAddStub(start.direction);
   const endHasStub = shouldAddStub(end.direction);
-  const startStub = startHasStub ? offsetPoint(start.point, start.direction, stubLength) : clonePoint(start.point);
-  const endStub = endHasStub ? offsetPoint(end.point, end.direction, stubLength) : clonePoint(end.point);
+  const startStub = startHasStub
+    ? offsetPoint(start.point, start.direction, startStubLength)
+    : clonePoint(start.point);
+  const endStub = endHasStub
+    ? offsetPoint(end.point, end.direction, endStubLength)
+    : clonePoint(end.point);
 
   const waypoints: Vec2[] = [];
 
@@ -462,8 +473,8 @@ const directionToAxis = (direction: ConnectorDirection): OrthogonalAxis | null =
 const MIN_FORCED_STUB = 12;
 const MAX_FORCED_STUB = 96;
 
-const getEnforcedStubLength = (connector: ConnectorModel): number => {
-  const length = getConnectorStubLength(connector);
+const getEnforcedStubLength = (connector: ConnectorModel, endpoint: 'start' | 'end'): number => {
+  const length = getConnectorStubLength(connector, endpoint);
   if (!Number.isFinite(length) || length <= 0) {
     return MIN_FORCED_STUB;
   }
@@ -481,25 +492,26 @@ const enforceEndpointStubBounds = (
   }
 
   const adjusted = waypoints.map(clonePoint);
-  const stubLength = getEnforcedStubLength(connector);
+  const startStubLength = getEnforcedStubLength(connector, 'start');
+  const endStubLength = getEnforcedStubLength(connector, 'end');
 
   if (shouldAddStub(start.direction)) {
     const first = adjusted[0];
     if (start.direction === 'right') {
       if (first.x <= start.point.x) {
-        first.x = start.point.x + stubLength;
+        first.x = start.point.x + startStubLength;
       }
     } else if (start.direction === 'left') {
       if (first.x >= start.point.x) {
-        first.x = start.point.x - stubLength;
+        first.x = start.point.x - startStubLength;
       }
     } else if (start.direction === 'down') {
       if (first.y <= start.point.y) {
-        first.y = start.point.y + stubLength;
+        first.y = start.point.y + startStubLength;
       }
     } else if (start.direction === 'up') {
       if (first.y >= start.point.y) {
-        first.y = start.point.y - stubLength;
+        first.y = start.point.y - startStubLength;
       }
     }
     adjusted[0] = first;
@@ -510,19 +522,19 @@ const enforceEndpointStubBounds = (
     const last = adjusted[lastIndex];
     if (end.direction === 'left') {
       if (last.x >= end.point.x) {
-        last.x = end.point.x - stubLength;
+        last.x = end.point.x - endStubLength;
       }
     } else if (end.direction === 'right') {
       if (last.x <= end.point.x) {
-        last.x = end.point.x + stubLength;
+        last.x = end.point.x + endStubLength;
       }
     } else if (end.direction === 'up') {
       if (last.y >= end.point.y) {
-        last.y = end.point.y - stubLength;
+        last.y = end.point.y - endStubLength;
       }
     } else if (end.direction === 'down') {
       if (last.y <= end.point.y) {
-        last.y = end.point.y + stubLength;
+        last.y = end.point.y + endStubLength;
       }
     }
     adjusted[lastIndex] = last;

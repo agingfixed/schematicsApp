@@ -145,11 +145,13 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
   const startLockedFill = getLockedFillForStartShape(startShape);
   const startFillDisabled = startLockedFill !== null;
   const startFillValue = startLockedFill ?? connector.style.startArrow?.fill ?? 'filled';
+  const startArrowSize = connector.style.startArrowSize ?? connector.style.arrowSize ?? 1;
 
   const endShape = connector.style.endArrow?.shape ?? 'none';
   const endLockedFill = getLockedFillForEndShape(endShape);
   const endFillDisabled = endLockedFill !== null;
   const endFillValue = endLockedFill ?? connector.style.endArrow?.fill ?? 'filled';
+  const endArrowSize = connector.style.endArrowSize ?? connector.style.arrowSize ?? 1;
 
   const handleStrokeWidthChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const value = Number(event.target.value);
@@ -210,10 +212,19 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
     handleEndArrowChange({ ...current, fill });
   };
 
-  const handleArrowSizeChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleStartArrowSizeChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const value = Number(event.target.value);
     if (Number.isFinite(value)) {
-      onStyleChange({ arrowSize: Math.max(0.5, Math.min(4, value)) });
+      const clamped = Math.max(0.5, Math.min(4, value));
+      onStyleChange({ startArrowSize: clamped });
+    }
+  };
+
+  const handleEndArrowSizeChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const value = Number(event.target.value);
+    if (Number.isFinite(value)) {
+      const clamped = Math.max(0.5, Math.min(4, value));
+      onStyleChange({ endArrowSize: clamped });
     }
   };
 
@@ -293,8 +304,8 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
                 min={0.5}
                 max={4}
                 step={0.1}
-                value={connector.style.arrowSize ?? 1}
-                onChange={handleArrowSizeChange}
+                value={startArrowSize}
+                onChange={handleStartArrowSizeChange}
               />
             </label>
             <label className="connector-toolbar__field">
@@ -333,8 +344,8 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
                 min={0.5}
                 max={4}
                 step={0.1}
-                value={connector.style.arrowSize ?? 1}
-                onChange={handleArrowSizeChange}
+                value={endArrowSize}
+                onChange={handleEndArrowSizeChange}
               />
             </label>
             <label className="connector-toolbar__field">
