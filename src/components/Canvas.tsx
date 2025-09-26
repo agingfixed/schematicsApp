@@ -148,7 +148,6 @@ export interface CanvasHandle {
   zoomIn: () => void;
   zoomOut: () => void;
   zoomToFit: () => void;
-  zoomToSelection: () => void;
   zoomToHundred: () => void;
   focusOn: (worldPoint: Vec2, scale?: number) => void;
   getTransform: () => CanvasTransform;
@@ -1237,25 +1236,6 @@ const CanvasComponent = (
     }
   };
 
-  const zoomToSelection = () => {
-    if (!viewport.width || !viewport.height) {
-      return;
-    }
-    if (!selectedNodeIds.length) {
-      zoomToFit();
-      return;
-    }
-    const bounds = getSceneBounds({ nodes, connectors }, selectedNodeIds);
-    if (!bounds) {
-      return;
-    }
-    const expanded = expandBounds(bounds, FIT_PADDING / 2);
-    const transformForFit = createTransformToFit(expanded, viewport);
-    if (transformForFit) {
-      setTransformState(transformForFit);
-    }
-  };
-
   const zoomToHundred = () => {
     if (!viewport.width || !viewport.height) {
       return;
@@ -1292,7 +1272,6 @@ const CanvasComponent = (
       zoomIn: () => zoomAtPoint({ x: viewport.width / 2, y: viewport.height / 2 }, ZOOM_FACTOR),
       zoomOut: () => zoomAtPoint({ x: viewport.width / 2, y: viewport.height / 2 }, 1 / ZOOM_FACTOR),
       zoomToFit,
-      zoomToSelection,
       zoomToHundred,
       focusOn,
       getTransform: () => transform,
