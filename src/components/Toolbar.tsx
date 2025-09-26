@@ -103,7 +103,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({ canvasRef }) => {
     setTool(nextValue);
   };
 
-  const handleZoom = (type: 'in' | 'out' | 'fit' | 'selection' | 'hundred') => {
+  const handleZoom = (type: 'in' | 'out' | 'fit' | 'hundred') => {
     const canvas = canvasRef.current;
     if (!canvas) {
       return;
@@ -117,9 +117,6 @@ export const Toolbar: React.FC<ToolbarProps> = ({ canvasRef }) => {
         break;
       case 'fit':
         canvas.zoomToFit();
-        break;
-      case 'selection':
-        canvas.zoomToSelection();
         break;
       case 'hundred':
         canvas.zoomToHundred();
@@ -217,15 +214,6 @@ export const Toolbar: React.FC<ToolbarProps> = ({ canvasRef }) => {
           data-tooltip="Fit view"
         >
           Fit
-        </button>
-        <button
-          type="button"
-          className="toolbar__button"
-          onClick={() => handleZoom('selection')}
-          aria-label="Zoom to selection"
-          data-tooltip="Fit selection"
-        >
-          Sel
         </button>
         <button
           type="button"
