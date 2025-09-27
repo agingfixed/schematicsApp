@@ -354,7 +354,8 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
   const startMarker = createMarker(startMarkerId, startArrowShape, startArrowFill, 'start');
   // Use the "start" orientation for end markers so they continue in the
   // connector's travel direction (pointing away from the line).
-  const endMarker = createMarker(endMarkerId, endArrowShape, endArrowFill, 'start');
+  //end fix?
+  const endMarker = createMarker(endMarkerId, endArrowShape, endArrowFill, 'end');
 
   const handleLabelInput = (event: React.FormEvent<HTMLDivElement>) => {
     setDraft(event.currentTarget.textContent ?? '');
