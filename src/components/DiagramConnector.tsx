@@ -235,7 +235,7 @@ const createEndpointCap = (
           transform={transform}
           style={{ color }}
         >
-          <circle className="diagram-connector__cap-shape" cx={-half} cy={0} r={half} fill="currentColor" />
+          <circle className="diagram-connector__cap-shape" cx={0} cy={0} r={half} fill="currentColor" />
         </g>
       );
     }
