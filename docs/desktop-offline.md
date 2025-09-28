@@ -15,15 +15,16 @@ simple file server.
 
 ## 2. Generate desktop archives automatically
 
-Running `npm run build` now creates pre-packaged zips under `dist/downloads/` for macOS, Windows, Linux, and a universal
-desktop bundle. Each archive contains:
+Running `npm run build` now creates pre-packaged archives under `dist/downloads/` for macOS, Windows, Linux, and a universal
+desktop bundle. macOS uses a `.tar.gz` to stay compatible with Archive Utility, while the other platforms remain `.zip` files.
+Each archive contains:
 
 - the production build under a `Schematics Studio` folder,
 - a platform-specific `README.txt` with launch instructions, and
 - cached assets ready for offline use after the first online sign-in.
 
 Need to refresh the archives without a new build? Run `npm run package:offline` after `npm run build`; it will regenerate the
-zips using the existing `dist/` output.
+archives using the existing `dist/` output.
 
 ## 3. Built-in installer behaviour
 
@@ -44,5 +45,5 @@ After installing the PWA or unzipping the archive:
 ## 5. Automating archive creation (optional)
 
 CI/CD pipelines only need to run `npm install && npm run build`. The build script already invokes the offline packager so the
-zips land in `dist/downloads/`. Upload those artifacts to your preferred storage (S3, GCS, internal fileshare) and surface the
+archives land in `dist/downloads/`. Upload those artifacts to your preferred storage (S3, GCS, internal fileshare) and surface the
 direct download links in release notes or the in-app “Download for …” button.

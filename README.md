@@ -29,8 +29,9 @@ Schematics Studio ships as an installable Progressive Web App (PWA). When you vi
 see an install card that automatically detects your operating system and explains the correct install flow (for example, “Add to
 Dock” on macOS or “Install app” in Chrome on Windows).
 
-For users who prefer a distributable archive, run `npm run build` and grab the ready-made zips from `dist/downloads/`. Each
-archive contains the static build plus a README explaining how to launch it on the targeted platform. See
+For users who prefer a distributable archive, run `npm run build` and grab the ready-made bundles from `dist/downloads/`
+(macOS ships as a `.tar.gz` for compatibility, other platforms remain `.zip`). Each archive contains the static build plus a
+README explaining how to launch it on the targeted platform. See
 [`docs/desktop-offline.md`](docs/desktop-offline.md) for more detail on distributing these bundles.
 
 ## Current Capabilities

@@ -93,7 +93,7 @@ const OS_GUIDES: Record<OperatingSystem, OsGuide> = {
 };
 
 const PACKAGE_FILENAMES: Partial<Record<OperatingSystem, string>> = {
-  mac: 'schematics-studio-mac.zip',
+  mac: 'schematics-studio-mac.tar.gz',
   windows: 'schematics-studio-windows.zip',
   linux: 'schematics-studio-linux.zip',
   chromeos: 'schematics-studio-desktop.zip',
