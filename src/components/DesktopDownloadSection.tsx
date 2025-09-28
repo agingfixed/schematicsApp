@@ -100,6 +100,18 @@ const PACKAGE_FILENAMES: Partial<Record<OperatingSystem, string>> = {
   unknown: 'schematics-studio-desktop.zip'
 };
 
+const resolveDownloadUrl = (filename: string): string => {
+  const baseUrl = import.meta.env.BASE_URL ?? '/';
+
+  if (typeof window === 'undefined') {
+    const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
+    return `${normalizedBase}downloads/${filename}`;
+  }
+
+  const absoluteBase = new URL(baseUrl, window.location.origin);
+  return new URL(`downloads/${filename}`, absoluteBase).toString();
+};
+
 const isStandaloneDisplayMode = (): boolean => {
   if (typeof window === 'undefined') {
     return false;
@@ -180,7 +192,7 @@ export const DesktopDownloadSection: React.FC = () => {
     const checkAvailability = async () => {
       setIsCheckingPackage(true);
       try {
-        const response = await fetch(`/downloads/${packageFilename}`, {
+        const response = await fetch(resolveDownloadUrl(packageFilename), {
           method: 'HEAD',
           cache: 'no-store',
           signal: controller.signal
@@ -233,7 +245,7 @@ export const DesktopDownloadSection: React.FC = () => {
 
     try {
       setIsActionPending(true);
-      const downloadUrl = `/downloads/${packageFilename}`;
+      const downloadUrl = resolveDownloadUrl(packageFilename);
       const anchor = document.createElement('a');
       anchor.href = downloadUrl;
       anchor.download = packageFilename;
