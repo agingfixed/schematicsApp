@@ -14,6 +14,49 @@ type OsGuide = {
   fallbackMessage: string;
 };
 
+type BundleEntry = {
+  file: string;
+  fileName: string;
+  size: number;
+  sha256: string;
+};
+
+type BundleManifest = {
+  generatedAt: string;
+  bundles: Record<'mac' | 'windows' | 'linux', BundleEntry>;
+};
+
+const BUNDLE_TARGET_BY_OS: Partial<Record<OperatingSystem, keyof BundleManifest['bundles']>> = {
+  mac: 'mac',
+  windows: 'windows',
+  linux: 'linux',
+  chromeos: 'linux'
+};
+
+const formatFileSize = (bytes: number): string => {
+  if (!Number.isFinite(bytes) || bytes < 0) {
+    return '';
+  }
+
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let size = bytes;
+  let unitIndex = 0;
+
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
+    unitIndex += 1;
+  }
+
+  return `${size.toFixed(size >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
+};
+
+const resolveBundlePath = (relativePath: string): string => {
+  const base = import.meta.env.BASE_URL ?? '/';
+  const normalizedBase = base.endsWith('/') ? base : `${base}/`;
+  const normalizedRelative = relativePath.startsWith('/') ? relativePath.slice(1) : relativePath;
+  return `${normalizedBase}${normalizedRelative}`;
+};
+
 const OS_GUIDES: Record<OperatingSystem, OsGuide> = {
   mac: {
     label: 'macOS',
@@ -108,6 +151,9 @@ export const DesktopDownloadSection: React.FC = () => {
   const [isInstalled, setIsInstalled] = useState<boolean>(isStandaloneDisplayMode());
   const [isActionPending, setIsActionPending] = useState(false);
   const [installMessage, setInstallMessage] = useState<string | null>(null);
+  const [bundleManifest, setBundleManifest] = useState<BundleManifest | null>(null);
+  const [bundleEntry, setBundleEntry] = useState<BundleEntry | null>(null);
+  const [isBundleLoading, setIsBundleLoading] = useState(false);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -147,6 +193,58 @@ export const DesktopDownloadSection: React.FC = () => {
     setInstallMessage(null);
   }, [operatingSystem, installPrompt]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    let isActive = true;
+
+    const loadManifest = async () => {
+      setIsBundleLoading(true);
+      try {
+        const response = await fetch('downloads/index.json', { cache: 'no-store' });
+        if (!response.ok) {
+          throw new Error(`Unexpected response: ${response.status}`);
+        }
+        const data = (await response.json()) as BundleManifest;
+        if (isActive) {
+          setBundleManifest(data);
+        }
+      } catch (error) {
+        console.warn('Unable to load offline bundle manifest', error);
+        if (isActive) {
+          setBundleManifest(null);
+        }
+      } finally {
+        if (isActive) {
+          setIsBundleLoading(false);
+        }
+      }
+    };
+
+    loadManifest();
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!bundleManifest) {
+      setBundleEntry(null);
+      return;
+    }
+
+    const target = BUNDLE_TARGET_BY_OS[operatingSystem];
+    if (target && bundleManifest.bundles[target]) {
+      setBundleEntry(bundleManifest.bundles[target]);
+      return;
+    }
+
+    setBundleEntry(null);
+  }, [bundleManifest, operatingSystem]);
+
   const handleInstall = useCallback(async () => {
     if (isActionPending) {
       return;
@@ -173,11 +271,45 @@ export const DesktopDownloadSection: React.FC = () => {
       return;
     }
 
-    setInstallMessage('Your browser did not offer an install prompt. Follow the steps below to add the app.');
-  }, [installPrompt, isActionPending]);
+    if (bundleEntry) {
+      if (typeof window === 'undefined') {
+        setInstallMessage('Desktop downloads are not supported in this environment.');
+        return;
+      }
+
+      try {
+        setIsActionPending(true);
+        const link = document.createElement('a');
+        link.href = resolveBundlePath(bundleEntry.file);
+        link.download = bundleEntry.fileName;
+        link.rel = 'noopener';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setInstallMessage(
+          `Your download of ${bundleEntry.fileName} has started. Unzip it and open index.html to launch Schematics Studio offline.`
+        );
+      } catch (error) {
+        console.error('Download failed', error);
+        setInstallMessage('We could not start the download automatically. Use the manual download link below.');
+      } finally {
+        setIsActionPending(false);
+      }
+      return;
+    }
+
+    if (isBundleLoading) {
+      setInstallMessage('We are preparing the desktop bundle. Please try again in a moment.');
+      return;
+    }
+
+    setInstallMessage('No desktop bundle is available for this device. Follow the manual steps below to finish setup.');
+  }, [installPrompt, isActionPending, bundleEntry, isBundleLoading]);
 
   const actionEnabled = !isInstalled && !isActionPending;
   const isAutoInstall = Boolean(installPrompt);
+  const bundleSize = useMemo(() => (bundleEntry ? formatFileSize(bundleEntry.size) : ''), [bundleEntry]);
+  const bundleDownloadPath = useMemo(() => (bundleEntry ? resolveBundlePath(bundleEntry.file) : null), [bundleEntry]);
 
   const hintMessages = useMemo(() => {
     if (installMessage) {
@@ -188,12 +320,25 @@ export const DesktopDownloadSection: React.FC = () => {
       return 'Waiting for your browser to confirm installation…';
     }
 
+    if (isActionPending && bundleEntry) {
+      return 'Preparing your download…';
+    }
+
     if (isAutoInstall) {
       return 'Your browser will show an installation prompt. Accept it to add the app to your device.';
     }
 
+    if (bundleEntry) {
+      const sizeSuffix = bundleSize ? ` (${bundleSize})` : '';
+      return `Download the packaged desktop app${sizeSuffix} and open index.html after extracting to work offline.`;
+    }
+
+    if (isBundleLoading) {
+      return 'Preparing the desktop download…';
+    }
+
     return guide.fallbackMessage;
-  }, [installMessage, isActionPending, isAutoInstall, guide.fallbackMessage]);
+  }, [installMessage, isActionPending, isAutoInstall, guide.fallbackMessage, bundleEntry, bundleSize, isBundleLoading]);
 
   const hintClassNames = useMemo(() => {
     const classes = ['desktop-download__hint'];
@@ -234,6 +379,11 @@ export const DesktopDownloadSection: React.FC = () => {
             Install on {guide.label}
           </button>
           <p className={hintClassNames}>{hintMessages}</p>
+          {bundleEntry && !isAutoInstall && bundleDownloadPath ? (
+            <a className="desktop-download__manual-link" href={bundleDownloadPath} download={bundleEntry.fileName}>
+              Download {bundleEntry.fileName}{bundleSize ? ` (${bundleSize})` : ''}
+            </a>
+          ) : null}
         </div>
       )}
 
@@ -246,7 +396,16 @@ export const DesktopDownloadSection: React.FC = () => {
             </li>
           ))}
         </ol>
-        <p className="desktop-download__footnote">Need a packaged copy? Run <code>npm run build</code>, zip the <code>dist/</code> folder, and share it.</p>
+        {bundleEntry && bundleDownloadPath ? (
+          <p className="desktop-download__footnote">
+            Prefer manual setup? <a href={bundleDownloadPath} download={bundleEntry.fileName}>Download the offline bundle</a>
+            {bundleSize ? ` (${bundleSize})` : ''} and verify it with SHA-256 <code>{bundleEntry.sha256}</code>.
+          </p>
+        ) : (
+          <p className="desktop-download__footnote">
+            Need a packaged copy? Run <code>npm run build</code> to generate desktop-ready archives in <code>dist/downloads</code>.
+          </p>
+        )}
       </div>
     </section>
   );

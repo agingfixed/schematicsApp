@@ -19,7 +19,7 @@ npm config set registry https://registry.npmmirror.com
 ## Available Scripts
 
 - `npm run dev` – start the Vite development server.
-- `npm run build` – type-check and produce a production build.
+- `npm run build` – type-check, produce a production build, and generate desktop-ready archives in `dist/downloads/`.
 - `npm run preview` – preview the build output locally.
 
 ## Offline & Desktop installation
@@ -29,9 +29,10 @@ see an install card that automatically detects your operating system and explain
 Dock” on macOS or “Install app” in Chrome on Windows).
 
 If your browser surfaces an install button you can add the app in a single click. Safari on macOS exposes this as **File → Add
-to Dock**, while Chromium browsers show an install icon in the address bar or under **More → Install app**. The login screen
-mirrors these steps and adapts its guidance based on your operating system. See [`docs/desktop-offline.md`](docs/desktop-offline.md)
-for tips on distributing the static build when a browser-based install is not available.
+to Dock**, while Chromium browsers show an install icon in the address bar or under **More → Install app**. When the browser
+cannot offer an install prompt, the login screen falls back to a one-click download of the correct offline bundle (macOS,
+Windows, or Linux) generated during `npm run build`. See [`docs/desktop-offline.md`](docs/desktop-offline.md) for a deeper look
+at distributing and verifying these archives.
 
 ## Current Capabilities
 
