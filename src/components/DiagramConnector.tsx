@@ -109,28 +109,17 @@ const useConnectorGeometry = (
   );
 };
 
-const arrowPathForShape = (shape: ArrowShape, orientation: 'start' | 'end'): string | null => {
+const arrowPathForShape = (shape: ArrowShape): string | null => {
   switch (shape) {
     case 'triangle':
-      return orientation === 'end'
-        ? 'M12 1 L0 6 L12 11 Z'
-        : 'M0 1 L12 6 L0 11 Z';
-    case 'triangle-inward':
-      return orientation === 'end'
-        ? 'M12 1 L0 6 L12 11 Z'
-        : 'M12 1 L0 6 L12 11 Z';
     case 'arrow':
-      return orientation === 'end'
-        ? 'M0 1 L12 6 L0 11 Z'
-        : 'M0 1 L12 6 L0 11 Z';
+      return 'M0 1 L12 6 L0 11 Z';
+    case 'triangle-inward':
+      return 'M12 1 L0 6 L12 11 Z';
     case 'line-arrow':
-      return orientation === 'end'
-        ? 'M12 1 L0 6 L12 11'
-        : 'M0 1 L12 6 L0 11';
+      return 'M0 1 L12 6 L0 11';
     case 'diamond':
-      return orientation === 'end'
-        ? 'M0 6 L6 0 L12 6 L6 12 Z'
-        : 'M12 6 L6 0 L0 6 L6 12 Z';
+      return 'M0 6 L6 12 L12 6 L6 0 Z';
     case 'circle':
       return 'M6 0 A6 6 0 1 1 5.999 0 Z';
     default:
@@ -144,18 +133,10 @@ const markerRefXForShape = (shape: ArrowShape, orientation: 'start' | 'end'): nu
   }
 
   if (shape === 'triangle-inward') {
-    return 12;
-  }
-
-  if (orientation === 'start') {
     return 0;
   }
 
-  if (shape === 'triangle') {
-    return 0;
-  }
-
-  return 12;
+  return orientation === 'start' ? 0 : 12;
 };
 
 const markerVisualsForShape = (
@@ -364,12 +345,10 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
       return null;
     }
 
-    const refX =
-      shape === 'circle'
-        ? markerRefXForShape(shape, orientation)
-        : markerRefXForShape(shape, 'end');
+    const refX = markerRefXForShape(shape, orientation);
     const visuals = markerVisualsForShape(shape, fill, arrowStroke);
     const lineCap = shape === 'line-arrow' ? 'round' : 'butt';
+    const orient = orientation === 'start' ? 'auto-start-reverse' : 'auto';
 
     return (
       <marker
@@ -379,7 +358,7 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
         markerHeight={markerSize}
         refX={refX}
         refY={6}
-        orient="auto-start-reverse"
+        orient={orient}
         markerUnits="userSpaceOnUse"
       >
         {shape === 'circle' ? (
@@ -393,7 +372,7 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
           />
         ) : (
           <path
-            d={arrowPathForShape(shape, orientation) ?? ''}
+            d={arrowPathForShape(shape) ?? ''}
             fill={visuals.fill}
             stroke={visuals.stroke}
             strokeWidth={visuals.strokeWidth}
