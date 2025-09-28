@@ -1,4 +1,5 @@
 import React from 'react';
+import { CARDINAL_PORTS, getConnectorPortPositions } from '../utils/connector';
 import { CardinalConnectorPort, NodeModel, Tool } from '../types/scene';
 
 interface DiagramNodeProps {
@@ -107,14 +108,29 @@ export const DiagramNode: React.FC<DiagramNodeProps> = ({
 
   const cursor = tool === 'connector' ? 'crosshair' : 'move';
 
-  const connectorHandleOffset = 18;
-  const connectorHandles: Array<{ key: CardinalConnectorPort; x: number; y: number }> = [
-    { key: 'top', x: node.size.width / 2, y: -connectorHandleOffset },
-    { key: 'right', x: node.size.width + connectorHandleOffset, y: node.size.height / 2 },
-    { key: 'bottom', x: node.size.width / 2, y: node.size.height + connectorHandleOffset },
-    { key: 'left', x: -connectorHandleOffset, y: node.size.height / 2 }
-  ];
-  const connectorHandleRadius = 9;
+  const connectorHandleOffset = 20;
+  const connectorAnchors = getConnectorPortPositions(node);
+  const connectorHandles: Array<{ key: CardinalConnectorPort; x: number; y: number }> = CARDINAL_PORTS.map(
+    (port) => {
+      const anchor = connectorAnchors[port];
+      const localX = anchor.x - node.position.x;
+      const localY = anchor.y - node.position.y;
+
+      switch (port) {
+        case 'top':
+          return { key: port, x: localX, y: localY - connectorHandleOffset };
+        case 'right':
+          return { key: port, x: localX + connectorHandleOffset, y: localY };
+        case 'bottom':
+          return { key: port, x: localX, y: localY + connectorHandleOffset };
+        case 'left':
+          return { key: port, x: localX - connectorHandleOffset, y: localY };
+        default:
+          return { key: port, x: localX, y: localY };
+      }
+    }
+  );
+  const connectorHandleRadius = 11;
 
   const isLinkNode = node.shape === 'link';
   const isTextualNode = node.shape === 'text' || isLinkNode;

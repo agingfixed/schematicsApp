@@ -74,7 +74,7 @@ import {
   translateBounds
 } from '../utils/snap';
 import { DiagramNode } from './DiagramNode';
-import { DiagramConnector } from './DiagramConnector';
+import { DiagramConnector, DiagramConnectorEndpoints } from './DiagramConnector';
 import { SelectionToolbar } from './SelectionToolbar';
 import { ConnectorToolbar } from './ConnectorToolbar';
 import { ConnectorTextToolbar } from './ConnectorTextToolbar';
@@ -3255,6 +3255,7 @@ const CanvasComponent = (
                   ? activeConnectorEdit.previewPoints
                   : undefined
               }
+              renderEndpoints={false}
             />
           ))}
           {nodes.map((node) => (
@@ -3272,6 +3273,28 @@ const CanvasComponent = (
               onDoubleClick={(event) => handleNodeDoubleClick(event, node)}
             />
           ))}
+          {connectors.map((connector) => {
+            if (!selectedConnectorIds.includes(connector.id)) {
+              return null;
+            }
+            return (
+              <DiagramConnectorEndpoints
+                key={`${connector.id}-endpoints`}
+                connector={connector}
+                source={resolveEndpointNode(connector.source)}
+                target={resolveEndpointNode(connector.target)}
+                nodes={nodes}
+                onEndpointPointerDown={(event, endpoint) =>
+                  handleConnectorEndpointPointerDown(event, connector, endpoint)
+                }
+                previewPoints={
+                  activeConnectorEdit?.connectorId === connector.id
+                    ? activeConnectorEdit.previewPoints
+                    : undefined
+                }
+              />
+            );
+          })}
           {pendingPreview && (
             <path
               className="connector-pending"
