@@ -299,12 +299,10 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
       return null;
     }
 
-    const refX =
-      shape === 'circle'
-        ? markerRefXForShape(shape, orientation)
-        : markerRefXForShape(shape, 'end');
+    const refX = markerRefXForShape(shape, orientation);
     const visuals = markerVisualsForShape(shape, fill, arrowStroke);
     const lineCap = shape === 'line-arrow' ? 'round' : 'butt';
+    const orient = orientation === 'start' ? 'auto-start-reverse' : 'auto';
 
     return (
       <marker
@@ -314,7 +312,7 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
         markerHeight={markerSize}
         refX={refX}
         refY={6}
-        orient="auto-start-reverse"
+        orient={orient}
         markerUnits="userSpaceOnUse"
       >
         {shape === 'circle' ? (
