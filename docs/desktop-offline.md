@@ -15,9 +15,8 @@ simple file server.
 
 ## 2. Generate desktop archives automatically
 
-Running `npm run build` now creates pre-packaged archives under `dist/downloads/` for macOS, Windows, Linux, and a universal
-desktop bundle. macOS uses a `.tar.gz` to stay compatible with Archive Utility, while the other platforms remain `.zip` files.
-Each archive contains:
+Running `npm run build` now creates pre-packaged `.zip` archives under `dist/downloads/` for macOS, Windows, Linux, and a
+universal desktop bundle. Each archive contains:
 
 - the production build under a `Schematics Studio` folder,
 - a platform-specific `README.txt` with launch instructions, and

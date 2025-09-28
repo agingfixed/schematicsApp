@@ -8,15 +8,14 @@ const DOWNLOADS_DIR = path.join(DIST_DIR, 'downloads');
 
 const PACKAGES = [
   {
-    filename: 'schematics-studio-mac.tar.gz',
-    format: 'tar',
+    filename: 'schematics-studio-mac.zip',
     readme: `Schematics Studio (macOS)
 ================================
 
 Thanks for downloading the Schematics Studio offline bundle.
 
 How to launch:
-1. Unzip the archive anywhere on your Mac.
+1. Unzip the archive anywhere on your Mac (double-click it in Finder).
 2. Open the folder named "Schematics Studio".
 3. Double-click index.html. Safari or Chrome will open the app and cache it for offline work after you sign in.
 
@@ -27,7 +26,6 @@ Tips:
   },
   {
     filename: 'schematics-studio-windows.zip',
-    format: 'zip',
     readme: `Schematics Studio (Windows)
 ================================
 
@@ -45,7 +43,6 @@ Tips:
   },
   {
     filename: 'schematics-studio-linux.zip',
-    format: 'zip',
     readme: `Schematics Studio (Linux)
 ================================
 
@@ -63,7 +60,6 @@ Tips:
   },
   {
     filename: 'schematics-studio-desktop.zip',
-    format: 'zip',
     readme: `Schematics Studio (Desktop)
 =================================
 
@@ -98,13 +94,6 @@ const zipAvailable = async () =>
     child.on('exit', (code) => resolve(code === 0));
   });
 
-const tarAvailable = async () =>
-  new Promise((resolve) => {
-    const child = spawn('tar', ['--version']);
-    child.on('error', () => resolve(false));
-    child.on('exit', (code) => resolve(code === 0));
-  });
-
 const runZip = (cwd, destination, targetFolder) =>
   new Promise((resolve, reject) => {
     const args = ['-r', '--quiet', destination, targetFolder];
@@ -125,27 +114,7 @@ const runZip = (cwd, destination, targetFolder) =>
     });
   });
 
-const runTar = (cwd, destination, targetFolder) =>
-  new Promise((resolve, reject) => {
-    const args = ['-czf', destination, targetFolder];
-    const child = spawn('tar', args, { cwd });
-
-    let stderr = '';
-    child.stderr?.on('data', (chunk) => {
-      stderr += chunk.toString();
-    });
-
-    child.on('error', (error) => reject(error));
-    child.on('exit', (code) => {
-      if (code === 0) {
-        resolve();
-      } else {
-        reject(new Error(`tar command failed with code ${code}: ${stderr}`));
-      }
-    });
-  });
-
-const createPackage = async ({ filename, readme, format }) => {
+const createPackage = async ({ filename, readme }) => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'schematics-offline-'));
   const bundleFolderName = 'Schematics Studio';
   const bundleDir = path.join(tempRoot, bundleFolderName);
@@ -156,11 +125,7 @@ const createPackage = async ({ filename, readme, format }) => {
   await writeFile(path.join(bundleDir, 'README.txt'), readme, 'utf8');
 
   const destination = path.join(DOWNLOADS_DIR, filename);
-  if (format === 'tar') {
-    await runTar(tempRoot, destination, bundleFolderName);
-  } else {
-    await runZip(tempRoot, destination, bundleFolderName);
-  }
+  await runZip(tempRoot, destination, bundleFolderName);
 
   await rm(tempRoot, { recursive: true, force: true });
 };
@@ -171,23 +136,15 @@ const main = async () => {
     return;
   }
 
-  const needsTar = PACKAGES.some((pkg) => pkg.format === 'tar');
-  const needsZip = PACKAGES.some((pkg) => pkg.format !== 'tar');
-
   const toolAvailability = {
-    tar: needsTar ? await tarAvailable() : true,
-    zip: needsZip ? await zipAvailable() : true
+    zip: await zipAvailable()
   };
 
-  if (!toolAvailability.tar && needsTar) {
-    console.warn('[offline-packager] tar command is not available on this system; macOS bundle will be skipped.');
-  }
-
-  if (!toolAvailability.zip && needsZip) {
+  if (!toolAvailability.zip) {
     console.warn('[offline-packager] zip command is not available on this system; zip bundles will be skipped.');
   }
 
-  if (!toolAvailability.tar && !toolAvailability.zip) {
+  if (!toolAvailability.zip) {
     return;
   }
 
@@ -195,10 +152,7 @@ const main = async () => {
   await mkdir(DOWNLOADS_DIR, { recursive: true });
 
   for (const pkg of PACKAGES) {
-    if (pkg.format === 'tar' && !toolAvailability.tar) {
-      continue;
-    }
-    if (pkg.format !== 'tar' && !toolAvailability.zip) {
+    if (!toolAvailability.zip) {
       continue;
     }
     try {
