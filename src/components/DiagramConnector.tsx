@@ -45,28 +45,18 @@ const clampLabelOffset = (value: number) =>
 const clampLabelRadius = (value: number) =>
   Math.max(0, Math.min(MAX_LABEL_DISTANCE, Math.abs(value)));
 
-const arrowPathForShape = (shape: ArrowShape, orientation: 'start' | 'end'): string | null => {
+const arrowPathForShape = (shape: ArrowShape): string | null => {
   switch (shape) {
     case 'triangle':
-      return orientation === 'end'
-        ? 'M12 1 L0 6 L12 11 Z'
-        : 'M0 1 L12 6 L0 11 Z';
+      return 'M0 1 L12 6 L0 11 Z';
     case 'triangle-inward':
-      return orientation === 'end'
-        ? 'M12 1 L0 6 L12 11 Z'
-        : 'M12 1 L0 6 L12 11 Z';
+      return 'M12 1 L0 6 L12 11 Z';
     case 'arrow':
-      return orientation === 'end'
-        ? 'M0 1 L12 6 L0 11 Z'
-        : 'M0 1 L12 6 L0 11 Z';
+      return 'M0 1 L12 6 L0 11 Z';
     case 'line-arrow':
-      return orientation === 'end'
-        ? 'M12 1 L0 6 L12 11'
-        : 'M0 1 L12 6 L0 11';
+      return 'M0 1 L12 6 L0 11';
     case 'diamond':
-      return orientation === 'end'
-        ? 'M0 6 L6 0 L12 6 L6 12 Z'
-        : 'M12 6 L6 0 L0 6 L6 12 Z';
+      return 'M12 6 L6 0 L0 6 L6 12 Z';
     case 'circle':
       return 'M6 0 A6 6 0 1 1 5.999 0 Z';
     default:
@@ -338,7 +328,7 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
           />
         ) : (
           <path
-            d={arrowPathForShape(shape, orientation) ?? ''}
+            d={arrowPathForShape(shape) ?? ''}
             fill={visuals.fill}
             stroke={visuals.stroke}
             strokeWidth={visuals.strokeWidth}
