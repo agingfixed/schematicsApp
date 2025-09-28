@@ -106,9 +106,16 @@ interface SceneStoreActions {
   setNodeText: (nodeId: string, text: string) => void;
   setNodeShape: (nodeIds: string[], shape: NodeKind) => void;
   setNodeLink: (nodeId: string, url: string | null) => void;
+  replaceScene: (scene: SceneContent, options?: ReplaceSceneOptions) => void;
+  resetScene: () => void;
 }
 
 export type SceneStore = SceneStoreState & SceneStoreActions;
+
+export interface ReplaceSceneOptions {
+  resetHistory?: boolean;
+  resetTransform?: boolean;
+}
 
 const defaultConnectorStyle: ConnectorModel['style'] = {
   stroke: '#e5e7eb',
@@ -865,7 +872,38 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
 
       node.link = nextUrl ? { url: nextUrl } : undefined;
       return withSceneChange(current, scene);
-    })
+    }),
+  replaceScene: (scene, options) =>
+    set(() => {
+      const { resetHistory = true, resetTransform = true } = options ?? {};
+      const updates: Partial<SceneStoreState> = {
+        scene: cloneScene(scene),
+        selection: { nodeIds: [], connectorIds: [] },
+        tool: 'select',
+        editingNodeId: null,
+        isTransaction: false
+      };
+
+      if (resetHistory) {
+        updates.history = { past: [], future: [] };
+      }
+
+      if (resetTransform) {
+        updates.transform = { x: 0, y: 0, scale: 1 };
+      }
+
+      return updates;
+    }),
+  resetScene: () =>
+    set(() => ({
+      scene: createInitialScene(),
+      history: { past: [], future: [] },
+      selection: { nodeIds: [], connectorIds: [] },
+      tool: 'select',
+      editingNodeId: null,
+      isTransaction: false,
+      transform: { x: 0, y: 0, scale: 1 }
+    }))
 }));
 
 export const selectScene = (state: SceneStore) => state.scene;
