@@ -20,7 +20,7 @@ const OS_GUIDES: Record<OperatingSystem, OsGuide> = {
     manualHeading: 'Install on macOS',
     steps: [
       'Open Schematics Studio in Safari or Chrome on your Mac.',
-      "In Safari: choose File → Add to Dock to create an app icon that opens offline.",
+      'In Safari: choose File → Add to Dock to create an app icon that opens offline.',
       "In Chrome or Edge: look for the install icon in the address bar (or More ⋮ → 'Install app') and confirm the installation.",
       'Launch the installed app from Applications (or Chrome Apps). It will cache your boards for offline work after the first sign-in.'
     ],
@@ -67,7 +67,7 @@ const OS_GUIDES: Record<OperatingSystem, OsGuide> = {
       "Tap the menu (⋮) and choose 'Install app' or 'Add to Home screen'.",
       'Approve the prompt. The installed app caches data the next time you sign in while online.'
     ],
-    fallbackMessage: 'Use Chrome’s menu → Install app to add it to your Android device.'
+    fallbackMessage: 'Use Chrome’s menu → Install app to add the app to your Android device.'
   },
   chromeos: {
     label: 'ChromeOS',
@@ -84,32 +84,12 @@ const OS_GUIDES: Record<OperatingSystem, OsGuide> = {
     manualHeading: 'Install on your device',
     steps: [
       'Open Schematics Studio in a Chromium-based browser (Chrome, Edge) or Safari.',
-      "Look for an install option in the browser address bar or menu (for Safari on macOS use File → Add to Dock).",
+      'Look for an install option in the browser address bar or menu (for Safari on macOS use File → Add to Dock).',
       'Confirm the prompt to finish installing the offline-ready app.'
     ],
     fallbackMessage:
       'Open the site in a modern browser such as Chrome, Edge, or Safari and use the browser’s install option to add the app.'
   }
-};
-
-const PACKAGE_FILENAMES: Partial<Record<OperatingSystem, string>> = {
-  mac: 'schematics-studio-mac.zip',
-  windows: 'schematics-studio-windows.zip',
-  linux: 'schematics-studio-linux.zip',
-  chromeos: 'schematics-studio-desktop.zip',
-  unknown: 'schematics-studio-desktop.zip'
-};
-
-const resolveDownloadUrl = (filename: string): string => {
-  const baseUrl = import.meta.env.BASE_URL ?? '/';
-
-  if (typeof window === 'undefined') {
-    const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
-    return `${normalizedBase}downloads/${filename}`;
-  }
-
-  const absoluteBase = new URL(baseUrl, window.location.origin);
-  return new URL(`downloads/${filename}`, absoluteBase).toString();
 };
 
 const isStandaloneDisplayMode = (): boolean => {
@@ -127,9 +107,7 @@ export const DesktopDownloadSection: React.FC = () => {
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [isInstalled, setIsInstalled] = useState<boolean>(isStandaloneDisplayMode());
   const [isActionPending, setIsActionPending] = useState(false);
-  const [downloadError, setDownloadError] = useState<string | null>(null);
-  const [packageAvailable, setPackageAvailable] = useState(false);
-  const [isCheckingPackage, setIsCheckingPackage] = useState(false);
+  const [installMessage, setInstallMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -164,144 +142,69 @@ export const DesktopDownloadSection: React.FC = () => {
   }, []);
 
   const guide = useMemo<OsGuide>(() => OS_GUIDES[operatingSystem], [operatingSystem]);
-  const packageFilename = useMemo(() => {
-    if (operatingSystem === 'ios' || operatingSystem === 'android') {
-      return null;
-    }
-    return PACKAGE_FILENAMES[operatingSystem] ?? PACKAGE_FILENAMES.unknown ?? null;
-  }, [operatingSystem]);
 
   useEffect(() => {
-    setDownloadError(null);
+    setInstallMessage(null);
   }, [operatingSystem, installPrompt]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      return;
-    }
-
-    if (!packageFilename) {
-      setPackageAvailable(false);
-      return;
-    }
-
-    let cancelled = false;
-    const controller = new AbortController();
-    setPackageAvailable(false);
-
-    const checkAvailability = async () => {
-      setIsCheckingPackage(true);
-      try {
-        const response = await fetch(resolveDownloadUrl(packageFilename), {
-          method: 'HEAD',
-          cache: 'no-store',
-          signal: controller.signal
-        });
-        if (!cancelled) {
-          setPackageAvailable(response.ok);
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setPackageAvailable(false);
-        }
-      } finally {
-        if (!cancelled) {
-          setIsCheckingPackage(false);
-        }
-      }
-    };
-
-    checkAvailability();
-
-    return () => {
-      cancelled = true;
-      controller.abort();
-    };
-  }, [packageFilename]);
 
   const handleInstall = useCallback(async () => {
     if (isActionPending) {
       return;
     }
 
-    setDownloadError(null);
+    setInstallMessage(null);
 
     if (installPrompt) {
       try {
         setIsActionPending(true);
         await installPrompt.prompt();
-        await installPrompt.userChoice;
-        setInstallPrompt(null);
+        const choice = await installPrompt.userChoice;
+        if (choice.outcome === 'accepted') {
+          setInstallPrompt(null);
+        } else {
+          setInstallMessage('Installation was cancelled. You can try again or follow the manual steps below.');
+        }
+      } catch (error) {
+        console.error('Install prompt failed', error);
+        setInstallMessage('We could not open the install prompt. Use the manual steps below to finish setup.');
       } finally {
         setIsActionPending(false);
       }
       return;
     }
 
-    if (!packageFilename || !packageAvailable) {
-      setDownloadError('Automatic installation is not available in this browser. Follow the steps below to finish setup.');
-      return;
-    }
+    setInstallMessage('Your browser did not offer an install prompt. Follow the steps below to add the app.');
+  }, [installPrompt, isActionPending]);
 
-    try {
-      setIsActionPending(true);
-      const downloadUrl = resolveDownloadUrl(packageFilename);
-      const anchor = document.createElement('a');
-      anchor.href = downloadUrl;
-      anchor.download = packageFilename;
-      anchor.rel = 'noopener';
-      document.body.appendChild(anchor);
-      anchor.click();
-      document.body.removeChild(anchor);
-    } catch (error) {
-      console.error('Offline package download failed', error);
-      setDownloadError('We could not start the download. Use the manual steps below to install the app.');
-    } finally {
-      setIsActionPending(false);
-    }
-  }, [installPrompt, packageFilename, packageAvailable, isActionPending]);
-
-  const actionEnabled = !isInstalled && !isActionPending && (Boolean(installPrompt) || packageAvailable);
+  const actionEnabled = !isInstalled && !isActionPending;
   const isAutoInstall = Boolean(installPrompt);
 
   const hintMessages = useMemo(() => {
-    if (downloadError) {
-      return downloadError;
+    if (installMessage) {
+      return installMessage;
     }
 
     if (isActionPending && isAutoInstall) {
       return 'Waiting for your browser to confirm installation…';
     }
 
-    if (isActionPending) {
-      return 'Preparing your offline download package…';
-    }
-
     if (isAutoInstall) {
       return 'Your browser will show an installation prompt. Accept it to add the app to your device.';
     }
 
-    if (packageFilename && packageAvailable) {
-      return 'We will download a ready-to-run offline bundle tailored for your desktop.';
-    }
-
-    if (isCheckingPackage) {
-      return 'Checking for the latest offline bundle…';
-    }
-
     return guide.fallbackMessage;
-  }, [downloadError, isActionPending, isAutoInstall, packageFilename, packageAvailable, isCheckingPackage, guide.fallbackMessage]);
+  }, [installMessage, isActionPending, isAutoInstall, guide.fallbackMessage]);
 
   const hintClassNames = useMemo(() => {
     const classes = ['desktop-download__hint'];
-    if (downloadError) {
+    if (installMessage) {
       classes.push('desktop-download__hint--error');
     }
     if (isActionPending) {
       classes.push('desktop-download__hint--pending');
     }
     return classes.join(' ');
-  }, [downloadError, isActionPending]);
+  }, [installMessage, isActionPending]);
 
   return (
     <section className="desktop-download" aria-labelledby="desktop-download-title">
@@ -310,15 +213,15 @@ export const DesktopDownloadSection: React.FC = () => {
           Work offline from your desktop
         </h2>
         <p className="desktop-download__description">
-          Install Schematics Studio as a desktop application tailored for {guide.label}. Once installed, the app
-          automatically caches your boards for offline editing after you sign in while online.
+          Install Schematics Studio as a desktop application tailored for {guide.label}. Once installed, the app automatically
+          caches your boards for offline editing after you sign in while online.
         </p>
       </div>
 
       {isInstalled ? (
         <div className="desktop-download__status" role="status">
-          <strong>Already installed.</strong> Launch the Schematics Studio app from your application launcher to work
-          offline any time.
+          <strong>Already installed.</strong> Launch the Schematics Studio app from your application launcher to work offline any
+          time.
         </div>
       ) : (
         <div className="desktop-download__actions">
@@ -328,8 +231,7 @@ export const DesktopDownloadSection: React.FC = () => {
             onClick={handleInstall}
             disabled={!actionEnabled}
           >
-            {isAutoInstall ? 'Install on ' : 'Download for '}
-            {guide.label}
+            Install on {guide.label}
           </button>
           <p className={hintClassNames}>{hintMessages}</p>
         </div>
@@ -344,10 +246,7 @@ export const DesktopDownloadSection: React.FC = () => {
             </li>
           ))}
         </ol>
-        <p className="desktop-download__footnote">
-          Need a packaged bundle instead? Run <code>npm run build</code> and grab the latest archives from
-          <code>dist/downloads/</code> for direct sharing.
-        </p>
+        <p className="desktop-download__footnote">Need a packaged copy? Run <code>npm run build</code>, zip the <code>dist/</code> folder, and share it.</p>
       </div>
     </section>
   );

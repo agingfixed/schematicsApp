@@ -19,8 +19,7 @@ npm config set registry https://registry.npmmirror.com
 ## Available Scripts
 
 - `npm run dev` – start the Vite development server.
-- `npm run build` – type-check, produce a production build, and generate offline desktop bundles in `dist/downloads/`.
-- `npm run package:offline` – regenerate only the offline desktop bundles (after a build).
+- `npm run build` – type-check and produce a production build.
 - `npm run preview` – preview the build output locally.
 
 ## Offline & Desktop installation
@@ -29,10 +28,10 @@ Schematics Studio ships as an installable Progressive Web App (PWA). When you vi
 see an install card that automatically detects your operating system and explains the correct install flow (for example, “Add to
 Dock” on macOS or “Install app” in Chrome on Windows).
 
-For users who prefer a distributable archive, run `npm run build` and grab the ready-made bundles from `dist/downloads/`.
-Each operating system receives a `.zip` file containing the static build plus a
-README explaining how to launch it on the targeted platform. See
-[`docs/desktop-offline.md`](docs/desktop-offline.md) for more detail on distributing these bundles.
+If your browser surfaces an install button you can add the app in a single click. Safari on macOS exposes this as **File → Add
+to Dock**, while Chromium browsers show an install icon in the address bar or under **More → Install app**. The login screen
+mirrors these steps and adapts its guidance based on your operating system. See [`docs/desktop-offline.md`](docs/desktop-offline.md)
+for tips on distributing the static build when a browser-based install is not available.
 
 ## Current Capabilities
 
