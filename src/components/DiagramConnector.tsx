@@ -133,8 +133,9 @@ const computeEndpointPlacement = (
 
   const direction = computeEndpointDirection(points, which);
   const angle = (Math.atan2(direction.y, direction.x) * 180) / Math.PI;
+  const rotation = which === 'start' ? angle + 180 : angle;
 
-  return { point: anchor, angle };
+  return { point: anchor, angle: rotation };
 };
 
 const createEndpointCap = (
