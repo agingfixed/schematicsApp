@@ -38,6 +38,7 @@ The default canvas now boots with a validation scene that fans connectors across
 - Traverse left-to-right, right-to-left, top-to-bottom, and bottom-to-top between nodes.
 - Loop back between stages to exercise multiple ports on a single node.
 - Terminate at floating positions so you can inspect API behaviour for unattached endpoints.
+- Display start-arrow variations (filled triangles, outlined diamonds, circles, line arrows, and inward arrows) so testers can confirm both inbound and outbound arrowhead rendering.
 
 Feel free to duplicate or delete the seeded nodes once you finish verifying connector flows.
 
