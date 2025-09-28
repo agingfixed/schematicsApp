@@ -126,3 +126,86 @@
   min-width: calc(92px * var(--menu-scale));
 }
 
+.connector-toolbar__panel--caps {
+  flex: 1 1 calc(320px * var(--menu-scale));
+}
+
+.connector-toolbar__caps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(calc(200px * var(--menu-scale)), 1fr));
+  gap: calc(12px * var(--menu-scale));
+}
+
+.connector-toolbar__cap-group {
+  display: flex;
+  flex-direction: column;
+  gap: calc(10px * var(--menu-scale));
+  padding: calc(10px * var(--menu-scale));
+  border-radius: calc(10px * var(--menu-scale));
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(15, 23, 42, 0.35);
+  transition: border 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
+}
+
+.connector-toolbar__cap-group[data-active] {
+  border-color: rgba(147, 197, 253, 0.55);
+  background: rgba(30, 64, 175, 0.32);
+  box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.25);
+}
+
+.connector-toolbar__cap-heading {
+  display: flex;
+  align-items: center;
+  gap: calc(10px * var(--menu-scale));
+}
+
+.connector-toolbar__cap-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(32px * var(--menu-scale));
+  height: calc(32px * var(--menu-scale));
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.16);
+  font-size: calc(14px * var(--menu-scale));
+}
+
+.connector-toolbar__cap-icon--start {
+  color: rgba(96, 165, 250, 0.92);
+}
+
+.connector-toolbar__cap-icon--end {
+  color: rgba(244, 114, 182, 0.92);
+}
+
+.connector-toolbar__cap-text {
+  display: flex;
+  flex-direction: column;
+  gap: calc(2px * var(--menu-scale));
+}
+
+.connector-toolbar__cap-text span {
+  font-size: calc(13px * var(--menu-scale));
+  font-weight: 600;
+  color: #e2e8f0;
+}
+
+.connector-toolbar__cap-text small {
+  font-size: calc(11px * var(--menu-scale));
+  color: rgba(226, 232, 240, 0.55);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.connector-toolbar__field--slider span {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+.connector-toolbar__field--slider span strong {
+  font-size: calc(12px * var(--menu-scale));
+  color: rgba(226, 232, 240, 0.75);
+}
+

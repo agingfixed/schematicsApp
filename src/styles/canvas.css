@@ -337,6 +337,34 @@
   stroke-width: 1.8;
 }
 
+.diagram-connector__cap {
+  pointer-events: none;
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: opacity 0.18s ease, filter 0.18s ease;
+}
+
+.diagram-connector__cap-shape {
+  pointer-events: none;
+  transition: fill 0.18s ease, stroke 0.18s ease;
+}
+
+body[data-connector-cap-focus='start'] .diagram-connector__cap[data-endpoint='start'],
+body[data-connector-cap-focus='start']
+  .diagram-connector__endpoint-group[data-endpoint='start']
+  .diagram-connector__endpoint-visual {
+  filter: drop-shadow(0 0 8px rgba(96, 165, 250, 0.55));
+  opacity: 1;
+}
+
+body[data-connector-cap-focus='end'] .diagram-connector__cap[data-endpoint='end'],
+body[data-connector-cap-focus='end']
+  .diagram-connector__endpoint-group[data-endpoint='end']
+  .diagram-connector__endpoint-visual {
+  filter: drop-shadow(0 0 8px rgba(244, 114, 182, 0.5));
+  opacity: 1;
+}
+
 .diagram-connector__label-leader {
   stroke: rgba(148, 163, 184, 0.55);
   stroke-width: 1.5;

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ConnectorModel, NodeModel, Vec2 } from '../types/scene';
+import { ConnectorEndpointStyle, ConnectorModel, NodeModel, Vec2 } from '../types/scene';
 import {
   ConnectorPath,
   buildRoundedConnectorPath,
@@ -42,6 +42,22 @@ const ENDPOINT_HANDLE_EPSILON = 1e-6;
 const ENDPOINT_VISUAL_RADIUS = 6.5;
 const ENDPOINT_HIT_RADIUS = 20;
 
+const CAP_SIZE_MIN = 6;
+const CAP_SIZE_MAX = 52;
+const DEFAULT_ENDPOINT_CAP: ConnectorEndpointStyle = { shape: 'none', size: 14 };
+
+const clampCapSize = (value: number | undefined) => {
+  if (typeof value !== 'number' || Number.isNaN(value)) {
+    return DEFAULT_ENDPOINT_CAP.size;
+  }
+  return Math.max(CAP_SIZE_MIN, Math.min(CAP_SIZE_MAX, value));
+};
+
+const resolveCapStyle = (cap?: ConnectorEndpointStyle): ConnectorEndpointStyle => ({
+  shape: cap?.shape ?? DEFAULT_ENDPOINT_CAP.shape,
+  size: clampCapSize(cap?.size)
+});
+
 const clampLabel = (value: string) => value.trim();
 
 const clampLabelOffset = (value: number) =>
@@ -77,6 +93,152 @@ const computeEndpointHandleCenter = (points: Vec2[], which: 'start' | 'end'): Ve
     x: anchor.x + delta.x * scale,
     y: anchor.y + delta.y * scale
   };
+};
+
+const computeEndpointDirection = (points: Vec2[], which: 'start' | 'end'): Vec2 => {
+  const anchorIndex = which === 'start' ? 0 : points.length - 1;
+  const neighborIndex = which === 'start' ? 1 : points.length - 2;
+  const anchor = points[anchorIndex];
+  const neighbor = points[neighborIndex];
+
+  if (!anchor || !neighbor) {
+    return { x: which === 'end' ? -1 : 1, y: 0 };
+  }
+
+  const delta =
+    which === 'start'
+      ? { x: neighbor.x - anchor.x, y: neighbor.y - anchor.y }
+      : { x: anchor.x - neighbor.x, y: anchor.y - neighbor.y };
+  const length = Math.hypot(delta.x, delta.y);
+
+  if (length <= ENDPOINT_HANDLE_EPSILON) {
+    return { x: which === 'end' ? -1 : 1, y: 0 };
+  }
+
+  return { x: delta.x / length, y: delta.y / length };
+};
+
+const computeEndpointPlacement = (
+  points: Vec2[],
+  which: 'start' | 'end'
+): { point: Vec2 | null; angle: number } => {
+  const anchorIndex = which === 'start' ? 0 : points.length - 1;
+  const anchor = points[anchorIndex];
+
+  if (!anchor) {
+    return { point: null, angle: 0 };
+  }
+
+  const direction = computeEndpointDirection(points, which);
+  const angle = (Math.atan2(direction.y, direction.x) * 180) / Math.PI;
+
+  return { point: anchor, angle };
+};
+
+const createEndpointCap = (
+  which: 'start' | 'end',
+  placement: { point: Vec2 | null; angle: number },
+  cap: ConnectorEndpointStyle,
+  color: string,
+  strokeWidth: number
+): React.ReactNode => {
+  if (!placement.point || cap.shape === 'none') {
+    return null;
+  }
+
+  const { point, angle } = placement;
+  const size = cap.size;
+  const half = size / 2;
+  const transform = `translate(${point.x} ${point.y}) rotate(${angle})`;
+
+  switch (cap.shape) {
+    case 'arrow': {
+      const headLength = size * 0.62;
+      const shoulder = size * 0.52;
+      const tailWidth = size * 0.28;
+      const back = -size;
+      const path = `M 0 0 L ${-headLength} ${shoulder} L ${-headLength} ${tailWidth} L ${back} ${tailWidth} L ${back} ${-tailWidth} L ${-headLength} ${-tailWidth} L ${-headLength} ${-shoulder} Z`;
+      return (
+        <g
+          key={`${which}-arrow`}
+          className="diagram-connector__cap diagram-connector__cap--arrow"
+          data-endpoint={which}
+          transform={transform}
+          style={{ color }}
+        >
+          <path className="diagram-connector__cap-shape" d={path} fill="currentColor" />
+        </g>
+      );
+    }
+    case 'triangle': {
+      const path = `M 0 0 L ${-size} ${half} L ${-size} ${-half} Z`;
+      return (
+        <g
+          key={`${which}-triangle`}
+          className="diagram-connector__cap diagram-connector__cap--triangle"
+          data-endpoint={which}
+          transform={transform}
+          style={{ color }}
+        >
+          <path className="diagram-connector__cap-shape" d={path} fill="currentColor" />
+        </g>
+      );
+    }
+    case 'open-arrow': {
+      const outline = `M 0 0 L ${-size} ${half} M 0 0 L ${-size} ${-half}`;
+      const width = Math.max(1.4, strokeWidth * 0.85);
+      return (
+        <g
+          key={`${which}-open-arrow`}
+          className="diagram-connector__cap diagram-connector__cap--open-arrow"
+          data-endpoint={which}
+          transform={transform}
+          style={{ color }}
+        >
+          <path
+            className="diagram-connector__cap-shape"
+            d={outline}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={width}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </g>
+      );
+    }
+    case 'diamond': {
+      const forward = -size * 1.4;
+      const mid = -size * 0.7;
+      const path = `M 0 0 L ${mid} ${half} L ${forward} 0 L ${mid} ${-half} Z`;
+      return (
+        <g
+          key={`${which}-diamond`}
+          className="diagram-connector__cap diagram-connector__cap--diamond"
+          data-endpoint={which}
+          transform={transform}
+          style={{ color }}
+        >
+          <path className="diagram-connector__cap-shape" d={path} fill="currentColor" />
+        </g>
+      );
+    }
+    case 'circle': {
+      return (
+        <g
+          key={`${which}-circle`}
+          className="diagram-connector__cap diagram-connector__cap--circle"
+          data-endpoint={which}
+          transform={transform}
+          style={{ color }}
+        >
+          <circle className="diagram-connector__cap-shape" cx={-half} cy={0} r={half} fill="currentColor" />
+        </g>
+      );
+    }
+    default:
+      return null;
+  }
 };
 
 const useConnectorGeometry = (
@@ -206,6 +368,16 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
 
   const geometry = useConnectorGeometry(connector, source, target, nodes, previewPoints);
 
+  const startCapStyle = useMemo(() => resolveCapStyle(connector.style.startCap), [connector.style.startCap]);
+  const endCapStyle = useMemo(() => resolveCapStyle(connector.style.endCap), [connector.style.endCap]);
+
+  const startPlacement = useMemo(
+    () => computeEndpointPlacement(geometry.points, 'start'),
+    [geometry]
+  );
+
+  const endPlacement = useMemo(() => computeEndpointPlacement(geometry.points, 'end'), [geometry]);
+
   const startHandleCenter = useMemo(
     () => computeEndpointHandleCenter(geometry.points, 'start'),
     [geometry]
@@ -272,6 +444,40 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
   }, [geometry, labelPosition, labelRadius, labelOffset, labelAngle, hasCustomAngle]);
 
   const endpointColor = connector.style.stroke;
+
+  const startCapElement = useMemo(
+    () =>
+      createEndpointCap(
+        'start',
+        startPlacement,
+        startCapStyle,
+        connector.style.stroke,
+        connector.style.strokeWidth
+      ),
+    [
+      startPlacement,
+      startCapStyle,
+      connector.style.stroke,
+      connector.style.strokeWidth
+    ]
+  );
+
+  const endCapElement = useMemo(
+    () =>
+      createEndpointCap(
+        'end',
+        endPlacement,
+        endCapStyle,
+        connector.style.stroke,
+        connector.style.strokeWidth
+      ),
+    [
+      endPlacement,
+      endCapStyle,
+      connector.style.stroke,
+      connector.style.strokeWidth
+    ]
+  );
 
   const handleLabelInput = (event: React.FormEvent<HTMLDivElement>) => {
     setDraft(event.currentTarget.textContent ?? '');
@@ -467,11 +673,14 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
         strokeDasharray={connector.style.dashed ? '12 8' : undefined}
         onPointerDown={onPointerDown}
       />
+      {startCapElement}
+      {endCapElement}
       {selected && renderEndpoints && (
         <>
           <g
             className={`diagram-connector__endpoint-group${startHovered ? ' is-hovered' : ''}`}
             style={{ color: endpointColor }}
+            data-endpoint="start"
           >
             <circle
               className={`diagram-connector__endpoint-visual${startHovered ? ' is-hovered' : ''}`}
@@ -497,6 +706,7 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
           <g
             className={`diagram-connector__endpoint-group${endHovered ? ' is-hovered' : ''}`}
             style={{ color: endpointColor }}
+            data-endpoint="end"
           >
             <circle
               className={`diagram-connector__endpoint-visual${endHovered ? ' is-hovered' : ''}`}
@@ -641,6 +851,7 @@ export const DiagramConnectorEndpoints: React.FC<DiagramConnectorEndpointsProps>
       <g
         className={`diagram-connector__endpoint-group${startHovered ? ' is-hovered' : ''}`}
         style={{ color: endpointColor }}
+        data-endpoint="start"
       >
         <circle
           className={`diagram-connector__endpoint-visual${startHovered ? ' is-hovered' : ''}`}
@@ -664,6 +875,7 @@ export const DiagramConnectorEndpoints: React.FC<DiagramConnectorEndpointsProps>
       <g
         className={`diagram-connector__endpoint-group${endHovered ? ' is-hovered' : ''}`}
         style={{ color: endpointColor }}
+        data-endpoint="end"
       >
         <circle
           className={`diagram-connector__endpoint-visual${endHovered ? ' is-hovered' : ''}`}

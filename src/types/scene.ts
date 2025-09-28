@@ -73,11 +73,26 @@ export interface ConnectorLabelStyle {
   background: string;
 }
 
+export type ConnectorEndpointShape =
+  | 'none'
+  | 'arrow'
+  | 'triangle'
+  | 'open-arrow'
+  | 'diamond'
+  | 'circle';
+
+export interface ConnectorEndpointStyle {
+  shape: ConnectorEndpointShape;
+  size: number;
+}
+
 export interface ConnectorStyle {
   stroke: string;
   strokeWidth: number;
   dashed?: boolean;
   cornerRadius?: number;
+  startCap?: ConnectorEndpointStyle;
+  endCap?: ConnectorEndpointStyle;
 }
 
 export interface ConnectorModel {
