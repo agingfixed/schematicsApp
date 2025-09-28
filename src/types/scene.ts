@@ -66,21 +66,6 @@ export const isFloatingConnectorEndpoint = (
   endpoint: ConnectorEndpoint
 ): endpoint is FloatingConnectorEndpoint => 'position' in endpoint;
 
-export type ArrowShape =
-  | 'none'
-  | 'triangle'
-  | 'triangle-inward'
-  | 'diamond'
-  | 'circle'
-  | 'arrow'
-  | 'line-arrow';
-export type ArrowFill = 'filled' | 'outlined';
-
-export interface ConnectorArrowStyle {
-  shape: ArrowShape;
-  fill: ArrowFill;
-}
-
 export interface ConnectorLabelStyle {
   fontSize: number;
   fontWeight: NodeFontWeight;
@@ -92,8 +77,6 @@ export interface ConnectorStyle {
   stroke: string;
   strokeWidth: number;
   dashed?: boolean;
-  startArrow?: ConnectorArrowStyle;
-  arrowSize?: number;
   cornerRadius?: number;
 }
 
