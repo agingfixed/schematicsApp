@@ -26,11 +26,36 @@ type BundleManifest = {
   bundles: Record<'mac' | 'windows' | 'linux', BundleEntry>;
 };
 
+declare global {
+  interface Window {
+    __SCHEMATICS_OFFLINE_BUNDLES__?: BundleManifest | null;
+  }
+  // eslint-disable-next-line no-var
+  var __SCHEMATICS_OFFLINE_BUNDLES__: BundleManifest | null | undefined;
+}
+
 const BUNDLE_TARGET_BY_OS: Partial<Record<OperatingSystem, keyof BundleManifest['bundles']>> = {
   mac: 'mac',
   windows: 'windows',
   linux: 'linux',
   chromeos: 'linux'
+};
+
+const readPreloadedManifest = (): BundleManifest | null => {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  const manifest = globalThis.__SCHEMATICS_OFFLINE_BUNDLES__;
+  if (!manifest || typeof manifest !== 'object') {
+    return null;
+  }
+
+  if (!manifest.bundles || typeof manifest.bundles !== 'object') {
+    return null;
+  }
+
+  return manifest as BundleManifest;
 };
 
 const formatFileSize = (bytes: number): string => {
@@ -51,10 +76,77 @@ const formatFileSize = (bytes: number): string => {
 };
 
 const resolveBundlePath = (relativePath: string): string => {
+  const normalizedRelative = relativePath.startsWith('/') ? relativePath.slice(1) : relativePath;
+  if (typeof window !== 'undefined' && window.location.protocol === 'file:') {
+    return normalizedRelative.startsWith('./') ? normalizedRelative : `./${normalizedRelative}`;
+  }
+
   const base = import.meta.env.BASE_URL ?? '/';
   const normalizedBase = base.endsWith('/') ? base : `${base}/`;
-  const normalizedRelative = relativePath.startsWith('/') ? relativePath.slice(1) : relativePath;
   return `${normalizedBase}${normalizedRelative}`;
+};
+
+const loadBootstrapManifest = async (): Promise<BundleManifest | null> => {
+  if (typeof document === 'undefined') {
+    return readPreloadedManifest();
+  }
+
+  const existing = readPreloadedManifest();
+  if (existing) {
+    return existing;
+  }
+
+  const selector = 'script[data-offline-bundles]';
+  const existingScript = document.querySelector<HTMLScriptElement>(selector);
+  if (existingScript) {
+    if (existingScript.dataset.offlineBundlesLoaded === 'true') {
+      return readPreloadedManifest();
+    }
+
+    return new Promise((resolve) => {
+      const handleLoad = () => {
+        existingScript.removeEventListener('load', handleLoad);
+        existingScript.removeEventListener('error', handleError);
+        existingScript.dataset.offlineBundlesLoaded = 'true';
+        resolve(readPreloadedManifest());
+      };
+      const handleError = () => {
+        existingScript.removeEventListener('load', handleLoad);
+        existingScript.removeEventListener('error', handleError);
+        resolve(null);
+      };
+      existingScript.addEventListener('load', handleLoad);
+      existingScript.addEventListener('error', handleError);
+    });
+  }
+
+  return new Promise((resolve) => {
+    const script = document.createElement('script');
+    script.type = 'module';
+    script.async = true;
+    script.src = resolveBundlePath('offline-bundles.js');
+    script.setAttribute('data-offline-bundles', 'true');
+
+    const cleanup = () => {
+      script.removeEventListener('load', handleLoad);
+      script.removeEventListener('error', handleError);
+    };
+
+    const handleLoad = () => {
+      cleanup();
+      script.setAttribute('data-offline-bundles-loaded', 'true');
+      resolve(readPreloadedManifest());
+    };
+
+    const handleError = () => {
+      cleanup();
+      resolve(null);
+    };
+
+    script.addEventListener('load', handleLoad);
+    script.addEventListener('error', handleError);
+    document.head.appendChild(script);
+  });
 };
 
 const OS_GUIDES: Record<OperatingSystem, OsGuide> = {
@@ -151,7 +243,7 @@ export const DesktopDownloadSection: React.FC = () => {
   const [isInstalled, setIsInstalled] = useState<boolean>(isStandaloneDisplayMode());
   const [isActionPending, setIsActionPending] = useState(false);
   const [installMessage, setInstallMessage] = useState<string | null>(null);
-  const [bundleManifest, setBundleManifest] = useState<BundleManifest | null>(null);
+  const [bundleManifest, setBundleManifest] = useState<BundleManifest | null>(() => readPreloadedManifest());
   const [bundleEntry, setBundleEntry] = useState<BundleEntry | null>(null);
   const [isBundleLoading, setIsBundleLoading] = useState(false);
 
@@ -194,7 +286,7 @@ export const DesktopDownloadSection: React.FC = () => {
   }, [operatingSystem, installPrompt]);
 
   useEffect(() => {
-    if (typeof window === 'undefined') {
+    if (bundleManifest || typeof window === 'undefined') {
       return;
     }
 
@@ -203,6 +295,13 @@ export const DesktopDownloadSection: React.FC = () => {
     const loadManifest = async () => {
       setIsBundleLoading(true);
       try {
+        const preloaded = await loadBootstrapManifest();
+        if (isActive && preloaded) {
+          setBundleManifest(preloaded);
+          globalThis.__SCHEMATICS_OFFLINE_BUNDLES__ = preloaded;
+          return;
+        }
+
         const response = await fetch('downloads/index.json', { cache: 'no-store' });
         if (!response.ok) {
           throw new Error(`Unexpected response: ${response.status}`);
@@ -210,6 +309,7 @@ export const DesktopDownloadSection: React.FC = () => {
         const data = (await response.json()) as BundleManifest;
         if (isActive) {
           setBundleManifest(data);
+          globalThis.__SCHEMATICS_OFFLINE_BUNDLES__ = data;
         }
       } catch (error) {
         console.warn('Unable to load offline bundle manifest', error);
@@ -228,7 +328,7 @@ export const DesktopDownloadSection: React.FC = () => {
     return () => {
       isActive = false;
     };
-  }, []);
+  }, [bundleManifest]);
 
   useEffect(() => {
     if (!bundleManifest) {

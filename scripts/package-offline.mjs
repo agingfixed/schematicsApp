@@ -96,6 +96,10 @@ try {
 
   const manifestPath = join(downloadsDir, 'index.json');
   writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+
+  const bootstrapPath = join(distDir, 'offline-bundles.js');
+  const bootstrapContents = `globalThis.__SCHEMATICS_OFFLINE_BUNDLES__ = ${JSON.stringify(manifest, null, 2)};\n`;
+  writeFileSync(bootstrapPath, bootstrapContents);
 } finally {
   rmSync(tempRoot, { recursive: true, force: true });
 }

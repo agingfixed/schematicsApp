@@ -31,8 +31,10 @@ Dock” on macOS or “Install app” in Chrome on Windows).
 If your browser surfaces an install button you can add the app in a single click. Safari on macOS exposes this as **File → Add
 to Dock**, while Chromium browsers show an install icon in the address bar or under **More → Install app**. When the browser
 cannot offer an install prompt, the login screen falls back to a one-click download of the correct offline bundle (macOS,
-Windows, or Linux) generated during `npm run build`. See [`docs/desktop-offline.md`](docs/desktop-offline.md) for a deeper look
-at distributing and verifying these archives.
+Windows, or Linux) generated during `npm run build`. That packaging step also writes `dist/offline-bundles.js`, which preloads
+the manifest that powers one-click downloads so the installer still works when the site is served from a static folder or opened
+directly from disk. See [`docs/desktop-offline.md`](docs/desktop-offline.md) for a deeper look at distributing and verifying
+these archives.
 
 ## Current Capabilities
 

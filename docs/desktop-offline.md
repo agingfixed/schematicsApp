@@ -17,7 +17,7 @@ The build command type-checks the project, emits the production assets into `dis
 | Windows   | `dist/downloads/schematics-studio-windows.zip` |
 | Linux/ChromeOS | `dist/downloads/schematics-studio-linux.zip` |
 
-Each archive contains a `schematics-studio` folder with the fully built site. The packaging step also emits `dist/downloads/index.json` so the login screen can auto-detect the correct bundle for one-click downloads.
+Each archive contains a `schematics-studio` folder with the fully built site. The packaging step also emits `dist/downloads/index.json` so the login screen can auto-detect the correct bundle for one-click downloads and writes `dist/offline-bundles.js`, which hydrates that manifest on page load for static hosting scenarios.
 
 ## 2. Built-in installer behaviour
 
