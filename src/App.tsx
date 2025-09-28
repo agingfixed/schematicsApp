@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, CanvasHandle } from './components/Canvas';
 import { Toolbar } from './components/Toolbar';
 import { MiniMap } from './components/MiniMap';
@@ -8,6 +8,9 @@ import {
   selectTransform,
   useSceneStore
 } from './state/sceneStore';
+import { useAuthStore } from './state/authStore';
+import { LoginScreen } from './components/LoginScreen';
+import { BoardControls } from './components/BoardControls';
 import './App.css';
 
 export const App: React.FC = () => {
@@ -16,6 +19,39 @@ export const App: React.FC = () => {
   const showMiniMap = useSceneStore(selectShowMiniMap);
   const transform = useSceneStore(selectTransform);
   const scene = useSceneStore(selectScene);
+  const replaceScene = useSceneStore((state) => state.replaceScene);
+  const resetScene = useSceneStore((state) => state.resetScene);
+  const user = useAuthStore((state) => state.user);
+  const currentBoardId = useAuthStore((state) => state.currentBoardId);
+  const savedBoards = useAuthStore((state) => state.savedBoards);
+
+  const lastLoadedBoard = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!user) {
+      lastLoadedBoard.current = null;
+      resetScene();
+      return;
+    }
+
+    if (!currentBoardId) {
+      if (lastLoadedBoard.current) {
+        resetScene();
+        lastLoadedBoard.current = null;
+      }
+      return;
+    }
+
+    if (lastLoadedBoard.current === currentBoardId) {
+      return;
+    }
+
+    const board = savedBoards.find((item) => item.id === currentBoardId);
+    if (board) {
+      replaceScene(board.scene);
+      lastLoadedBoard.current = currentBoardId;
+    }
+  }, [user, currentBoardId, savedBoards, replaceScene, resetScene]);
 
   const nodeCount = scene.nodes.length;
   const connectorCount = scene.connectors.length;
@@ -25,8 +61,13 @@ export const App: React.FC = () => {
     [nodeCount, connectorCount]
   );
 
+  if (!user) {
+    return <LoginScreen />;
+  }
+
   return (
     <div className="app-shell">
+      <BoardControls />
       <Toolbar canvasRef={canvasRef} />
       <div className="workspace">
         <div className="workspace__main">
