@@ -40,6 +40,7 @@ const defaultConnectorStyle: Mutable<ConnectorModel['style']> = {
   strokeWidth: 2,
   dashed: false,
   startArrow: { shape: 'none', fill: 'filled' },
+  stopArrow: { shape: 'none', fill: 'filled' },
   arrowSize: 1,
   cornerRadius: 12
 };
@@ -98,6 +99,13 @@ test('connectors create orthogonal paths with outward stubs', () => {
   const firstSegment = { start: path.points[0], end: path.points[1] };
   assert.ok(Math.abs(firstSegment.start.y - firstSegment.end.y) < 1e-3, 'start stub should be horizontal');
   assert.ok(firstSegment.end.x > firstSegment.start.x, 'start stub should extend outward');
+
+  const lastSegment = {
+    start: path.points[path.points.length - 2],
+    end: path.points[path.points.length - 1]
+  };
+  assert.ok(Math.abs(lastSegment.start.y - lastSegment.end.y) < 1e-3, 'stop stub should be horizontal');
+  assert.ok(lastSegment.start.x < lastSegment.end.x, 'stop stub should extend outward');
 
   for (let index = 0; index < path.points.length - 1; index += 1) {
     const a = path.points[index];
