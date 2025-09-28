@@ -79,11 +79,27 @@ export const cloneConnectorEndpoint = (endpoint: ConnectorEndpoint): ConnectorEn
   throw new Error('Unsupported connector endpoint.');
 };
 
+const midpoint = (a: Vec2, b: Vec2): Vec2 => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+
 export const getConnectorPortPositions = (
   node: NodeModel
 ): Record<CardinalConnectorPort, Vec2> => {
   const { position, size } = node;
   const center = getNodeCenter(node);
+
+  if (node.shape === 'triangle') {
+    const top: Vec2 = { x: position.x + size.width / 2, y: position.y };
+    const bottomLeft: Vec2 = { x: position.x, y: position.y + size.height };
+    const bottomRight: Vec2 = { x: position.x + size.width, y: position.y + size.height };
+
+    return {
+      top,
+      right: midpoint(top, bottomRight),
+      bottom: midpoint(bottomLeft, bottomRight),
+      left: midpoint(top, bottomLeft)
+    };
+  }
+
   return {
     top: { x: center.x, y: position.y },
     right: { x: position.x + size.width, y: center.y },

@@ -31,11 +31,16 @@ interface DiagramConnectorProps {
   onLabelPointerDown: (event: React.PointerEvent<Element>) => void;
   shouldIgnoreLabelBlur?: () => boolean;
   previewPoints?: Vec2[] | null;
+  renderEndpoints?: boolean;
 }
 
 const DEFAULT_LABEL_POSITION = 0.5;
 const DEFAULT_LABEL_DISTANCE = 18;
 const MAX_LABEL_DISTANCE = 60;
+const ENDPOINT_HANDLE_OFFSET = 14;
+const ENDPOINT_HANDLE_EPSILON = 1e-6;
+const ENDPOINT_VISUAL_RADIUS = 6.5;
+const ENDPOINT_HIT_RADIUS = 20;
 
 const clampLabel = (value: string) => value.trim();
 
@@ -44,6 +49,65 @@ const clampLabelOffset = (value: number) =>
 
 const clampLabelRadius = (value: number) =>
   Math.max(0, Math.min(MAX_LABEL_DISTANCE, Math.abs(value)));
+
+const computeEndpointHandleCenter = (points: Vec2[], which: 'start' | 'end'): Vec2 => {
+  const anchorIndex = which === 'start' ? 0 : points.length - 1;
+  const neighborIndex = which === 'start' ? 1 : points.length - 2;
+  const anchor = points[anchorIndex];
+  const neighbor = points[neighborIndex];
+
+  if (!anchor) {
+    return { x: 0, y: 0 };
+  }
+
+  if (!neighbor) {
+    return { x: anchor.x, y: anchor.y };
+  }
+
+  const delta = { x: neighbor.x - anchor.x, y: neighbor.y - anchor.y };
+  const length = Math.hypot(delta.x, delta.y);
+
+  if (length <= ENDPOINT_HANDLE_EPSILON) {
+    return { x: anchor.x, y: anchor.y };
+  }
+
+  const scale = ENDPOINT_HANDLE_OFFSET / length;
+
+  return {
+    x: anchor.x + delta.x * scale,
+    y: anchor.y + delta.y * scale
+  };
+};
+
+const useConnectorGeometry = (
+  connector: ConnectorModel,
+  source: NodeModel | undefined,
+  target: NodeModel | undefined,
+  nodes: NodeModel[],
+  previewPoints: Vec2[] | null | undefined
+) => {
+  const previewGeometry = useMemo<ConnectorPath | null>(() => {
+    if (!previewPoints || previewPoints.length < 2) {
+      return null;
+    }
+    const start = { ...previewPoints[0] };
+    const end = { ...previewPoints[previewPoints.length - 1] };
+    const waypoints = previewPoints
+      .slice(1, previewPoints.length - 1)
+      .map((point) => ({ ...point }));
+    return {
+      start,
+      end,
+      waypoints,
+      points: previewPoints.map((point) => ({ ...point }))
+    };
+  }, [previewPoints]);
+
+  return useMemo(
+    () => previewGeometry ?? getConnectorPath(connector, source, target, nodes),
+    [previewGeometry, connector, source, target, nodes]
+  );
+};
 
 const arrowPathForShape = (shape: ArrowShape, orientation: 'start' | 'end'): string | null => {
   switch (shape) {
@@ -155,7 +219,8 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
   onRequestLabelEdit,
   onLabelPointerDown,
   shouldIgnoreLabelBlur,
-  previewPoints
+  previewPoints,
+  renderEndpoints = true
 }) => {
   const [draft, setDraft] = useState(connector.label ?? '');
   const [hoveredSegment, setHoveredSegment] = useState<number | null>(null);
@@ -208,26 +273,16 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
     }
   }, [labelEditing, draft, labelEditEntryPoint]);
 
-  const previewGeometry = useMemo<ConnectorPath | null>(() => {
-    if (!previewPoints || previewPoints.length < 2) {
-      return null;
-    }
-    const start = { ...previewPoints[0] };
-    const end = { ...previewPoints[previewPoints.length - 1] };
-    const waypoints = previewPoints
-      .slice(1, previewPoints.length - 1)
-      .map((point) => ({ ...point }));
-    return {
-      start,
-      end,
-      waypoints,
-      points: previewPoints.map((point) => ({ ...point }))
-    };
-  }, [previewPoints]);
+  const geometry = useConnectorGeometry(connector, source, target, nodes, previewPoints);
 
-  const geometry = useMemo(
-    () => previewGeometry ?? getConnectorPath(connector, source, target, nodes),
-    [previewGeometry, connector, source, target, nodes]
+  const startHandleCenter = useMemo(
+    () => computeEndpointHandleCenter(geometry.points, 'start'),
+    [geometry]
+  );
+
+  const endHandleCenter = useMemo(
+    () => computeEndpointHandleCenter(geometry.points, 'end'),
+    [geometry]
   );
 
   const cornerRadius = connector.style.cornerRadius ?? 12;
@@ -546,7 +601,7 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
         markerStart={markerStartUrl}
         onPointerDown={onPointerDown}
       />
-      {selected && (
+      {selected && renderEndpoints && (
         <>
           <g
             className={`diagram-connector__endpoint-group${startHovered ? ' is-hovered' : ''}`}
@@ -554,15 +609,15 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
           >
             <circle
               className={`diagram-connector__endpoint-visual${startHovered ? ' is-hovered' : ''}`}
-              cx={geometry.start.x}
-              cy={geometry.start.y}
-              r={5.5}
+              cx={startHandleCenter.x}
+              cy={startHandleCenter.y}
+              r={ENDPOINT_VISUAL_RADIUS}
             />
             <circle
               className={`diagram-connector__endpoint-hit${startHovered ? ' is-hovered' : ''}`}
-              cx={geometry.start.x}
-              cy={geometry.start.y}
-              r={16}
+              cx={startHandleCenter.x}
+              cy={startHandleCenter.y}
+              r={ENDPOINT_HIT_RADIUS}
               onPointerEnter={() => setHoveredEndpoint('start')}
               onPointerLeave={() =>
                 setHoveredEndpoint((value) => (value === 'start' ? null : value))
@@ -579,15 +634,15 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
           >
             <circle
               className={`diagram-connector__endpoint-visual${endHovered ? ' is-hovered' : ''}`}
-              cx={geometry.end.x}
-              cy={geometry.end.y}
-              r={5.5}
+              cx={endHandleCenter.x}
+              cy={endHandleCenter.y}
+              r={ENDPOINT_VISUAL_RADIUS}
             />
             <circle
               className={`diagram-connector__endpoint-hit${endHovered ? ' is-hovered' : ''}`}
-              cx={geometry.end.x}
-              cy={geometry.end.y}
-              r={16}
+              cx={endHandleCenter.x}
+              cy={endHandleCenter.y}
+              r={ENDPOINT_HIT_RADIUS}
               onPointerEnter={() => setHoveredEndpoint('end')}
               onPointerLeave={() => setHoveredEndpoint((value) => (value === 'end' ? null : value))}
               onPointerDown={(event) => {
@@ -670,5 +725,99 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
         </>
       )}
     </g>
+  );
+};
+
+interface DiagramConnectorEndpointsProps {
+  connector: ConnectorModel;
+  source?: NodeModel;
+  target?: NodeModel;
+  nodes: NodeModel[];
+  onEndpointPointerDown: (
+    event: React.PointerEvent<SVGCircleElement>,
+    endpoint: 'start' | 'end'
+  ) => void;
+  previewPoints?: Vec2[] | null;
+}
+
+export const DiagramConnectorEndpoints: React.FC<DiagramConnectorEndpointsProps> = ({
+  connector,
+  source,
+  target,
+  nodes,
+  onEndpointPointerDown,
+  previewPoints
+}) => {
+  const [hoveredEndpoint, setHoveredEndpoint] = useState<'start' | 'end' | null>(null);
+
+  const geometry = useConnectorGeometry(connector, source, target, nodes, previewPoints);
+
+  const startHandleCenter = useMemo(
+    () => computeEndpointHandleCenter(geometry.points, 'start'),
+    [geometry]
+  );
+
+  const endHandleCenter = useMemo(
+    () => computeEndpointHandleCenter(geometry.points, 'end'),
+    [geometry]
+  );
+
+  useEffect(() => {
+    setHoveredEndpoint(null);
+  }, [connector.id, geometry]);
+
+  const startHovered = hoveredEndpoint === 'start';
+  const endHovered = hoveredEndpoint === 'end';
+  const endpointColor = connector.style.stroke;
+
+  return (
+    <>
+      <g
+        className={`diagram-connector__endpoint-group${startHovered ? ' is-hovered' : ''}`}
+        style={{ color: endpointColor }}
+      >
+        <circle
+          className={`diagram-connector__endpoint-visual${startHovered ? ' is-hovered' : ''}`}
+          cx={startHandleCenter.x}
+          cy={startHandleCenter.y}
+          r={ENDPOINT_VISUAL_RADIUS}
+        />
+        <circle
+          className={`diagram-connector__endpoint-hit${startHovered ? ' is-hovered' : ''}`}
+          cx={startHandleCenter.x}
+          cy={startHandleCenter.y}
+          r={ENDPOINT_HIT_RADIUS}
+          onPointerEnter={() => setHoveredEndpoint('start')}
+          onPointerLeave={() => setHoveredEndpoint((value) => (value === 'start' ? null : value))}
+          onPointerDown={(event) => {
+            setHoveredEndpoint('start');
+            onEndpointPointerDown(event, 'start');
+          }}
+        />
+      </g>
+      <g
+        className={`diagram-connector__endpoint-group${endHovered ? ' is-hovered' : ''}`}
+        style={{ color: endpointColor }}
+      >
+        <circle
+          className={`diagram-connector__endpoint-visual${endHovered ? ' is-hovered' : ''}`}
+          cx={endHandleCenter.x}
+          cy={endHandleCenter.y}
+          r={ENDPOINT_VISUAL_RADIUS}
+        />
+        <circle
+          className={`diagram-connector__endpoint-hit${endHovered ? ' is-hovered' : ''}`}
+          cx={endHandleCenter.x}
+          cy={endHandleCenter.y}
+          r={ENDPOINT_HIT_RADIUS}
+          onPointerEnter={() => setHoveredEndpoint('end')}
+          onPointerLeave={() => setHoveredEndpoint((value) => (value === 'end' ? null : value))}
+          onPointerDown={(event) => {
+            setHoveredEndpoint('end');
+            onEndpointPointerDown(event, 'end');
+          }}
+        />
+      </g>
+    </>
   );
 };
