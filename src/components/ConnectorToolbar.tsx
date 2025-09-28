@@ -147,12 +147,12 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
     onStyleChange({ dashed: !connector.style.dashed });
   };
 
-  const handleStartArrowChange = (shape: ConnectorModel['style']['startArrow']) => {
-    onStyleChange({ startArrow: shape });
+  const handleStartArrowChange = (arrowStyle: ConnectorModel['style']['startArrow']) => {
+    onStyleChange({ startArrow: arrowStyle });
   };
 
-  const handleEndArrowChange = (shape: ConnectorModel['style']['endArrow']) => {
-    onStyleChange({ endArrow: shape });
+  const handleEndArrowChange = (arrowStyle: ConnectorModel['style']['endArrow']) => {
+    onStyleChange({ endArrow: arrowStyle });
   };
 
   const handleStartArrowShapeChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
@@ -264,9 +264,9 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
             </label>
           </div>
         </section>
-        <section className="connector-toolbar__panel connector-toolbar__panel--start">
-          <h3 className="connector-toolbar__panel-title">Start</h3>
-          <div className="connector-toolbar__section">
+        <section className="connector-toolbar__panel connector-toolbar__panel--arrows">
+          <h3 className="connector-toolbar__panel-title">Arrows</h3>
+          <div className="connector-toolbar__section connector-toolbar__section--geometry">
             <label className="connector-toolbar__field connector-toolbar__field--block">
               <span>Size</span>
               <input
@@ -279,7 +279,7 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
               />
             </label>
             <label className="connector-toolbar__field">
-              <span>Shape</span>
+              <span>Start Shape</span>
               <select value={startShape} onChange={handleStartArrowShapeChange}>
                 {arrowOptions.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -289,7 +289,7 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
               </select>
             </label>
             <label className="connector-toolbar__field">
-              <span>Fill</span>
+              <span>Start Fill</span>
               <select
                 value={startFillValue}
                 onChange={handleStartArrowFillChange}
@@ -302,24 +302,8 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
                 ))}
               </select>
             </label>
-          </div>
-        </section>
-        <section className="connector-toolbar__panel connector-toolbar__panel--end">
-          <h3 className="connector-toolbar__panel-title">End</h3>
-          <div className="connector-toolbar__section">
-            <label className="connector-toolbar__field connector-toolbar__field--block">
-              <span>Size</span>
-              <input
-                type="range"
-                min={0.5}
-                max={4}
-                step={0.1}
-                value={connector.style.arrowSize ?? 1}
-                onChange={handleArrowSizeChange}
-              />
-            </label>
             <label className="connector-toolbar__field">
-              <span>Shape</span>
+              <span>End Shape</span>
               <select value={endShape} onChange={handleEndArrowShapeChange}>
                 {arrowOptions.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -329,7 +313,7 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
               </select>
             </label>
             <label className="connector-toolbar__field">
-              <span>Fill</span>
+              <span>End Fill</span>
               <select
                 value={endFillValue}
                 onChange={handleEndArrowFillChange}
