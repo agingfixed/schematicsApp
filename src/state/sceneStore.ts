@@ -122,13 +122,18 @@ const defaultConnectorStyle: ConnectorModel['style'] = {
   strokeWidth: 2,
   dashed: false,
   startArrow: { shape: 'none', fill: 'filled' },
+  endArrow: { shape: 'none', fill: 'filled' },
   arrowSize: 1,
   cornerRadius: 12
 };
 
-const connectorStyle = (startArrow?: ConnectorArrowStyle): ConnectorModel['style'] => ({
+const connectorStyle = (style: {
+  startArrow?: ConnectorArrowStyle;
+  endArrow?: ConnectorArrowStyle;
+} = {}): ConnectorModel['style'] => ({
   ...defaultConnectorStyle,
-  ...(startArrow ? { startArrow } : {})
+  ...(style.startArrow ? { startArrow: style.startArrow } : {}),
+  ...(style.endArrow ? { endArrow: style.endArrow } : {})
 });
 
 const defaultConnectorLabelStyle: ConnectorLabelStyle = {
@@ -152,7 +157,7 @@ const createInitialScene = (): SceneContent => {
       id: nanoid(),
       source: { nodeId: start.id, port: 'right' },
       target: { nodeId: collect.id, port: 'left' },
-      style: connectorStyle({ shape: 'triangle', fill: 'filled' }),
+      style: connectorStyle({ startArrow: { shape: 'triangle', fill: 'filled' } }),
       label: 'Begin',
       labelPosition: 0.5,
       labelOffset: 18,
@@ -162,7 +167,7 @@ const createInitialScene = (): SceneContent => {
       id: nanoid(),
       source: { nodeId: collect.id, port: 'right' },
       target: { nodeId: decision.id, port: 'left' },
-      style: connectorStyle({ shape: 'diamond', fill: 'outlined' }),
+      style: connectorStyle({ startArrow: { shape: 'diamond', fill: 'outlined' } }),
       label: 'Forward',
       labelPosition: 0.5,
       labelOffset: 18,
@@ -172,7 +177,7 @@ const createInitialScene = (): SceneContent => {
       id: nanoid(),
       source: { nodeId: decision.id, port: 'right' },
       target: { nodeId: done.id, port: 'left' },
-      style: connectorStyle({ shape: 'circle', fill: 'filled' }),
+      style: connectorStyle({ startArrow: { shape: 'circle', fill: 'filled' } }),
       label: 'Yes',
       labelPosition: 0.5,
       labelOffset: 18,
@@ -192,7 +197,7 @@ const createInitialScene = (): SceneContent => {
       id: nanoid(),
       source: { nodeId: review.id, port: 'left' },
       target: { nodeId: retry.id, port: 'right' },
-      style: connectorStyle({ shape: 'line-arrow', fill: 'outlined' }),
+      style: connectorStyle({ startArrow: { shape: 'line-arrow', fill: 'outlined' } }),
       label: 'Rework',
       labelPosition: 0.5,
       labelOffset: 18,
@@ -212,7 +217,7 @@ const createInitialScene = (): SceneContent => {
       id: nanoid(),
       source: { nodeId: decision.id, port: 'bottom' },
       target: { nodeId: notify.id, port: 'top' },
-      style: connectorStyle({ shape: 'triangle-inward', fill: 'filled' }),
+      style: connectorStyle({ startArrow: { shape: 'triangle-inward', fill: 'filled' } }),
       label: 'No',
       labelPosition: 0.5,
       labelOffset: 18,
@@ -222,7 +227,7 @@ const createInitialScene = (): SceneContent => {
       id: nanoid(),
       source: { nodeId: notify.id, port: 'right' },
       target: { position: { x: 620, y: 220 } },
-      style: connectorStyle({ shape: 'arrow', fill: 'filled' }),
+      style: connectorStyle({ startArrow: { shape: 'arrow', fill: 'filled' } }),
       label: 'Webhook',
       labelPosition: 0.5,
       labelOffset: 18,
@@ -232,7 +237,7 @@ const createInitialScene = (): SceneContent => {
       id: nanoid(),
       source: { nodeId: start.id, port: 'top' },
       target: { position: { x: -380, y: -360 } },
-      style: connectorStyle({ shape: 'triangle', fill: 'outlined' }),
+      style: connectorStyle({ startArrow: { shape: 'triangle', fill: 'outlined' } }),
       label: 'Monitoring',
       labelPosition: 0.5,
       labelOffset: 18,
@@ -324,7 +329,8 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
           target: cloneConnectorEndpoint(connector.target),
           style: {
             ...connector.style,
-            startArrow: connector.style.startArrow ? { ...connector.style.startArrow } : undefined
+            startArrow: connector.style.startArrow ? { ...connector.style.startArrow } : undefined,
+            endArrow: connector.style.endArrow ? { ...connector.style.endArrow } : undefined
           },
           labelStyle: connector.labelStyle ? { ...connector.labelStyle } : undefined,
           points: connector.points?.map((point) => ({ ...point }))
@@ -584,7 +590,11 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
         ...existing,
         source: cloneConnectorEndpoint(existing.source),
         target: cloneConnectorEndpoint(existing.target),
-        style: { ...existing.style },
+        style: {
+          ...existing.style,
+          startArrow: existing.style.startArrow ? { ...existing.style.startArrow } : undefined,
+          endArrow: existing.style.endArrow ? { ...existing.style.endArrow } : undefined
+        },
         labelStyle: existing.labelStyle ? { ...existing.labelStyle } : undefined,
         points: existing.points?.map((point) => ({ ...point }))
       };
@@ -592,7 +602,14 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
       const { style, points, labelStyle, source, target, ...rest } = patch;
 
       if (style) {
-        nextConnector.style = { ...nextConnector.style, ...style };
+        const mergedStyle: ConnectorModel['style'] = { ...nextConnector.style, ...style };
+        if ('startArrow' in style) {
+          mergedStyle.startArrow = style.startArrow ? { ...style.startArrow } : undefined;
+        }
+        if ('endArrow' in style) {
+          mergedStyle.endArrow = style.endArrow ? { ...style.endArrow } : undefined;
+        }
+        nextConnector.style = mergedStyle;
       }
       if (labelStyle !== undefined) {
         nextConnector.labelStyle = labelStyle ? { ...labelStyle } : undefined;
