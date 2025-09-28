@@ -31,6 +31,16 @@ npm config set registry https://registry.npmmirror.com
 - Mini map that visualises the entire board and recentres the viewport on click.
 - Inline text editing for nodes and connectors with content-aware shortcuts (double-click to edit, escape to cancel).
 
+## Testing Layout
+
+The default canvas now boots with a validation scene that fans connectors across every cardinal port and a couple of floating endpoints. This makes it easy to confirm connector rendering, labeling, and request handling without any manual setup. Start the dev server and you should immediately see connectors that:
+
+- Traverse left-to-right, right-to-left, top-to-bottom, and bottom-to-top between nodes.
+- Loop back between stages to exercise multiple ports on a single node.
+- Terminate at floating positions so you can inspect API behaviour for unattached endpoints.
+
+Feel free to duplicate or delete the seeded nodes once you finish verifying connector flows.
+
 ## Roadmap
 
 - Orthogonal routing improvements with preserved waypoints.

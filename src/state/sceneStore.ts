@@ -130,6 +130,9 @@ const createInitialScene = (): SceneContent => {
   const collect = createNodeModel('rectangle', { x: -40, y: -180 }, { text: 'Collect Input' });
   const decision = createNodeModel('diamond', { x: 320, y: -200 }, { text: 'Valid?' });
   const done = createNodeModel('ellipse', { x: 700, y: -160 }, { text: 'Archive' });
+  const review = createNodeModel('rectangle', { x: -40, y: 140 }, { text: 'Review Input' });
+  const retry = createNodeModel('triangle', { x: -380, y: 120 }, { text: 'Retry Capture' });
+  const notify = createNodeModel('ellipse', { x: 320, y: 160 }, { text: 'Notify Team' });
 
   const connectors: ConnectorModel[] = [
     {
@@ -147,6 +150,7 @@ const createInitialScene = (): SceneContent => {
       source: { nodeId: collect.id, port: 'right' },
       target: { nodeId: decision.id, port: 'left' },
       style: { ...defaultConnectorStyle },
+      label: 'Forward',
       labelPosition: 0.5,
       labelOffset: 18,
       labelStyle: { ...defaultConnectorLabelStyle }
@@ -160,11 +164,71 @@ const createInitialScene = (): SceneContent => {
       labelPosition: 0.5,
       labelOffset: 18,
       labelStyle: { ...defaultConnectorLabelStyle }
+    },
+    {
+      id: nanoid(),
+      source: { nodeId: collect.id, port: 'bottom' },
+      target: { nodeId: review.id, port: 'top' },
+      style: { ...defaultConnectorStyle },
+      label: 'Needs Review',
+      labelPosition: 0.5,
+      labelOffset: 22,
+      labelStyle: { ...defaultConnectorLabelStyle }
+    },
+    {
+      id: nanoid(),
+      source: { nodeId: review.id, port: 'left' },
+      target: { nodeId: retry.id, port: 'right' },
+      style: { ...defaultConnectorStyle },
+      label: 'Rework',
+      labelPosition: 0.5,
+      labelOffset: 18,
+      labelStyle: { ...defaultConnectorLabelStyle }
+    },
+    {
+      id: nanoid(),
+      source: { nodeId: retry.id, port: 'top' },
+      target: { nodeId: start.id, port: 'bottom' },
+      style: { ...defaultConnectorStyle },
+      label: 'Loop Back',
+      labelPosition: 0.5,
+      labelOffset: 18,
+      labelStyle: { ...defaultConnectorLabelStyle }
+    },
+    {
+      id: nanoid(),
+      source: { nodeId: decision.id, port: 'bottom' },
+      target: { nodeId: notify.id, port: 'top' },
+      style: { ...defaultConnectorStyle },
+      label: 'No',
+      labelPosition: 0.5,
+      labelOffset: 18,
+      labelStyle: { ...defaultConnectorLabelStyle }
+    },
+    {
+      id: nanoid(),
+      source: { nodeId: notify.id, port: 'right' },
+      target: { position: { x: 620, y: 220 } },
+      style: { ...defaultConnectorStyle },
+      label: 'Webhook',
+      labelPosition: 0.5,
+      labelOffset: 18,
+      labelStyle: { ...defaultConnectorLabelStyle }
+    },
+    {
+      id: nanoid(),
+      source: { nodeId: start.id, port: 'top' },
+      target: { position: { x: -380, y: -360 } },
+      style: { ...defaultConnectorStyle },
+      label: 'Monitoring',
+      labelPosition: 0.5,
+      labelOffset: 18,
+      labelStyle: { ...defaultConnectorLabelStyle }
     }
   ];
 
   return {
-    nodes: [start, collect, decision, done],
+    nodes: [start, collect, decision, done, review, retry, notify],
     connectors
   };
 };
