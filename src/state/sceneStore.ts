@@ -116,12 +116,22 @@ export interface ReplaceSceneOptions {
   resetTransform?: boolean;
 }
 
+const defaultConnectorCap = { shape: 'none', size: 14 } as const;
+
 const defaultConnectorStyle: ConnectorModel['style'] = {
   stroke: '#e5e7eb',
   strokeWidth: 2,
   dashed: false,
-  cornerRadius: 12
+  cornerRadius: 12,
+  startCap: { ...defaultConnectorCap },
+  endCap: { ...defaultConnectorCap }
 };
+
+const createDefaultConnectorStyle = (): ConnectorModel['style'] => ({
+  ...defaultConnectorStyle,
+  startCap: defaultConnectorStyle.startCap ? { ...defaultConnectorStyle.startCap } : undefined,
+  endCap: defaultConnectorStyle.endCap ? { ...defaultConnectorStyle.endCap } : undefined
+});
 
 const defaultConnectorLabelStyle: ConnectorLabelStyle = {
   fontSize: 14,
@@ -144,7 +154,7 @@ const createInitialScene = (): SceneContent => {
       id: nanoid(),
       source: { nodeId: start.id, port: 'right' },
       target: { nodeId: collect.id, port: 'left' },
-      style: { ...defaultConnectorStyle },
+      style: createDefaultConnectorStyle(),
       label: 'Begin',
       labelPosition: 0.5,
       labelOffset: 18,
@@ -154,7 +164,7 @@ const createInitialScene = (): SceneContent => {
       id: nanoid(),
       source: { nodeId: collect.id, port: 'right' },
       target: { nodeId: decision.id, port: 'left' },
-      style: { ...defaultConnectorStyle },
+      style: createDefaultConnectorStyle(),
       label: 'Forward',
       labelPosition: 0.5,
       labelOffset: 18,
@@ -164,7 +174,7 @@ const createInitialScene = (): SceneContent => {
       id: nanoid(),
       source: { nodeId: decision.id, port: 'right' },
       target: { nodeId: done.id, port: 'left' },
-      style: { ...defaultConnectorStyle },
+      style: createDefaultConnectorStyle(),
       label: 'Yes',
       labelPosition: 0.5,
       labelOffset: 18,
@@ -174,7 +184,7 @@ const createInitialScene = (): SceneContent => {
       id: nanoid(),
       source: { nodeId: collect.id, port: 'bottom' },
       target: { nodeId: review.id, port: 'top' },
-      style: { ...defaultConnectorStyle },
+      style: createDefaultConnectorStyle(),
       label: 'Needs Review',
       labelPosition: 0.5,
       labelOffset: 22,
@@ -184,7 +194,7 @@ const createInitialScene = (): SceneContent => {
       id: nanoid(),
       source: { nodeId: review.id, port: 'left' },
       target: { nodeId: retry.id, port: 'right' },
-      style: { ...defaultConnectorStyle },
+      style: createDefaultConnectorStyle(),
       label: 'Rework',
       labelPosition: 0.5,
       labelOffset: 18,
@@ -194,7 +204,7 @@ const createInitialScene = (): SceneContent => {
       id: nanoid(),
       source: { nodeId: retry.id, port: 'top' },
       target: { nodeId: start.id, port: 'bottom' },
-      style: { ...defaultConnectorStyle },
+      style: createDefaultConnectorStyle(),
       label: 'Loop Back',
       labelPosition: 0.5,
       labelOffset: 18,
@@ -204,7 +214,7 @@ const createInitialScene = (): SceneContent => {
       id: nanoid(),
       source: { nodeId: decision.id, port: 'bottom' },
       target: { nodeId: notify.id, port: 'top' },
-      style: { ...defaultConnectorStyle },
+      style: createDefaultConnectorStyle(),
       label: 'No',
       labelPosition: 0.5,
       labelOffset: 18,
@@ -214,7 +224,7 @@ const createInitialScene = (): SceneContent => {
       id: nanoid(),
       source: { nodeId: notify.id, port: 'right' },
       target: { position: { x: 620, y: 220 } },
-      style: { ...defaultConnectorStyle },
+      style: createDefaultConnectorStyle(),
       label: 'Webhook',
       labelPosition: 0.5,
       labelOffset: 18,
@@ -224,7 +234,7 @@ const createInitialScene = (): SceneContent => {
       id: nanoid(),
       source: { nodeId: start.id, port: 'top' },
       target: { position: { x: -380, y: -360 } },
-      style: { ...defaultConnectorStyle },
+      style: createDefaultConnectorStyle(),
       label: 'Monitoring',
       labelPosition: 0.5,
       labelOffset: 18,
@@ -536,7 +546,7 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
         id: nanoid(),
         source,
         target,
-        style: { ...defaultConnectorStyle },
+        style: createDefaultConnectorStyle(),
         labelPosition: 0.5,
         labelOffset: 18,
         labelStyle: { ...defaultConnectorLabelStyle }
@@ -573,7 +583,11 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
         ...existing,
         source: cloneConnectorEndpoint(existing.source),
         target: cloneConnectorEndpoint(existing.target),
-        style: { ...existing.style },
+        style: {
+          ...existing.style,
+          startCap: existing.style.startCap ? { ...existing.style.startCap } : undefined,
+          endCap: existing.style.endCap ? { ...existing.style.endCap } : undefined
+        },
         labelStyle: existing.labelStyle ? { ...existing.labelStyle } : undefined,
         points: existing.points?.map((point) => ({ ...point }))
       };
@@ -581,7 +595,28 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
       const { style, points, labelStyle, source, target, ...rest } = patch;
 
       if (style) {
-        nextConnector.style = { ...nextConnector.style, ...style };
+        const { startCap, endCap, ...restStyle } = style;
+        const mergedStyle: ConnectorModel['style'] = {
+          ...nextConnector.style,
+          ...restStyle
+        };
+        if (startCap) {
+          mergedStyle.startCap = {
+            ...(nextConnector.style.startCap ?? { ...defaultConnectorCap }),
+            ...startCap
+          };
+        } else if ('startCap' in style && !startCap) {
+          mergedStyle.startCap = undefined;
+        }
+        if (endCap) {
+          mergedStyle.endCap = {
+            ...(nextConnector.style.endCap ?? { ...defaultConnectorCap }),
+            ...endCap
+          };
+        } else if ('endCap' in style && !endCap) {
+          mergedStyle.endCap = undefined;
+        }
+        nextConnector.style = mergedStyle;
       }
       if (labelStyle !== undefined) {
         nextConnector.labelStyle = labelStyle ? { ...labelStyle } : undefined;

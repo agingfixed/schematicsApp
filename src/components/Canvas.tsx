@@ -116,7 +116,9 @@ const PENDING_CONNECTOR_STYLE: ConnectorModel['style'] = {
   stroke: '#e5e7eb',
   strokeWidth: 2,
   dashed: false,
-  cornerRadius: 12
+  cornerRadius: 12,
+  startCap: { shape: 'none', size: 14 },
+  endCap: { shape: 'none', size: 14 }
 };
 
 const MARQUEE_ACTIVATION_THRESHOLD = 2;
@@ -235,7 +237,9 @@ const cloneNodeForClipboard = (node: NodeModel): NodeModel => ({
 });
 
 const cloneConnectorStyle = (style: ConnectorModel['style']): ConnectorModel['style'] => ({
-  ...style
+  ...style,
+  startCap: style.startCap ? { ...style.startCap } : undefined,
+  endCap: style.endCap ? { ...style.endCap } : undefined
 });
 
 const cloneConnectorForClipboard = (connector: ConnectorModel): ConnectorModel => ({

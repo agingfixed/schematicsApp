@@ -1,5 +1,5 @@
-import React, { useMemo, useRef } from 'react';
-import { ConnectorModel } from '../types/scene';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ConnectorEndpointShape, ConnectorModel } from '../types/scene';
 import { FloatingMenuChrome } from './FloatingMenuChrome';
 import { useFloatingMenuDrag } from '../hooks/useFloatingMenuDrag';
 import { computeFloatingMenuPlacement } from '../utils/floatingMenu';
@@ -16,6 +16,19 @@ interface ConnectorToolbarProps {
 }
 
 const TOOLBAR_OFFSET = 14;
+const CAP_SIZE_MIN = 6;
+const CAP_SIZE_MAX = 52;
+const DEFAULT_CAP_SIZE = 14;
+const CAP_OPTIONS: Array<{ value: ConnectorEndpointShape; label: string }> = [
+  { value: 'none', label: 'None' },
+  { value: 'arrow', label: 'Arrow' },
+  { value: 'triangle', label: 'Triangle' },
+  { value: 'open-arrow', label: 'Arrow (outline)' },
+  { value: 'diamond', label: 'Diamond' },
+  { value: 'circle', label: 'Circle' }
+];
+
+const clampCapSize = (value: number) => Math.max(CAP_SIZE_MIN, Math.min(CAP_SIZE_MAX, value));
 
 export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
   connector,
@@ -26,6 +39,44 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
   pointerPosition
 }) => {
   const toolbarRef = useRef<HTMLDivElement>(null);
+  const [activeEndpoint, setActiveEndpoint] = useState<'start' | 'end' | null>(null);
+
+  const startCap = useMemo(() => {
+    const cap = connector.style.startCap;
+    return {
+      shape: cap?.shape ?? 'none',
+      size: clampCapSize(typeof cap?.size === 'number' ? cap.size : DEFAULT_CAP_SIZE)
+    };
+  }, [connector.style.startCap]);
+
+  const endCap = useMemo(() => {
+    const cap = connector.style.endCap;
+    return {
+      shape: cap?.shape ?? 'none',
+      size: clampCapSize(typeof cap?.size === 'number' ? cap.size : DEFAULT_CAP_SIZE)
+    };
+  }, [connector.style.endCap]);
+
+  useEffect(() => {
+    if (!isVisible || !anchor) {
+      setActiveEndpoint(null);
+    }
+  }, [isVisible, anchor]);
+
+  useEffect(() => {
+    const body = document.body;
+    if (!body) {
+      return () => undefined;
+    }
+    if (activeEndpoint) {
+      body.dataset.connectorCapFocus = activeEndpoint;
+    } else {
+      delete body.dataset.connectorCapFocus;
+    }
+    return () => {
+      delete body.dataset.connectorCapFocus;
+    };
+  }, [activeEndpoint]);
 
   const {
     menuState,
@@ -119,6 +170,64 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
     }
   };
 
+  const updateCap = useCallback(
+    (endpoint: 'start' | 'end', cap: { shape: ConnectorEndpointShape; size: number }) => {
+      if (endpoint === 'start') {
+        onStyleChange({ startCap: { ...cap } });
+      } else {
+        onStyleChange({ endCap: { ...cap } });
+      }
+    },
+    [onStyleChange]
+  );
+
+  const handleCapShapeChange = useCallback(
+    (endpoint: 'start' | 'end') => (event: React.ChangeEvent<HTMLSelectElement>) => {
+      const shape = event.target.value as ConnectorEndpointShape;
+      const current = endpoint === 'start' ? startCap : endCap;
+      updateCap(endpoint, { ...current, shape });
+      setActiveEndpoint(endpoint);
+    },
+    [endCap, startCap, updateCap]
+  );
+
+  const handleCapSizeChange = useCallback(
+    (endpoint: 'start' | 'end') => (event: React.ChangeEvent<HTMLInputElement>) => {
+      const size = clampCapSize(Number(event.target.value));
+      const current = endpoint === 'start' ? startCap : endCap;
+      updateCap(endpoint, { ...current, size });
+      setActiveEndpoint(endpoint);
+    },
+    [endCap, startCap, updateCap]
+  );
+
+  const handleCapGroupBlur = useCallback(
+    (event: React.FocusEvent<HTMLDivElement>) => {
+      const nextFocus = event.relatedTarget as HTMLElement | null;
+      if (!event.currentTarget.contains(nextFocus)) {
+        setActiveEndpoint(null);
+      }
+    },
+    [setActiveEndpoint]
+  );
+
+  const handleCapGroupMouseLeave = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      const activeElement = document.activeElement as HTMLElement | null;
+      if (!activeElement || !event.currentTarget.contains(activeElement)) {
+        setActiveEndpoint(null);
+      }
+    },
+    [setActiveEndpoint]
+  );
+
+  const handleCapGroupFocus = useCallback(
+    (endpoint: 'start' | 'end') => () => {
+      setActiveEndpoint(endpoint);
+    },
+    [setActiveEndpoint]
+  );
+
   return (
     <div
       ref={toolbarRef}
@@ -176,6 +285,97 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
                 onChange={handleCornerRadiusChange}
               />
             </label>
+          </div>
+        </section>
+        <section className="connector-toolbar__panel connector-toolbar__panel--caps">
+          <h3 className="connector-toolbar__panel-title">End caps</h3>
+          <div className="connector-toolbar__caps">
+            <div
+              className="connector-toolbar__cap-group"
+              data-endpoint="start"
+              data-active={activeEndpoint === 'start' || undefined}
+              onFocusCapture={handleCapGroupFocus('start')}
+              onBlurCapture={handleCapGroupBlur}
+              onMouseEnter={handleCapGroupFocus('start')}
+              onMouseLeave={handleCapGroupMouseLeave}
+            >
+              <div className="connector-toolbar__cap-heading">
+                <span className="connector-toolbar__cap-icon connector-toolbar__cap-icon--start" aria-hidden="true">
+                  ●▶
+                </span>
+                <div className="connector-toolbar__cap-text">
+                  <span>Start</span>
+                  <small>Source side</small>
+                </div>
+              </div>
+              <label className="connector-toolbar__field connector-toolbar__field--block">
+                <span>Shape</span>
+                <select value={startCap.shape} onChange={handleCapShapeChange('start')}>
+                  {CAP_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="connector-toolbar__field connector-toolbar__field--block connector-toolbar__field--slider">
+                <span>
+                  Size
+                  <strong>{startCap.size}px</strong>
+                </span>
+                <input
+                  type="range"
+                  min={CAP_SIZE_MIN}
+                  max={CAP_SIZE_MAX}
+                  step={1}
+                  value={startCap.size}
+                  onChange={handleCapSizeChange('start')}
+                />
+              </label>
+            </div>
+            <div
+              className="connector-toolbar__cap-group"
+              data-endpoint="end"
+              data-active={activeEndpoint === 'end' || undefined}
+              onFocusCapture={handleCapGroupFocus('end')}
+              onBlurCapture={handleCapGroupBlur}
+              onMouseEnter={handleCapGroupFocus('end')}
+              onMouseLeave={handleCapGroupMouseLeave}
+            >
+              <div className="connector-toolbar__cap-heading">
+                <span className="connector-toolbar__cap-icon connector-toolbar__cap-icon--end" aria-hidden="true">
+                  ▶●
+                </span>
+                <div className="connector-toolbar__cap-text">
+                  <span>End</span>
+                  <small>Target side</small>
+                </div>
+              </div>
+              <label className="connector-toolbar__field connector-toolbar__field--block">
+                <span>Shape</span>
+                <select value={endCap.shape} onChange={handleCapShapeChange('end')}>
+                  {CAP_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="connector-toolbar__field connector-toolbar__field--block connector-toolbar__field--slider">
+                <span>
+                  Size
+                  <strong>{endCap.size}px</strong>
+                </span>
+                <input
+                  type="range"
+                  min={CAP_SIZE_MIN}
+                  max={CAP_SIZE_MAX}
+                  step={1}
+                  value={endCap.size}
+                  onChange={handleCapSizeChange('end')}
+                />
+              </label>
+            </div>
           </div>
         </section>
       </div>
