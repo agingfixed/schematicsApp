@@ -114,6 +114,7 @@ const defaultConnectorStyle: ConnectorModel['style'] = {
   strokeWidth: 2,
   dashed: false,
   startArrow: { shape: 'none', fill: 'filled' },
+  endArrow: { shape: 'none', fill: 'filled' },
   arrowSize: 1,
   cornerRadius: 12
 };
@@ -247,7 +248,8 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
           target: cloneConnectorEndpoint(connector.target),
           style: {
             ...connector.style,
-            startArrow: connector.style.startArrow ? { ...connector.style.startArrow } : undefined
+            startArrow: connector.style.startArrow ? { ...connector.style.startArrow } : undefined,
+            endArrow: connector.style.endArrow ? { ...connector.style.endArrow } : undefined
           },
           labelStyle: connector.labelStyle ? { ...connector.labelStyle } : undefined,
           points: connector.points?.map((point) => ({ ...point }))
@@ -507,7 +509,11 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
         ...existing,
         source: cloneConnectorEndpoint(existing.source),
         target: cloneConnectorEndpoint(existing.target),
-        style: { ...existing.style },
+        style: {
+          ...existing.style,
+          startArrow: existing.style.startArrow ? { ...existing.style.startArrow } : undefined,
+          endArrow: existing.style.endArrow ? { ...existing.style.endArrow } : undefined
+        },
         labelStyle: existing.labelStyle ? { ...existing.labelStyle } : undefined,
         points: existing.points?.map((point) => ({ ...point }))
       };
@@ -516,6 +522,12 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
 
       if (style) {
         nextConnector.style = { ...nextConnector.style, ...style };
+        if (style.startArrow) {
+          nextConnector.style.startArrow = { ...style.startArrow };
+        }
+        if (style.endArrow) {
+          nextConnector.style.endArrow = { ...style.endArrow };
+        }
       }
       if (labelStyle !== undefined) {
         nextConnector.labelStyle = labelStyle ? { ...labelStyle } : undefined;
