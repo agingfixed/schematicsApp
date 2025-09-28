@@ -122,14 +122,22 @@ const defaultConnectorStyle: ConnectorModel['style'] = {
   strokeWidth: 2,
   dashed: false,
   startArrow: { shape: 'none', fill: 'filled' },
+  endArrow: { shape: 'none', fill: 'filled' },
   arrowSize: 1,
   cornerRadius: 12
 };
 
-const connectorStyle = (startArrow?: ConnectorArrowStyle): ConnectorModel['style'] => ({
-  ...defaultConnectorStyle,
-  ...(startArrow ? { startArrow } : {})
-});
+const connectorStyle = (
+  startArrow?: ConnectorArrowStyle,
+  endArrow?: ConnectorArrowStyle
+): ConnectorModel['style'] => {
+  const { startArrow: defaultStart, endArrow: defaultEnd, ...rest } = defaultConnectorStyle;
+  return {
+    ...rest,
+    startArrow: startArrow ? { ...startArrow } : defaultStart ? { ...defaultStart } : undefined,
+    endArrow: endArrow ? { ...endArrow } : defaultEnd ? { ...defaultEnd } : undefined
+  };
+};
 
 const defaultConnectorLabelStyle: ConnectorLabelStyle = {
   fontSize: 14,
@@ -324,7 +332,8 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
           target: cloneConnectorEndpoint(connector.target),
           style: {
             ...connector.style,
-            startArrow: connector.style.startArrow ? { ...connector.style.startArrow } : undefined
+            startArrow: connector.style.startArrow ? { ...connector.style.startArrow } : undefined,
+            endArrow: connector.style.endArrow ? { ...connector.style.endArrow } : undefined
           },
           labelStyle: connector.labelStyle ? { ...connector.labelStyle } : undefined,
           points: connector.points?.map((point) => ({ ...point }))
@@ -584,7 +593,11 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
         ...existing,
         source: cloneConnectorEndpoint(existing.source),
         target: cloneConnectorEndpoint(existing.target),
-        style: { ...existing.style },
+        style: {
+          ...existing.style,
+          startArrow: existing.style.startArrow ? { ...existing.style.startArrow } : undefined,
+          endArrow: existing.style.endArrow ? { ...existing.style.endArrow } : undefined
+        },
         labelStyle: existing.labelStyle ? { ...existing.labelStyle } : undefined,
         points: existing.points?.map((point) => ({ ...point }))
       };

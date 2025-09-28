@@ -238,7 +238,8 @@ const cloneNodeForClipboard = (node: NodeModel): NodeModel => ({
 
 const cloneConnectorStyle = (style: ConnectorModel['style']): ConnectorModel['style'] => ({
   ...style,
-  startArrow: style.startArrow ? { ...style.startArrow } : undefined
+  startArrow: style.startArrow ? { ...style.startArrow } : undefined,
+  endArrow: style.endArrow ? { ...style.endArrow } : undefined
 });
 
 const cloneConnectorForClipboard = (connector: ConnectorModel): ConnectorModel => ({
