@@ -37,7 +37,9 @@ interface DiagramConnectorProps {
 const DEFAULT_LABEL_POSITION = 0.5;
 const DEFAULT_LABEL_DISTANCE = 18;
 const MAX_LABEL_DISTANCE = 60;
-const ENDPOINT_HANDLE_OFFSET = 14;
+// Keep the endpoint grab handle aligned with the actual connector position so the
+// caps appear visually centered on the connection point.
+const ENDPOINT_HANDLE_OFFSET = 0;
 const ENDPOINT_HANDLE_EPSILON = 1e-6;
 const ENDPOINT_VISUAL_RADIUS = 6.5;
 const ENDPOINT_HIT_RADIUS = 20;
