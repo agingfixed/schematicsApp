@@ -93,6 +93,7 @@ export interface ConnectorStyle {
   strokeWidth: number;
   dashed?: boolean;
   startArrow?: ConnectorArrowStyle;
+  endArrow?: ConnectorArrowStyle;
   arrowSize?: number;
   cornerRadius?: number;
 }

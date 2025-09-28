@@ -114,6 +114,7 @@ const defaultConnectorStyle: ConnectorModel['style'] = {
   strokeWidth: 2,
   dashed: false,
   startArrow: { shape: 'none', fill: 'filled' },
+  endArrow: { shape: 'none', fill: 'filled' },
   arrowSize: 1,
   cornerRadius: 12
 };
@@ -247,7 +248,8 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
           target: cloneConnectorEndpoint(connector.target),
           style: {
             ...connector.style,
-            startArrow: connector.style.startArrow ? { ...connector.style.startArrow } : undefined
+            startArrow: connector.style.startArrow ? { ...connector.style.startArrow } : undefined,
+            endArrow: connector.style.endArrow ? { ...connector.style.endArrow } : undefined
           },
           labelStyle: connector.labelStyle ? { ...connector.labelStyle } : undefined,
           points: connector.points?.map((point) => ({ ...point }))
