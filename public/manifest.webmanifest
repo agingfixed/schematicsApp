@@ -1,0 +1,17 @@
+{
+  "name": "Schematics Studio",
+  "short_name": "Schematics",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#020617",
+  "theme_color": "#1d4ed8",
+  "description": "Design and edit circuit schematics from any device, even offline.",
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

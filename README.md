@@ -1,6 +1,7 @@
 # Schematics Studio
 
-An experimental infinite-canvas diagram editor focused on building flowcharts, org charts, and lightweight schematic documents. The goal is to provide a Figma-like authoring experience optimised for nodes, connectors, and rapid iteration.
+An experimental infinite-canvas diagram editor focused on building flowcharts, org charts, and lightweight schematic documents.
+The goal is to provide a Figma-like authoring experience optimised for nodes, connectors, and rapid iteration.
 
 ## Getting Started
 
@@ -18,8 +19,19 @@ npm config set registry https://registry.npmmirror.com
 ## Available Scripts
 
 - `npm run dev` – start the Vite development server.
-- `npm run build` – type-check and produce a production build.
+- `npm run build` – type-check, produce a production build, and generate offline desktop bundles in `dist/downloads/`.
+- `npm run package:offline` – regenerate only the offline desktop bundles (after a build).
 - `npm run preview` – preview the build output locally.
+
+## Offline & Desktop installation
+
+Schematics Studio ships as an installable Progressive Web App (PWA). When you visit the site in a supported browser you will
+see an install card that automatically detects your operating system and explains the correct install flow (for example, “Add to
+Dock” on macOS or “Install app” in Chrome on Windows).
+
+For users who prefer a distributable archive, run `npm run build` and grab the ready-made zips from `dist/downloads/`. Each
+archive contains the static build plus a README explaining how to launch it on the targeted platform. See
+[`docs/desktop-offline.md`](docs/desktop-offline.md) for more detail on distributing these bundles.
 
 ## Current Capabilities
 
