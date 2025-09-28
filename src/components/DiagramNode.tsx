@@ -108,7 +108,7 @@ export const DiagramNode: React.FC<DiagramNodeProps> = ({
 
   const cursor = tool === 'connector' ? 'crosshair' : 'move';
 
-  const connectorHandleOffset = 18;
+  const connectorHandleOffset = 20;
   const connectorAnchors = getConnectorPortPositions(node);
   const connectorHandles: Array<{ key: CardinalConnectorPort; x: number; y: number }> = CARDINAL_PORTS.map(
     (port) => {
@@ -130,7 +130,7 @@ export const DiagramNode: React.FC<DiagramNodeProps> = ({
       }
     }
   );
-  const connectorHandleRadius = 9;
+  const connectorHandleRadius = 11;
 
   const isLinkNode = node.shape === 'link';
   const isTextualNode = node.shape === 'text' || isLinkNode;
