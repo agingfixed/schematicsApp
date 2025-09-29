@@ -109,6 +109,28 @@
   flex: 1 1 100%;
 }
 
+.connector-toolbar__field--slider {
+  flex-direction: column;
+  align-items: stretch;
+  gap: calc(6px * var(--menu-scale));
+}
+
+.connector-toolbar__field-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  font-size: calc(11px * var(--menu-scale));
+  color: rgba(226, 232, 240, 0.72);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.connector-toolbar__value {
+  font-variant-numeric: tabular-nums;
+  color: rgba(226, 232, 240, 0.82);
+}
+
 .connector-toolbar__field--color {
   flex: 0 0 auto;
 }
@@ -150,6 +172,9 @@
   font-size: calc(12px * var(--menu-scale));
   cursor: pointer;
   transition: background 0.15s ease, border 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .connector-toolbar__button:hover {
@@ -165,5 +190,10 @@
 .connector-toolbar__button--toggle {
   flex: 0 0 auto;
   min-width: calc(92px * var(--menu-scale));
+}
+
+.connector-toolbar__button--block {
+  width: 100%;
+  justify-content: center;
 }
 

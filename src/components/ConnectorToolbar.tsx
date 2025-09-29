@@ -200,7 +200,7 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
             </label>
             <button
               type="button"
-              className={`connector-toolbar__button connector-toolbar__button--toggle${
+              className={`connector-toolbar__button connector-toolbar__button--toggle connector-toolbar__button--block${
                 connector.style.dashed ? ' is-active' : ''
               }`}
               onClick={handleDashToggle}
@@ -242,12 +242,16 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
                 ))}
               </select>
             </label>
-            <label className="connector-toolbar__field">
-              <span>Size</span>
+            <label className="connector-toolbar__field connector-toolbar__field--block connector-toolbar__field--slider">
+              <div className="connector-toolbar__field-header">
+                <span>Size</span>
+                <span className="connector-toolbar__value">{startCap.size}px</span>
+              </div>
               <input
-                type="number"
+                type="range"
                 min={6}
                 max={48}
+                step={1}
                 value={startCap.size}
                 onChange={(event) => handleEndpointSizeChange('start', event)}
               />
@@ -273,12 +277,16 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
                 ))}
               </select>
             </label>
-            <label className="connector-toolbar__field">
-              <span>Size</span>
+            <label className="connector-toolbar__field connector-toolbar__field--block connector-toolbar__field--slider">
+              <div className="connector-toolbar__field-header">
+                <span>Size</span>
+                <span className="connector-toolbar__value">{endCap.size}px</span>
+              </div>
               <input
-                type="number"
+                type="range"
                 min={6}
                 max={48}
+                step={1}
                 value={endCap.size}
                 onChange={(event) => handleEndpointSizeChange('end', event)}
               />
