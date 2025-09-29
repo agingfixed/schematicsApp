@@ -1,5 +1,10 @@
 import React, { useMemo, useRef } from 'react';
-import { ConnectorModel } from '../types/scene';
+import {
+  ConnectorEndpointCap,
+  ConnectorEndpointShape,
+  ConnectorModel,
+  cloneConnectorEndpointStyles
+} from '../types/scene';
 import { FloatingMenuChrome } from './FloatingMenuChrome';
 import { useFloatingMenuDrag } from '../hooks/useFloatingMenuDrag';
 import { computeFloatingMenuPlacement } from '../utils/floatingMenu';
@@ -12,6 +17,7 @@ interface ConnectorToolbarProps {
   viewportSize: { width: number; height: number };
   isVisible: boolean;
   onStyleChange: (patch: Partial<ConnectorModel['style']>) => void;
+  onEndpointStyleChange: (endpoint: 'start' | 'end', patch: Partial<ConnectorEndpointCap>) => void;
   pointerPosition: { x: number; y: number } | null;
 }
 
@@ -23,6 +29,7 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
   viewportSize,
   isVisible,
   onStyleChange,
+  onEndpointStyleChange,
   pointerPosition
 }) => {
   const toolbarRef = useRef<HTMLDivElement>(null);
@@ -119,6 +126,41 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
     }
   };
 
+  const endpointStyles = useMemo(
+    () => cloneConnectorEndpointStyles(connector.endpointStyles),
+    [connector.endpointStyles]
+  );
+
+  const handleEndpointShapeChange = (
+    endpoint: 'start' | 'end',
+    event: React.ChangeEvent<HTMLSelectElement>
+  ) => {
+    onEndpointStyleChange(endpoint, { shape: event.target.value as ConnectorEndpointShape });
+  };
+
+  const handleEndpointSizeChange = (
+    endpoint: 'start' | 'end',
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const value = Number(event.target.value);
+    if (!Number.isFinite(value)) {
+      return;
+    }
+    const next = Math.max(6, Math.min(48, Math.round(value)));
+    onEndpointStyleChange(endpoint, { size: next });
+  };
+
+  const startCap = endpointStyles.start;
+  const endCap = endpointStyles.end;
+
+  const shapeOptions: Array<{ value: ConnectorEndpointShape; label: string }> = [
+    { value: 'arrow', label: 'Arrow' },
+    { value: 'hollow-arrow', label: 'Hollow Arrow' },
+    { value: 'triangle', label: 'Triangle' },
+    { value: 'diamond', label: 'Diamond' },
+    { value: 'circle', label: 'Circle' }
+  ];
+
   return (
     <div
       ref={toolbarRef}
@@ -176,6 +218,66 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
                 onChange={handleCornerRadiusChange}
               />
             </label>
+          </div>
+        </section>
+        <section className="connector-toolbar__panel connector-toolbar__panel--endpoints">
+          <h3 className="connector-toolbar__panel-title">Endpoints</h3>
+          <div className="connector-toolbar__section connector-toolbar__section--endpoints">
+            <div className="connector-toolbar__endpoint-group" data-endpoint="start">
+              <div className="connector-toolbar__endpoint-header">
+                <span className="connector-toolbar__endpoint-title">Start</span>
+                <span className="connector-toolbar__endpoint-direction">Source end</span>
+              </div>
+              <label className="connector-toolbar__field">
+                <span>Shape</span>
+                <select
+                  value={startCap.shape}
+                  onChange={(event) => handleEndpointShapeChange('start', event)}
+                >
+                  {shapeOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="connector-toolbar__field">
+                <span>Size</span>
+                <input
+                  type="number"
+                  min={6}
+                  max={48}
+                  value={startCap.size}
+                  onChange={(event) => handleEndpointSizeChange('start', event)}
+                />
+              </label>
+            </div>
+            <div className="connector-toolbar__endpoint-group" data-endpoint="end">
+              <div className="connector-toolbar__endpoint-header">
+                <span className="connector-toolbar__endpoint-title">End</span>
+                <span className="connector-toolbar__endpoint-direction">Target end</span>
+              </div>
+              <label className="connector-toolbar__field">
+                <span>Shape</span>
+                <select value={endCap.shape} onChange={(event) => handleEndpointShapeChange('end', event)}>
+                  {shapeOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="connector-toolbar__field">
+                <span>Size</span>
+                <input
+                  type="number"
+                  min={6}
+                  max={48}
+                  value={endCap.size}
+                  onChange={(event) => handleEndpointSizeChange('end', event)}
+                />
+              </label>
+            </div>
           </div>
         </section>
       </div>

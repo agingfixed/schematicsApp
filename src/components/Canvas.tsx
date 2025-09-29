@@ -15,12 +15,14 @@ import {
   CanvasTransform,
   CardinalConnectorPort,
   ConnectorEndpoint,
+  ConnectorEndpointCap,
   ConnectorModel,
   NodeKind,
   NodeModel,
   SelectionState,
   Tool,
   Vec2,
+  cloneConnectorEndpointStyles,
   isAttachedConnectorEndpoint
 } from '../types/scene';
 import {
@@ -1118,6 +1120,19 @@ const CanvasComponent = (
   const handleConnectorStyleChange = useCallback(
     (connector: ConnectorModel, patch: Partial<ConnectorModel['style']>) => {
       updateConnector(connector.id, { style: patch });
+    },
+    [updateConnector]
+  );
+
+  const handleConnectorEndpointStyleChange = useCallback(
+    (connector: ConnectorModel, endpoint: 'start' | 'end', patch: Partial<ConnectorEndpointCap>) => {
+      const styles = cloneConnectorEndpointStyles(connector.endpointStyles);
+      if (endpoint === 'start') {
+        styles.start = { ...styles.start, ...patch };
+      } else {
+        styles.end = { ...styles.end, ...patch };
+      }
+      updateConnector(connector.id, { endpointStyles: styles });
     },
     [updateConnector]
   );
@@ -3377,6 +3392,9 @@ const CanvasComponent = (
           viewportSize={viewport}
           isVisible={tool === 'select' && !isPanning && !editingConnectorId}
           onStyleChange={(patch) => handleConnectorStyleChange(selectedConnector, patch)}
+          onEndpointStyleChange={(endpoint, patch) =>
+            handleConnectorEndpointStyleChange(selectedConnector, endpoint, patch)
+          }
           pointerPosition={lastPointerPosition}
         />
       )}

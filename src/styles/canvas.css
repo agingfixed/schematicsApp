@@ -292,6 +292,24 @@
   transition: color 0.18s ease;
 }
 
+.diagram-connector__endpoint-caps {
+  pointer-events: none;
+}
+
+.diagram-connector__cap {
+  pointer-events: none;
+  filter: drop-shadow(0 1px 4px rgba(15, 23, 42, 0.25));
+  transition: filter 0.18s ease, opacity 0.18s ease;
+}
+
+.diagram-connector.is-selected .diagram-connector__cap {
+  filter: drop-shadow(0 2px 8px rgba(59, 130, 246, 0.35));
+}
+
+.diagram-connector__cap--hollow {
+  filter: drop-shadow(0 1px 3px rgba(15, 23, 42, 0.3));
+}
+
 .diagram-connector__endpoint-group.is-hovered {
   color: rgba(59, 130, 246, 0.95);
 }
