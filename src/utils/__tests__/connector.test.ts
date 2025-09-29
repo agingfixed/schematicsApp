@@ -39,8 +39,6 @@ const defaultConnectorStyle: Mutable<ConnectorModel['style']> = {
   stroke: '#111827',
   strokeWidth: 2,
   dashed: false,
-  startArrow: { shape: 'none', fill: 'filled' },
-  arrowSize: 1,
   cornerRadius: 12
 };
 
@@ -121,35 +119,6 @@ test('aligned connectors preserve outward stubs', () => {
   assert.ok(startStub.x > path.start.x);
   assert.ok(Math.abs(endStub.y - path.end.y) < 1e-3);
   assert.ok(endStub.x < path.end.x);
-});
-
-test('connector stub length is controlled by arrow size instead of stroke width', () => {
-  const source = createNode('source', { x: 0, y: 120 });
-  const target = createNode('target', { x: 320, y: 120 });
-
-  const thinConnector = createConnector('right', 'left');
-  thinConnector.style.arrowSize = 1;
-
-  const thickConnector = createConnector('right', 'left');
-  thickConnector.style.strokeWidth = 8;
-  thickConnector.style.arrowSize = 1;
-
-  const largeArrowConnector = createConnector('right', 'left');
-  largeArrowConnector.style.arrowSize = 2;
-
-  const thinPath = getConnectorPath(thinConnector, source, target, [source, target]);
-  const thickPath = getConnectorPath(thickConnector, source, target, [source, target]);
-  const largeArrowPath = getConnectorPath(largeArrowConnector, source, target, [source, target]);
-
-  const stubLength = thinPath.points[1].x - thinPath.points[0].x;
-  const thickStubLength = thickPath.points[1].x - thickPath.points[0].x;
-  const largeArrowStubLength = largeArrowPath.points[1].x - largeArrowPath.points[0].x;
-
-  assert.ok(Math.abs(stubLength - thickStubLength) < 1e-6, 'stroke width should not affect stub length');
-  assert.ok(
-    largeArrowStubLength > stubLength,
-    'increasing arrow size should expand stub length to preserve spacing'
-  );
 });
 
 test('manual waypoints stay aligned to endpoints', () => {

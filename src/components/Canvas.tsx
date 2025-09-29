@@ -15,12 +15,14 @@ import {
   CanvasTransform,
   CardinalConnectorPort,
   ConnectorEndpoint,
+  ConnectorEndpointCap,
   ConnectorModel,
   NodeKind,
   NodeModel,
   SelectionState,
   Tool,
   Vec2,
+  cloneConnectorEndpointStyles,
   isAttachedConnectorEndpoint
 } from '../types/scene';
 import {
@@ -116,8 +118,6 @@ const PENDING_CONNECTOR_STYLE: ConnectorModel['style'] = {
   stroke: '#e5e7eb',
   strokeWidth: 2,
   dashed: false,
-  startArrow: { shape: 'none', fill: 'filled' },
-  arrowSize: 1,
   cornerRadius: 12
 };
 
@@ -237,8 +237,7 @@ const cloneNodeForClipboard = (node: NodeModel): NodeModel => ({
 });
 
 const cloneConnectorStyle = (style: ConnectorModel['style']): ConnectorModel['style'] => ({
-  ...style,
-  startArrow: style.startArrow ? { ...style.startArrow } : undefined
+  ...style
 });
 
 const cloneConnectorForClipboard = (connector: ConnectorModel): ConnectorModel => ({
@@ -1121,6 +1120,19 @@ const CanvasComponent = (
   const handleConnectorStyleChange = useCallback(
     (connector: ConnectorModel, patch: Partial<ConnectorModel['style']>) => {
       updateConnector(connector.id, { style: patch });
+    },
+    [updateConnector]
+  );
+
+  const handleConnectorEndpointStyleChange = useCallback(
+    (connector: ConnectorModel, endpoint: 'start' | 'end', patch: Partial<ConnectorEndpointCap>) => {
+      const styles = cloneConnectorEndpointStyles(connector.endpointStyles);
+      if (endpoint === 'start') {
+        styles.start = { ...styles.start, ...patch };
+      } else {
+        styles.end = { ...styles.end, ...patch };
+      }
+      updateConnector(connector.id, { endpointStyles: styles });
     },
     [updateConnector]
   );
@@ -3192,28 +3204,7 @@ const CanvasComponent = (
             <path d="M2 2 L12 6 L2 10 Z" fill="#e5e7eb" />
           </marker>
           <marker
-            id="arrow-start"
-            markerWidth="16"
-            markerHeight="16"
-            refX="4"
-            refY="6"
-            orient="auto"
-            markerUnits="strokeWidth"
-          >
-            <path d="M12 2 L2 6 L12 10 Z" fill="#e5e7eb" />
-          </marker>
-          <marker
             id="dot-end"
-            markerWidth="10"
-            markerHeight="10"
-            refX="5"
-            refY="5"
-            markerUnits="strokeWidth"
-          >
-            <circle cx="5" cy="5" r="3" fill="#e5e7eb" />
-          </marker>
-          <marker
-            id="dot-start"
             markerWidth="10"
             markerHeight="10"
             refX="5"
@@ -3401,6 +3392,9 @@ const CanvasComponent = (
           viewportSize={viewport}
           isVisible={tool === 'select' && !isPanning && !editingConnectorId}
           onStyleChange={(patch) => handleConnectorStyleChange(selectedConnector, patch)}
+          onEndpointStyleChange={(endpoint, patch) =>
+            handleConnectorEndpointStyleChange(selectedConnector, endpoint, patch)
+          }
           pointerPosition={lastPointerPosition}
         />
       )}

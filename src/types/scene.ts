@@ -66,21 +66,6 @@ export const isFloatingConnectorEndpoint = (
   endpoint: ConnectorEndpoint
 ): endpoint is FloatingConnectorEndpoint => 'position' in endpoint;
 
-export type ArrowShape =
-  | 'none'
-  | 'triangle'
-  | 'triangle-inward'
-  | 'diamond'
-  | 'circle'
-  | 'arrow'
-  | 'line-arrow';
-export type ArrowFill = 'filled' | 'outlined';
-
-export interface ConnectorArrowStyle {
-  shape: ArrowShape;
-  fill: ArrowFill;
-}
-
 export interface ConnectorLabelStyle {
   fontSize: number;
   fontWeight: NodeFontWeight;
@@ -92,10 +77,32 @@ export interface ConnectorStyle {
   stroke: string;
   strokeWidth: number;
   dashed?: boolean;
-  startArrow?: ConnectorArrowStyle;
-  arrowSize?: number;
   cornerRadius?: number;
 }
+
+export type ConnectorEndpointShape = 'circle' | 'diamond' | 'arrow' | 'triangle' | 'hollow-arrow';
+
+export interface ConnectorEndpointCap {
+  shape: ConnectorEndpointShape;
+  size: number;
+}
+
+export interface ConnectorEndpointStyles {
+  start: ConnectorEndpointCap;
+  end: ConnectorEndpointCap;
+}
+
+export const DEFAULT_CONNECTOR_ENDPOINT_STYLES: ConnectorEndpointStyles = {
+  start: { shape: 'circle', size: 12 },
+  end: { shape: 'arrow', size: 12 }
+};
+
+export const cloneConnectorEndpointStyles = (
+  styles?: ConnectorEndpointStyles
+): ConnectorEndpointStyles => ({
+  start: { ...(styles?.start ?? DEFAULT_CONNECTOR_ENDPOINT_STYLES.start) },
+  end: { ...(styles?.end ?? DEFAULT_CONNECTOR_ENDPOINT_STYLES.end) }
+});
 
 export interface ConnectorModel {
   id: string;
@@ -108,6 +115,7 @@ export interface ConnectorModel {
   labelAngle?: number;
   style: ConnectorStyle;
   labelStyle?: ConnectorLabelStyle;
+  endpointStyles?: ConnectorEndpointStyles;
 }
 
 export interface SceneContent {
