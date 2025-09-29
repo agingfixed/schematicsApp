@@ -242,12 +242,13 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
                 ))}
               </select>
             </label>
-            <label className="connector-toolbar__field">
+            <label className="connector-toolbar__field connector-toolbar__field--block">
               <span>Size</span>
               <input
-                type="number"
+                type="range"
                 min={6}
                 max={48}
+                step={1}
                 value={startCap.size}
                 onChange={(event) => handleEndpointSizeChange('start', event)}
               />
@@ -273,12 +274,13 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
                 ))}
               </select>
             </label>
-            <label className="connector-toolbar__field">
+            <label className="connector-toolbar__field connector-toolbar__field--block">
               <span>Size</span>
               <input
-                type="number"
+                type="range"
                 min={6}
                 max={48}
+                step={1}
                 value={endCap.size}
                 onChange={(event) => handleEndpointSizeChange('end', event)}
               />
