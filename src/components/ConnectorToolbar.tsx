@@ -100,10 +100,6 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
     placementOptions
   ]);
 
-  if (!isVisible || !anchor) {
-    return null;
-  }
-
   const handleStrokeWidthChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const value = Number(event.target.value);
     if (Number.isFinite(value)) {
@@ -131,6 +127,13 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
     [connector.endpointStyles]
   );
 
+  const startSizeId = useId();
+  const endSizeId = useId();
+
+  if (!isVisible || !anchor) {
+    return null;
+  }
+
   const handleEndpointShapeChange = (
     endpoint: 'start' | 'end',
     event: React.ChangeEvent<HTMLSelectElement>
@@ -152,8 +155,6 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
 
   const startCap = endpointStyles.start;
   const endCap = endpointStyles.end;
-  const startSizeId = useId();
-  const endSizeId = useId();
 
   const shapeOptions: Array<{ value: ConnectorEndpointShape; label: string }> = [
     { value: 'arrow', label: 'Arrow' },
