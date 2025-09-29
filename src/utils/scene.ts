@@ -6,7 +6,8 @@ import {
   NodeModel,
   NodeShape,
   SceneContent,
-  Vec2
+  Vec2,
+  cloneConnectorEndpointStyles
 } from '../types/scene';
 import { cloneConnectorEndpoint } from './connector';
 import { ensureHtmlContent } from './text';
@@ -175,6 +176,9 @@ export const cloneScene = (scene: SceneContent): SceneContent => ({
     ...connector,
     source: cloneConnectorEndpoint(connector.source),
     target: cloneConnectorEndpoint(connector.target),
+    style: { ...connector.style },
+    labelStyle: connector.labelStyle ? { ...connector.labelStyle } : undefined,
+    endpointStyles: cloneConnectorEndpointStyles(connector.endpointStyles),
     points: connector.points?.map((point) => ({ ...point }))
   }))
 });
@@ -259,5 +263,3 @@ export const centerOfBounds = (bounds: Bounds): Vec2 => ({
 
 export const getNodeById = (scene: SceneContent, id: string): NodeModel | undefined =>
   scene.nodes.find((node) => node.id === id);
-
-export const connectorArrowId = (type: 'arrow' | 'dot') => `${type}-start`;
