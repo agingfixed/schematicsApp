@@ -35,10 +35,7 @@ export const App: React.FC = () => {
     }
 
     if (!currentBoardId) {
-      if (lastLoadedBoard.current) {
-        resetScene();
-        lastLoadedBoard.current = null;
-      }
+      lastLoadedBoard.current = null;
       return;
     }
 
