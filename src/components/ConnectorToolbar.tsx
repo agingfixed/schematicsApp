@@ -222,8 +222,8 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
         </section>
         <section className="connector-toolbar__panel connector-toolbar__panel--endpoints">
           <h3 className="connector-toolbar__panel-title">Endpoints</h3>
-          <div className="connector-toolbar__section connector-toolbar__section--endpoints">
-            <div className="connector-toolbar__endpoint-group" data-endpoint="start">
+          <div className="connector-toolbar__endpoints">
+            <div className="connector-toolbar__endpoint" data-endpoint="start">
               <div className="connector-toolbar__endpoint-header">
                 <span className="connector-toolbar__endpoint-title">Start</span>
                 <span className="connector-toolbar__endpoint-direction">Source end</span>
@@ -241,18 +241,20 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
                   ))}
                 </select>
               </label>
-              <label className="connector-toolbar__field">
+              <label className="connector-toolbar__field connector-toolbar__field--slider">
                 <span>Size</span>
                 <input
-                  type="number"
+                  type="range"
                   min={6}
                   max={48}
+                  step={1}
                   value={startCap.size}
                   onChange={(event) => handleEndpointSizeChange('start', event)}
                 />
+                <span className="connector-toolbar__value">{startCap.size}px</span>
               </label>
             </div>
-            <div className="connector-toolbar__endpoint-group" data-endpoint="end">
+            <div className="connector-toolbar__endpoint" data-endpoint="end">
               <div className="connector-toolbar__endpoint-header">
                 <span className="connector-toolbar__endpoint-title">End</span>
                 <span className="connector-toolbar__endpoint-direction">Target end</span>
@@ -267,15 +269,17 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
                   ))}
                 </select>
               </label>
-              <label className="connector-toolbar__field">
+              <label className="connector-toolbar__field connector-toolbar__field--slider">
                 <span>Size</span>
                 <input
-                  type="number"
+                  type="range"
                   min={6}
                   max={48}
+                  step={1}
                   value={endCap.size}
                   onChange={(event) => handleEndpointSizeChange('end', event)}
                 />
+                <span className="connector-toolbar__value">{endCap.size}px</span>
               </label>
             </div>
           </div>
