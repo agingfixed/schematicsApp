@@ -1,4 +1,4 @@
-import React, { useMemo, useRef } from 'react';
+import React, { useId, useMemo, useRef } from 'react';
 import {
   ConnectorEndpointCap,
   ConnectorEndpointShape,
@@ -152,6 +152,8 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
 
   const startCap = endpointStyles.start;
   const endCap = endpointStyles.end;
+  const startSizeId = useId();
+  const endSizeId = useId();
 
   const shapeOptions: Array<{ value: ConnectorEndpointShape; label: string }> = [
     { value: 'arrow', label: 'Arrow' },
@@ -200,7 +202,7 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
             </label>
             <button
               type="button"
-              className={`connector-toolbar__button connector-toolbar__button--toggle${
+              className={`connector-toolbar__button connector-toolbar__button--toggle connector-toolbar__button--block${
                 connector.style.dashed ? ' is-active' : ''
               }`}
               onClick={handleDashToggle}
@@ -242,16 +244,22 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
                 ))}
               </select>
             </label>
-            <label className="connector-toolbar__field">
-              <span>Size</span>
+            <div className="connector-toolbar__slider-group">
+              <div className="connector-toolbar__field-header">
+                <label htmlFor={startSizeId}>Size</label>
+                <span className="connector-toolbar__value">{startCap.size}px</span>
+              </div>
               <input
-                type="number"
+                id={startSizeId}
+                className="connector-toolbar__slider"
+                type="range"
                 min={6}
                 max={48}
+                step={1}
                 value={startCap.size}
                 onChange={(event) => handleEndpointSizeChange('start', event)}
               />
-            </label>
+            </div>
           </div>
         </section>
         <section
@@ -273,16 +281,22 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
                 ))}
               </select>
             </label>
-            <label className="connector-toolbar__field">
-              <span>Size</span>
+            <div className="connector-toolbar__slider-group">
+              <div className="connector-toolbar__field-header">
+                <label htmlFor={endSizeId}>Size</label>
+                <span className="connector-toolbar__value">{endCap.size}px</span>
+              </div>
               <input
-                type="number"
+                id={endSizeId}
+                className="connector-toolbar__slider"
+                type="range"
                 min={6}
                 max={48}
+                step={1}
                 value={endCap.size}
                 onChange={(event) => handleEndpointSizeChange('end', event)}
               />
-            </label>
+            </div>
           </div>
         </section>
       </div>

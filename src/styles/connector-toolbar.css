@@ -20,7 +20,7 @@
 
 .connector-toolbar__content {
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   gap: calc(12px * var(--menu-scale));
   align-items: stretch;
 }
@@ -33,8 +33,8 @@
   display: flex;
   flex-direction: column;
   gap: calc(10px * var(--menu-scale));
-  flex: 1 1 calc(160px * var(--menu-scale));
-  min-width: calc(160px * var(--menu-scale));
+  flex: 1 1 calc(200px * var(--menu-scale));
+  min-width: calc(180px * var(--menu-scale));
 }
 
 .connector-toolbar__panel-title {
@@ -101,12 +101,32 @@
   align-items: center;
   gap: calc(8px * var(--menu-scale));
   font-size: calc(12px * var(--menu-scale));
-  flex: 1 1 calc(150px * var(--menu-scale));
-  min-width: calc(140px * var(--menu-scale));
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .connector-toolbar__field--block {
   flex: 1 1 100%;
+}
+
+.connector-toolbar__field-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  font-size: calc(11px * var(--menu-scale));
+  color: rgba(226, 232, 240, 0.72);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.connector-toolbar__field-header label {
+  cursor: pointer;
+}
+
+.connector-toolbar__value {
+  font-variant-numeric: tabular-nums;
+  color: rgba(226, 232, 240, 0.82);
 }
 
 .connector-toolbar__field--color {
@@ -115,7 +135,8 @@
 
 .connector-toolbar__field input[type='number'],
 .connector-toolbar__field select,
-.connector-toolbar__field input[type='range'] {
+.connector-toolbar__field input[type='range'],
+.connector-toolbar__slider {
   background: rgba(30, 41, 59, 0.85);
   border: 1px solid rgba(148, 163, 184, 0.2);
   border-radius: calc(8px * var(--menu-scale));
@@ -125,10 +146,19 @@
   min-width: calc(72px * var(--menu-scale));
   flex: 1 1 auto;
   min-height: calc(28px * var(--menu-scale));
+  box-sizing: border-box;
 }
 
-.connector-toolbar__field input[type='range'] {
+.connector-toolbar__field input[type='range'],
+.connector-toolbar__slider {
   min-width: 0;
+  width: 100%;
+}
+
+.connector-toolbar__slider-group {
+  display: flex;
+  flex-direction: column;
+  gap: calc(6px * var(--menu-scale));
   width: 100%;
 }
 
@@ -150,6 +180,9 @@
   font-size: calc(12px * var(--menu-scale));
   cursor: pointer;
   transition: background 0.15s ease, border 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .connector-toolbar__button:hover {
@@ -165,5 +198,10 @@
 .connector-toolbar__button--toggle {
   flex: 0 0 auto;
   min-width: calc(92px * var(--menu-scale));
+}
+
+.connector-toolbar__button--block {
+  width: 100%;
+  justify-content: center;
 }
 
