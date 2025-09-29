@@ -14,13 +14,13 @@
   color: #e2e8f0;
   pointer-events: auto;
   will-change: transform;
-  min-width: calc(520px * var(--menu-scale));
-  max-width: calc(640px * var(--menu-scale));
+  min-width: calc(564px * var(--menu-scale));
+  max-width: calc(720px * var(--menu-scale));
 }
 
 .connector-toolbar__content {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(calc(180px * var(--menu-scale)), 1fr));
   gap: calc(12px * var(--menu-scale));
   align-items: stretch;
 }
