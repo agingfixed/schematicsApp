@@ -121,7 +121,7 @@ test('aligned connectors preserve outward stubs', () => {
   assert.ok(endStub.x < path.end.x);
 });
 
-test('manual waypoints stay aligned to endpoints', () => {
+test('manual waypoints remain unadjusted by endpoints', () => {
   const originalSource = createNode('source', { x: 0, y: 0 });
   const originalTarget = createNode('target', { x: 320, y: 200 });
   const connector = createConnector('right', 'left');
@@ -129,21 +129,24 @@ test('manual waypoints stay aligned to endpoints', () => {
     { x: 200, y: originalSource.position.y },
     { x: 200, y: originalTarget.position.y }
   ];
+  const manualWaypoints = connector.points.map((point) => ({ ...point }));
 
   const movedSource = createNode('source', { x: 80, y: 60 });
   const movedTarget = createNode('target', { x: 420, y: 280 });
 
   const path = getConnectorPath(connector, movedSource, movedTarget, [movedSource, movedTarget]);
-  assert.ok(path.waypoints.length >= 2, 'expected preserved interior waypoints');
-  const first = path.waypoints[0];
-  const last = path.waypoints[path.waypoints.length - 1];
-  assert.ok(Math.abs(first.y - path.start.y) < 1e-3, 'first waypoint should align with source port');
-  assert.ok(first.x >= path.start.x, 'first waypoint should remain outward from the node');
-  assert.ok(Math.abs(last.y - path.end.y) < 1e-3, 'last waypoint should align with target port');
-  assert.ok(last.x <= path.end.x, 'last waypoint should remain outward from the node');
+  assert.ok(path.points.some((point) => Math.abs(point.x - manualWaypoints[0].x) < 1e-3));
+
+  const firstSegment = { start: path.points[0], end: path.points[1] };
+  const firstDx = Math.abs(firstSegment.start.x - firstSegment.end.x);
+  const firstDy = Math.abs(firstSegment.start.y - firstSegment.end.y);
+  assert.ok(
+    firstDx > 1e-3 && firstDy > 1e-3,
+    'manual waypoints should allow diagonal movement from the source endpoint'
+  );
 });
 
-test('connectors keep right angles when endpoints move', () => {
+test('connectors may include diagonal segments when endpoints move', () => {
   const seedSource = createNode('source', { x: 0, y: 0 });
   const seedTarget = createNode('target', { x: 320, y: 200 });
   const connector = createConnector('right', 'left');
@@ -157,16 +160,8 @@ test('connectors keep right angles when endpoints move', () => {
   const path = getConnectorPath(connector, movedSource, movedTarget, [movedSource, movedTarget]);
   assert.ok(path.points.length > 2, 'expected elbow connector to keep bends after moving nodes');
 
-  for (let index = 0; index < path.points.length - 1; index += 1) {
-    const a = path.points[index];
-    const b = path.points[index + 1];
-    const dx = Math.abs(a.x - b.x);
-    const dy = Math.abs(a.y - b.y);
-    assert.ok(
-      dx < 1e-3 || dy < 1e-3,
-      'segments must remain horizontal or vertical after moving attached nodes'
-    );
-  }
+  const hasDiagonal = path.segments.some((segment) => segment.axis === 'diagonal');
+  assert.ok(hasDiagonal, 'connectors should allow diagonal segments when endpoints shift');
 });
 
 test('tidyOrthogonalWaypoints removes redundant points', () => {

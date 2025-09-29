@@ -1575,37 +1575,6 @@ const CanvasComponent = (
           }
         }
 
-        const prev = path[pathIndex - 1];
-        const next = path[pathIndex + 1];
-
-        if (edit.prevAxis === 'horizontal') {
-          if (pathIndex - 1 > 0) {
-            path[pathIndex - 1] = { ...prev, y: point.y };
-          } else {
-            point.y = prev.y;
-          }
-        } else if (edit.prevAxis === 'vertical') {
-          if (pathIndex - 1 > 0) {
-            path[pathIndex - 1] = { ...prev, x: point.x };
-          } else {
-            point.x = prev.x;
-          }
-        }
-
-        if (edit.nextAxis === 'horizontal') {
-          if (pathIndex + 1 < path.length - 1) {
-            path[pathIndex + 1] = { ...next, y: point.y };
-          } else if (next) {
-            point.y = next.y;
-          }
-        } else if (edit.nextAxis === 'vertical') {
-          if (pathIndex + 1 < path.length - 1) {
-            path[pathIndex + 1] = { ...next, x: point.x };
-          } else if (next) {
-            point.x = next.x;
-          }
-        }
-
         path[pathIndex] = point;
       }
 
