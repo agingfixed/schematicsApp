@@ -220,64 +220,69 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
             </label>
           </div>
         </section>
-        <section className="connector-toolbar__panel connector-toolbar__panel--endpoints">
-          <h3 className="connector-toolbar__panel-title">Endpoints</h3>
-          <div className="connector-toolbar__section connector-toolbar__section--endpoints">
-            <div className="connector-toolbar__endpoint-group" data-endpoint="start">
-              <div className="connector-toolbar__endpoint-header">
-                <span className="connector-toolbar__endpoint-title">Start</span>
-                <span className="connector-toolbar__endpoint-direction">Source end</span>
-              </div>
-              <label className="connector-toolbar__field">
-                <span>Shape</span>
-                <select
-                  value={startCap.shape}
-                  onChange={(event) => handleEndpointShapeChange('start', event)}
-                >
-                  {shapeOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="connector-toolbar__field">
-                <span>Size</span>
-                <input
-                  type="number"
-                  min={6}
-                  max={48}
-                  value={startCap.size}
-                  onChange={(event) => handleEndpointSizeChange('start', event)}
-                />
-              </label>
-            </div>
-            <div className="connector-toolbar__endpoint-group" data-endpoint="end">
-              <div className="connector-toolbar__endpoint-header">
-                <span className="connector-toolbar__endpoint-title">End</span>
-                <span className="connector-toolbar__endpoint-direction">Target end</span>
-              </div>
-              <label className="connector-toolbar__field">
-                <span>Shape</span>
-                <select value={endCap.shape} onChange={(event) => handleEndpointShapeChange('end', event)}>
-                  {shapeOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="connector-toolbar__field">
-                <span>Size</span>
-                <input
-                  type="number"
-                  min={6}
-                  max={48}
-                  value={endCap.size}
-                  onChange={(event) => handleEndpointSizeChange('end', event)}
-                />
-              </label>
-            </div>
+        <section
+          className="connector-toolbar__panel connector-toolbar__panel--endpoint"
+          data-endpoint="start"
+        >
+          <div className="connector-toolbar__endpoint-header">
+            <h3 className="connector-toolbar__panel-title">Start</h3>
+            <span className="connector-toolbar__endpoint-direction">Source end</span>
+          </div>
+          <div className="connector-toolbar__section connector-toolbar__section--endpoint">
+            <label className="connector-toolbar__field">
+              <span>Shape</span>
+              <select
+                value={startCap.shape}
+                onChange={(event) => handleEndpointShapeChange('start', event)}
+              >
+                {shapeOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="connector-toolbar__field">
+              <span>Size</span>
+              <input
+                type="number"
+                min={6}
+                max={48}
+                value={startCap.size}
+                onChange={(event) => handleEndpointSizeChange('start', event)}
+              />
+            </label>
+          </div>
+        </section>
+        <section
+          className="connector-toolbar__panel connector-toolbar__panel--endpoint"
+          data-endpoint="end"
+        >
+          <div className="connector-toolbar__endpoint-header">
+            <h3 className="connector-toolbar__panel-title">End</h3>
+            <span className="connector-toolbar__endpoint-direction">Target end</span>
+          </div>
+          <div className="connector-toolbar__section connector-toolbar__section--endpoint">
+            <label className="connector-toolbar__field">
+              <span>Shape</span>
+              <select value={endCap.shape} onChange={(event) => handleEndpointShapeChange('end', event)}>
+                {shapeOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="connector-toolbar__field">
+              <span>Size</span>
+              <input
+                type="number"
+                min={6}
+                max={48}
+                value={endCap.size}
+                onChange={(event) => handleEndpointSizeChange('end', event)}
+              />
+            </label>
           </div>
         </section>
       </div>
