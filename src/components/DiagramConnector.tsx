@@ -123,24 +123,24 @@ const computeEndpointDirection = (points: Vec2[], which: 'start' | 'end'): Vec2 
 const computeEndpointPlacement = (
   points: Vec2[],
   which: 'start' | 'end'
-): { point: Vec2 | null; angle: number } => {
+): { point: Vec2 | null; angle: number; direction: Vec2 } => {
   const anchorIndex = which === 'start' ? 0 : points.length - 1;
   const anchor = points[anchorIndex];
 
   if (!anchor) {
-    return { point: null, angle: 0 };
+    return { point: null, angle: 0, direction: { x: 0, y: 0 } };
   }
 
   const direction = computeEndpointDirection(points, which);
   const angle = (Math.atan2(direction.y, direction.x) * 180) / Math.PI;
   const rotation = which === 'start' ? angle + 180 : angle;
 
-  return { point: anchor, angle: rotation };
+  return { point: anchor, angle: rotation, direction };
 };
 
 const createEndpointCap = (
   which: 'start' | 'end',
-  placement: { point: Vec2 | null; angle: number },
+  placement: { point: Vec2 | null; angle: number; direction: Vec2 },
   cap: ConnectorEndpointStyle,
   color: string,
   strokeWidth: number
@@ -149,10 +149,11 @@ const createEndpointCap = (
     return null;
   }
 
-  const { point, angle } = placement;
+  const { point, angle, direction } = placement;
   const size = cap.size;
   const half = size / 2;
   const transform = `translate(${point.x} ${point.y}) rotate(${angle})`;
+  const isVertical = Math.abs(direction.x) <= 1e-3 && Math.abs(direction.y) >= Math.abs(direction.x);
 
   switch (cap.shape) {
     case 'arrow': {
@@ -227,6 +228,7 @@ const createEndpointCap = (
       );
     }
     case 'circle': {
+      const cx = isVertical ? 0 : -half;
       return (
         <g
           key={`${which}-circle`}
@@ -235,7 +237,7 @@ const createEndpointCap = (
           transform={transform}
           style={{ color }}
         >
-          <circle className="diagram-connector__cap-shape" cx={0} cy={0} r={half} fill="currentColor" />
+          <circle className="diagram-connector__cap-shape" cx={cx} cy={0} r={half} fill="currentColor" />
         </g>
       );
     }
