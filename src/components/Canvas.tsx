@@ -653,15 +653,15 @@ const CanvasComponent = (
       .map((id) => nodeLookup.get(id))
       .filter((node): node is NodeModel => Boolean(node));
 
-    if (!selectedNodes.length) {
-      clipboardRef.current = null;
-      return false;
-    }
-
     const connectorLookup = new Map(connectors.map((connector) => [connector.id, connector]));
     const selectedConnectors = selectedConnectorIds
       .map((id) => connectorLookup.get(id))
       .filter((connector): connector is ConnectorModel => Boolean(connector));
+
+    if (!selectedNodes.length && !selectedConnectors.length) {
+      clipboardRef.current = null;
+      return false;
+    }
 
     clipboardRef.current = {
       nodes: selectedNodes.map(cloneNodeForClipboard),
@@ -952,7 +952,7 @@ const CanvasComponent = (
 
   const pasteClipboard = useCallback(() => {
     const clipboard = clipboardRef.current;
-    if (!clipboard || !clipboard.nodes.length) {
+    if (!clipboard || (!clipboard.nodes.length && !clipboard.connectors.length)) {
       return false;
     }
 
@@ -980,10 +980,7 @@ const CanvasComponent = (
     const remapEndpoint = (endpoint: ConnectorEndpoint): ConnectorEndpoint | null => {
       if (isAttachedConnectorEndpoint(endpoint)) {
         const mappedId = nodeIdMap.get(endpoint.nodeId);
-        if (!mappedId) {
-          return null;
-        }
-        return { nodeId: mappedId, port: endpoint.port };
+        return { nodeId: mappedId ?? endpoint.nodeId, port: endpoint.port };
       }
       if ('position' in endpoint) {
         return {
