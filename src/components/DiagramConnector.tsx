@@ -101,6 +101,10 @@ const createEndpointCapElement = ({
   const baseWidth = size * 0.9;
   const baseHalfWidth = baseWidth / 2;
 
+  if (cap.shape === 'none') {
+    return <React.Fragment key={key} />;
+  }
+
   if (cap.shape === 'circle') {
     return (
       <circle
