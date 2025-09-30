@@ -14,6 +14,7 @@ interface ConnectorTextToolbarProps {
   onChange: (next: ConnectorModel['labelStyle']) => void;
   pointerPosition: { x: number; y: number } | null;
   onPointerInteractionChange?: (active: boolean) => void;
+  onClose?: () => void;
 }
 
 const TOOLBAR_OFFSET = 12;
@@ -32,7 +33,8 @@ export const ConnectorTextToolbar: React.FC<ConnectorTextToolbarProps> = ({
   isVisible,
   onChange,
   pointerPosition,
-  onPointerInteractionChange
+  onPointerInteractionChange,
+  onClose
 }) => {
   const toolbarRef = useRef<HTMLDivElement>(null);
   const pointerInteractionCleanupRef = useRef<(() => void) | null>(null);
@@ -180,6 +182,7 @@ export const ConnectorTextToolbar: React.FC<ConnectorTextToolbarProps> = ({
         onPointerUp={handleDragPointerUp}
         onPointerCancel={handleDragPointerCancel}
         onKeyboardMove={moveMenuBy}
+        onClose={onClose}
       />
       <div className="connector-toolbar__section">
         <label className="connector-toolbar__field">

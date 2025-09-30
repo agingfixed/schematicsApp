@@ -10,6 +10,7 @@ interface FloatingMenuChromeProps {
   onPointerUp: (event: React.PointerEvent<HTMLDivElement>) => void;
   onPointerCancel: (event: React.PointerEvent<HTMLDivElement>) => void;
   onKeyboardMove: (dx: number, dy: number, options?: { fine?: boolean }) => void;
+  onClose?: () => void;
 }
 
 export const FloatingMenuChrome: React.FC<FloatingMenuChromeProps> = ({
@@ -20,7 +21,8 @@ export const FloatingMenuChrome: React.FC<FloatingMenuChromeProps> = ({
   onPointerMove,
   onPointerUp,
   onPointerCancel,
-  onKeyboardMove
+  onKeyboardMove,
+  onClose
 }) => {
   const handleKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLDivElement>) => {
@@ -66,6 +68,17 @@ export const FloatingMenuChrome: React.FC<FloatingMenuChromeProps> = ({
         <span className="floating-menu__grip" aria-hidden />
         <span className="floating-menu__title">{title}</span>
       </div>
+      {onClose ? (
+        <button
+          type="button"
+          className="floating-menu__close"
+          onClick={onClose}
+          aria-label={`Close ${title}`}
+          title="Close"
+        >
+          ×
+        </button>
+      ) : null}
     </div>
   );
 };

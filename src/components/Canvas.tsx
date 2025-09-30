@@ -1095,6 +1095,11 @@ const CanvasComponent = (
     connectorLabelEntryPointRef.current = null;
   }, [setConnectorLabelToolbarInteracting]);
 
+  const handleConnectorLabelToolbarClose = useCallback(() => {
+    handleConnectorLabelCancel();
+    clearSelection();
+  }, [handleConnectorLabelCancel, clearSelection]);
+
   const handleConnectorRequestLabelEdit = useCallback(
     (connectorId: string, entryPoint?: CaretPoint) => {
       connectorLabelEntryPointRef.current = entryPoint ?? null;
@@ -3404,6 +3409,7 @@ const CanvasComponent = (
           onChange={(style) => handleConnectorLabelStyleChange(selectedConnector, style)}
           pointerPosition={lastPointerPosition}
           onPointerInteractionChange={setConnectorLabelToolbarInteracting}
+          onClose={handleConnectorLabelToolbarClose}
         />
       )}
       {selectedNode && (

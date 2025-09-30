@@ -1,4 +1,4 @@
-import React, { useId, useMemo, useRef } from 'react';
+import React, { useCallback, useId, useMemo, useRef } from 'react';
 import {
   ConnectorEndpointCap,
   ConnectorEndpointShape,
@@ -10,6 +10,7 @@ import { useFloatingMenuDrag } from '../hooks/useFloatingMenuDrag';
 import { computeFloatingMenuPlacement } from '../utils/floatingMenu';
 import { useFrozenFloatingPlacement } from '../hooks/useFrozenFloatingPlacement';
 import '../styles/connector-toolbar.css';
+import { useSceneStore } from '../state/sceneStore';
 
 interface ConnectorToolbarProps {
   connector: ConnectorModel;
@@ -33,6 +34,8 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
   pointerPosition
 }) => {
   const toolbarRef = useRef<HTMLDivElement>(null);
+  const clearSelection = useSceneStore((state) => state.clearSelection);
+  const handleClose = useCallback(() => clearSelection(), [clearSelection]);
 
   const {
     menuState,
@@ -182,6 +185,7 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
         onPointerUp={handleDragPointerUp}
         onPointerCancel={handleDragPointerCancel}
         onKeyboardMove={moveMenuBy}
+        onClose={handleClose}
       />
       <div className="connector-toolbar__content">
         <section className="connector-toolbar__panel connector-toolbar__panel--stroke">
