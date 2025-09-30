@@ -174,6 +174,8 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
     identity: node.id
   });
 
+  const clearSelection = useSceneStore((state) => state.clearSelection);
+
   const getEditorElement = useCallback(
     () => textEditorRef?.current?.getElement() ?? null,
     [textEditorRef]
@@ -714,6 +716,7 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
         onPointerUp={handleDragPointerUp}
         onPointerCancel={handleDragPointerCancel}
         onKeyboardMove={moveMenuBy}
+        onClose={clearSelection}
       />
       <div className="selection-toolbar__content">
         {isTextEditing ? (
