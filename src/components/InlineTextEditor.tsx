@@ -250,7 +250,7 @@ const InlineTextEditorComponent = (
         style={contentStyle}
         contentEditable
         suppressContentEditableWarning
-        spellCheck={false}
+        spellCheck={true}
         translate="no"
         role="textbox"
         aria-multiline="true"
