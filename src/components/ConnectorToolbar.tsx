@@ -157,6 +157,7 @@ export const ConnectorToolbar: React.FC<ConnectorToolbarProps> = ({
   const endCap = endpointStyles.end;
 
   const shapeOptions: Array<{ value: ConnectorEndpointShape; label: string }> = [
+    { value: 'none', label: 'None' },
     { value: 'arrow', label: 'Arrow' },
     { value: 'hollow-arrow', label: 'Hollow Arrow' },
     { value: 'triangle', label: 'Triangle' },

@@ -80,7 +80,13 @@ export interface ConnectorStyle {
   cornerRadius?: number;
 }
 
-export type ConnectorEndpointShape = 'circle' | 'diamond' | 'arrow' | 'triangle' | 'hollow-arrow';
+export type ConnectorEndpointShape =
+  | 'none'
+  | 'circle'
+  | 'diamond'
+  | 'arrow'
+  | 'triangle'
+  | 'hollow-arrow';
 
 export interface ConnectorEndpointCap {
   shape: ConnectorEndpointShape;
