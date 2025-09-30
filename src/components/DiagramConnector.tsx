@@ -742,7 +742,7 @@ export const DiagramConnector: React.FC<DiagramConnectorProps> = ({
               data-placeholder="Label"
               contentEditable={labelEditing}
               suppressContentEditableWarning
-              spellCheck={false}
+              spellCheck={labelEditing || selected}
               translate="no"
               style={{
                 fontSize: labelFontSize,
