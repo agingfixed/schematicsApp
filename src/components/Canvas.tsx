@@ -144,6 +144,62 @@ const clampConnectorLabelOffset = (value: number) =>
 const clampConnectorLabelRadius = (value: number) =>
   Math.max(0, Math.min(MAX_CONNECTOR_LABEL_DISTANCE, Math.abs(value)));
 
+const CONNECTOR_SNAP_RATIO = 0.5;
+
+interface ConnectorSnapTargets {
+  x: number[];
+  y: number[];
+}
+
+const createConnectorSnapTargets = (
+  connectors: ConnectorModel[],
+  nodes: NodeModel[],
+  excludeId: string
+): ConnectorSnapTargets => {
+  const xValues = new Set<number>();
+  const yValues = new Set<number>();
+
+  connectors.forEach((candidate) => {
+    if (candidate.id === excludeId) {
+      return;
+    }
+
+    const geometry = getConnectorPath(candidate, undefined, undefined, nodes);
+    geometry.points.forEach((point) => {
+      if (Number.isFinite(point.x)) {
+        xValues.add(point.x);
+      }
+      if (Number.isFinite(point.y)) {
+        yValues.add(point.y);
+      }
+    });
+  });
+
+  return { x: Array.from(xValues), y: Array.from(yValues) };
+};
+
+const findClosestSnapValue = (
+  value: number,
+  candidates: number[],
+  tolerance: number
+): number | null => {
+  let closest: number | null = null;
+  let bestDistance = tolerance + 1;
+
+  candidates.forEach((candidate) => {
+    if (!Number.isFinite(candidate)) {
+      return;
+    }
+    const distance = Math.abs(candidate - value);
+    if (distance <= tolerance && distance < bestDistance) {
+      closest = candidate;
+      bestDistance = distance;
+    }
+  });
+
+  return closest;
+};
+
 export interface CanvasHandle {
   zoomIn: () => void;
   zoomOut: () => void;
@@ -281,6 +337,7 @@ interface ConnectorEditStateBase {
   originalWaypoints: Vec2[];
   previewWaypoints: Vec2[];
   previewPoints: Vec2[];
+  snapTargets: ConnectorSnapTargets;
   moved: boolean;
 }
 
@@ -1520,12 +1577,29 @@ const CanvasComponent = (
 
       edit.moved = true;
 
+      const snapTargets = edit.snapTargets;
+      const hasSnapTargets = snapTargets.x.length > 0 || snapTargets.y.length > 0;
+      const snapTolerance =
+        snapSettings.enabled &&
+        !event.altKey &&
+        hasSnapTargets &&
+        snapSettings.tolerance > 0
+          ? (snapSettings.tolerance * CONNECTOR_SNAP_RATIO) / Math.max(transform.scale, 1e-6)
+          : 0;
+
       if (edit.type === 'segment') {
         const pointerValue = edit.axis === 'horizontal' ? worldPoint.y : worldPoint.x;
-        const newValue = pointerValue - edit.grabOffset;
+        let newValue = pointerValue - edit.grabOffset;
         const index = Math.max(0, Math.min(path.length - 2, edit.segmentIndex));
         if (index === 0 || index === path.length - 2) {
           return true;
+        }
+        if (snapTolerance > 0) {
+          const candidates = edit.axis === 'horizontal' ? snapTargets.y : snapTargets.x;
+          const snapped = findClosestSnapValue(newValue, candidates, snapTolerance);
+          if (snapped !== null) {
+            newValue = snapped;
+          }
         }
         if (edit.axis === 'horizontal') {
           path[index] = { ...path[index], y: newValue };
@@ -1588,6 +1662,21 @@ const CanvasComponent = (
           }
         }
 
+        if (snapTolerance > 0) {
+          if (lock !== 'vertical') {
+            const snappedX = findClosestSnapValue(point.x, snapTargets.x, snapTolerance);
+            if (snappedX !== null) {
+              point = { ...point, x: snappedX };
+            }
+          }
+          if (lock !== 'horizontal') {
+            const snappedY = findClosestSnapValue(point.y, snapTargets.y, snapTolerance);
+            if (snappedY !== null) {
+              point = { ...point, y: snappedY };
+            }
+          }
+        }
+
         const prev = path[pathIndex - 1];
         const next = path[pathIndex + 1];
 
@@ -1635,7 +1724,13 @@ const CanvasComponent = (
 
       return true;
     },
-    [getWorldPoint, updateConnector]
+    [
+      getWorldPoint,
+      snapSettings.enabled,
+      snapSettings.tolerance,
+      transform.scale,
+      updateConnector
+    ]
   );
 
   const continuePendingConnection = useCallback(
@@ -2491,6 +2586,7 @@ const CanvasComponent = (
     const pointerValue = axis === 'horizontal' ? worldPoint.y : worldPoint.x;
     const segmentValue = axis === 'horizontal' ? segmentStart.y : segmentStart.x;
     const grabOffset = pointerValue - segmentValue;
+    const snapTargets = createConnectorSnapTargets(connectors, nodes, connector.id);
 
     connectorEditRef.current = {
       pointerId: event.pointerId,
@@ -2505,6 +2601,7 @@ const CanvasComponent = (
       originalWaypoints,
       previewWaypoints: geometry.waypoints.map((point) => ({ ...point })),
       previewPoints: geometry.points.map((point) => ({ ...point })),
+      snapTargets,
       moved: false
     };
 
@@ -2539,6 +2636,7 @@ const CanvasComponent = (
     const pathIndex = pointIndex + 1;
     const worldPoint = getWorldPoint(event);
     const grabOffset = { x: worldPoint.x - waypoint.x, y: worldPoint.y - waypoint.y };
+    const snapTargets = createConnectorSnapTargets(connectors, nodes, connector.id);
 
     const prevPoint = geometry.points[pathIndex - 1];
     const nextPoint = geometry.points[pathIndex + 1];
@@ -2568,6 +2666,7 @@ const CanvasComponent = (
       originalWaypoints: connector.points?.map((point) => ({ ...point })) ?? [],
       previewWaypoints: geometry.waypoints.map((point) => ({ ...point })),
       previewPoints: geometry.points.map((point) => ({ ...point })),
+      snapTargets,
       moved: false
     };
 
