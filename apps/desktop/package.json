@@ -1,0 +1,48 @@
+{
+  "name": "schematicsapp-desktop",
+  "version": "0.1.0",
+  "description": "Desktop shell for SchematicsApp",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "npm run start",
+    "prepare:dist": "node scripts/prepare-dist.cjs",
+    "build": "npm run prepare:dist && electron-builder --dir",
+    "package": "npm run prepare:dist && electron-builder"
+  },
+  "build": {
+    "appId": "com.schematicsapp.desktop",
+    "productName": "SchematicsApp",
+    "directories": {
+      "output": "release",
+      "buildResources": "resources"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "package.json",
+      "scripts/prepare-dist.cjs"
+    ],
+    "extraResources": [
+      {
+        "from": "../../dist",
+        "to": "dist"
+      }
+    ],
+    "mac": {
+      "target": ["dmg", "zip"],
+      "category": "public.app-category.productivity"
+    },
+    "win": {
+      "target": ["nsis", "zip"]
+    },
+    "linux": {
+      "target": ["AppImage", "deb", "tar.gz"],
+      "category": "Utility"
+    }
+  },
+  "devDependencies": {
+    "electron": "^28.2.3",
+    "electron-builder": "^24.9.1"
+  }
+}

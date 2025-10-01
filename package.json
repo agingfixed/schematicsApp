@@ -7,7 +7,12 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "test": "node -e \"fs.rmSync('build-tests',{recursive:true,force:true});\" && tsc --project tsconfig.tests.json && node scripts/fix-esm-extensions.mjs && node --test build-tests/utils/__tests__/*.js",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "desktop:dev": "npm --prefix apps/desktop run dev",
+    "desktop:start": "npm --prefix apps/desktop run start",
+    "desktop:build": "npm --prefix apps/desktop run build",
+    "desktop:package": "npm --prefix apps/desktop run package",
+    "postinstall": "npm --prefix apps/desktop install"
   },
   "dependencies": {
     "nanoid": "^4.0.2",
