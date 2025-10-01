@@ -4,8 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "prebuild": "node scripts/package-offline.mjs",
     "dev": "vite",
     "build": "tsc && vite build",
+    "package:offline": "node scripts/package-offline.mjs",
     "test": "node -e \"fs.rmSync('build-tests',{recursive:true,force:true});\" && tsc --project tsconfig.tests.json && node scripts/fix-esm-extensions.mjs && node --test build-tests/utils/__tests__/*.js",
     "preview": "vite preview"
   },

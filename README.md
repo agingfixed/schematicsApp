@@ -20,6 +20,17 @@ npm config set registry https://registry.npmmirror.com
 - `npm run dev` – start the Vite development server.
 - `npm run build` – type-check and produce a production build.
 - `npm run preview` – preview the build output locally.
+- `npm run package:offline` – build and archive the offline desktop bundle without running the production build.
+
+## Offline Desktop Bundle
+
+The project now ships with an automated packaging step that prepares a downloadable desktop bundle whenever `npm run build` (or `npm run package:offline`) runs. The workflow is designed to work within GitHub pull requests without committing large binary artifacts:
+
+1. The packaging script runs `vite build --mode offline` with a relative base path so the generated `index.html` and assets work from the local filesystem.
+2. The resulting bundle is zipped into `desktop/schematics-studio.zip` and duplicated to `public/desktop/schematics-studio.zip`, which the web app serves through the “Download for desktop” button.
+3. Inside the archive you will find a `README.txt` explaining how to extract the files and open `index.html` in a modern browser. The in-app “Download” and “Upload” buttons continue to save and reopen the existing `.json` board format entirely offline.
+
+Because the archive is generated during the build, no binary files live in the repository—avoiding the “Binary files are not supported” errors seen in previous attempts. When publishing a new release, run `npm run build` and upload `desktop/schematics-studio.zip` from the project root as the downloadable desktop artifact.
 
 ## Current Capabilities
 
