@@ -23,6 +23,7 @@ npm config set registry https://registry.npmmirror.com
 - `npm run desktop:dev` – launch the Electron shell after ensuring the web build exists.
 - `npm run desktop:build` – prepare the web build and create unpacked desktop artifacts.
 - `npm run desktop:package` – produce installable bundles for macOS, Windows, and Linux.
+- `npm run desktop:release` – one command that installs missing deps, rebuilds the web app, and packages installers.
 
 > **Tip:** `npm install` now installs the Electron dependencies automatically. If you previously skipped `postinstall` scripts you can manually run `npm --prefix apps/desktop install` before packaging.
 
@@ -40,10 +41,12 @@ For live development you can run `npm run build -- --watch` in one terminal and 
 Electron Builder is configured to generate native installers for the major desktop platforms. The output is written to `apps/desktop/release/`.
 
 ```bash
-npm run desktop:package
+npm run desktop:release
 ```
 
-The command will generate:
+This single command installs any missing dependencies, rebuilds the web client, and packages the desktop installers in one shot.
+
+The release output lives in `apps/desktop/release/` and contains:
 
 - Windows: NSIS installer (`.exe`) and a portable `.zip` archive.
 - macOS: signed `.dmg` image (unsigned by default) and `.zip` archive.

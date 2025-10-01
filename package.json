@@ -12,6 +12,7 @@
     "desktop:start": "npm --prefix apps/desktop run start",
     "desktop:build": "npm --prefix apps/desktop run build",
     "desktop:package": "npm --prefix apps/desktop run package",
+    "desktop:release": "node scripts/desktop-release.mjs",
     "postinstall": "npm --prefix apps/desktop install"
   },
   "dependencies": {
