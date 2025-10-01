@@ -8,3 +8,12 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
     <App />
   </React.StrictMode>
 );
+
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    const serviceWorkerUrl = new URL('service-worker.js', import.meta.env.BASE_URL).toString();
+    navigator.serviceWorker.register(serviceWorkerUrl, { scope: import.meta.env.BASE_URL }).catch((error) => {
+      console.warn('Service worker registration failed', error);
+    });
+  });
+}

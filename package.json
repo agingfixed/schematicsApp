@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "test": "node -e \"fs.rmSync('build-tests',{recursive:true,force:true});\" && tsc --project tsconfig.tests.json && node scripts/fix-esm-extensions.mjs && node --test build-tests/utils/__tests__/*.js",
+    "test": "node scripts/test-runner.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

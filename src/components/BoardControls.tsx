@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { selectScene, useSceneStore } from '../state/sceneStore';
 import { SceneContent } from '../types/scene';
 import { cloneScene } from '../utils/scene';
+import { useInstallPrompt } from '../hooks/useInstallPrompt';
 
 export const BoardControls: React.FC = () => {
   const scene = useSceneStore(selectScene);
@@ -9,6 +10,7 @@ export const BoardControls: React.FC = () => {
   const [status, setStatus] = useState<string | null>(null);
   const [lastBoardName, setLastBoardName] = useState('Untitled board');
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const { canInstall, promptInstall, isInstalled } = useInstallPrompt();
 
   useEffect(() => {
     if (!status) {
@@ -91,8 +93,39 @@ export const BoardControls: React.FC = () => {
     }
   };
 
+  const handleInstallClick = async () => {
+    try {
+      const accepted = await promptInstall();
+      if (accepted) {
+        setStatus('Desktop app installed. You can now launch it from your device.');
+      } else {
+        setStatus('Install was dismissed. You can try again later.');
+      }
+    } catch (error) {
+      console.warn('Failed to trigger install prompt', error);
+      setStatus('Could not start the install prompt. Please try again.');
+    }
+  };
+
   return (
     <div className="board-controls">
+      <div className="board-controls__group board-controls__group--install">
+        <button
+          type="button"
+          className="board-controls__button board-controls__button--primary"
+          onClick={handleInstallClick}
+          disabled={!canInstall}
+        >
+          {isInstalled ? 'Installed for Offline Use' : 'Install Desktop App'}
+        </button>
+        <div className="board-controls__hint">
+          {isInstalled
+            ? 'Open the installed app from your applications menu to work offline.'
+            : canInstall
+              ? 'Install once to add the app to your desktop and enable offline boards.'
+              : 'Use your browser menu to install or add the app to your desktop when the button is disabled.'}
+        </div>
+      </div>
       <div className="board-controls__group board-controls__group--actions">
         <button type="button" className="board-controls__button" onClick={handleExport}>
           Download

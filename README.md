@@ -20,6 +20,22 @@ npm config set registry https://registry.npmmirror.com
 - `npm run dev` – start the Vite development server.
 - `npm run build` – type-check and produce a production build.
 - `npm run preview` – preview the build output locally.
+- `npm run test` – execute the Node-based unit test suite. Extra flags like `--watch=false` are ignored when unsupported so CI
+  environments can safely append them.
+
+## Offline & Desktop Installation
+
+Schematics Studio now ships as a Progressive Web App (PWA). Visit the app in a supported browser (Chrome, Edge, or any Chromium-
+based browser on Windows/macOS/Linux) and click **Install Desktop App** inside the board controls. The browser will offer to add
+Schematics Studio to your desktop or applications menu. Once installed, the editor runs in its own window and will cache assets
+locally so existing boards and downloaded JSON files remain accessible offline.
+
+The install button becomes enabled when the browser determines the PWA can be installed. If you dismiss the prompt you can try
+again later from the same button. When a browser does not expose the install prompt (for example Firefox today), use the
+browser menu and choose the built-in **Install** or **Add to Home Screen** command to pin the app manually.
+
+During development the service worker only registers against production builds. Run `npm run build && npm run preview` to test
+the offline behaviour locally.
 
 ## Current Capabilities
 
