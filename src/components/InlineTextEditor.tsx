@@ -137,23 +137,28 @@ const InlineTextEditorComponent = (
     return null;
   }
 
-  const paddingTop = 6 * scale;
-  const paddingBottom = 10 * scale;
-  const paddingX = 14 * scale;
+  const normalizedScale = Number.isFinite(scale) && scale > 0 ? scale : 1;
+  const inverseScale = 1 / normalizedScale;
+
+  const paddingTop = 6;
+  const paddingBottom = 10;
+  const paddingX = 14;
 
   const containerStyle: React.CSSProperties = {
     position: 'absolute',
     left: bounds.x,
     top: bounds.y,
-    width: bounds.width,
-    height: bounds.height,
+    width: bounds.width * inverseScale,
+    height: bounds.height * inverseScale,
     padding: `${paddingTop}px ${paddingX}px ${paddingBottom}px`,
     zIndex: 30,
-    background: 'transparent'
+    background: 'transparent',
+    transform: `scale(${normalizedScale})`,
+    transformOrigin: 'top left'
   };
 
   const contentStyle: React.CSSProperties = {
-    fontSize: node.fontSize * scale,
+    fontSize: node.fontSize,
     fontWeight: node.fontWeight,
     lineHeight: 1.3,
     color: node.textColor,
