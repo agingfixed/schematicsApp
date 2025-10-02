@@ -772,6 +772,36 @@ const CanvasComponent = (
     hadFloatingMenuRef.current = hasMenu;
   }, [selectedConnector, selectedNode, clearFloatingMenuPlacement]);
 
+  const createImageNode = useCallback(
+    async (dataUrl: string, worldPoint: Vec2) => {
+      const { width, height } = await getImageDimensions(dataUrl);
+      const fitted = fitImageWithinBounds(width, height);
+      const position = {
+        x: worldPoint.x - fitted.width / 2,
+        y: worldPoint.y - fitted.height / 2
+      };
+
+      addNode('image', position, {
+        size: fitted,
+        image: { src: dataUrl, naturalWidth: width, naturalHeight: height }
+      });
+    },
+    [addNode]
+  );
+
+  const getPasteWorldPoint = useCallback((): Vec2 => {
+    if (lastPointerPosition) {
+      return screenToWorld(lastPointerPosition.x, lastPointerPosition.y, transform);
+    }
+
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (rect) {
+      return screenToWorld(rect.width / 2, rect.height / 2, transform);
+    }
+
+    return screenToWorld(0, 0, transform);
+  }, [lastPointerPosition, transform]);
+
   useEffect(() => {
     const handlePaste = async (event: ClipboardEvent) => {
       const active = document.activeElement as HTMLElement | null;
@@ -1052,23 +1082,6 @@ const CanvasComponent = (
     }
   }, [editingConnectorId, editingNodeId]);
 
-  const createImageNode = useCallback(
-    async (dataUrl: string, worldPoint: Vec2) => {
-      const { width, height } = await getImageDimensions(dataUrl);
-      const fitted = fitImageWithinBounds(width, height);
-      const position = {
-        x: worldPoint.x - fitted.width / 2,
-        y: worldPoint.y - fitted.height / 2
-      };
-
-      addNode('image', position, {
-        size: fitted,
-        image: { src: dataUrl, naturalWidth: width, naturalHeight: height }
-      });
-    },
-    [addNode]
-  );
-
   const pasteClipboard = useCallback(() => {
     const clipboard = clipboardRef.current;
     if (!clipboard || (!clipboard.nodes.length && !clipboard.connectors.length)) {
@@ -1133,19 +1146,6 @@ const CanvasComponent = (
     const selectionResult = addEntities({ nodes: newNodes, connectors: newConnectors });
     return Boolean(selectionResult.nodeIds.length || selectionResult.connectorIds.length);
   }, [addEntities, commitEditingIfNeeded]);
-
-  const getPasteWorldPoint = useCallback((): Vec2 => {
-    if (lastPointerPosition) {
-      return screenToWorld(lastPointerPosition.x, lastPointerPosition.y, transform);
-    }
-
-    const rect = containerRef.current?.getBoundingClientRect();
-    if (rect) {
-      return screenToWorld(rect.width / 2, rect.height / 2, transform);
-    }
-
-    return screenToWorld(0, 0, transform);
-  }, [lastPointerPosition, transform]);
 
   const beginTextEditing = useCallback(
     (nodeId: string, point?: { x: number; y: number }) => {
