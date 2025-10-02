@@ -772,6 +772,81 @@ const CanvasComponent = (
     hadFloatingMenuRef.current = hasMenu;
   }, [selectedConnector, selectedNode, clearFloatingMenuPlacement]);
 
+  const createImageNode = useCallback(
+    async (dataUrl: string, worldPoint: Vec2) => {
+      const { width, height } = await getImageDimensions(dataUrl);
+      const fitted = fitImageWithinBounds(width, height);
+      const position = {
+        x: worldPoint.x - fitted.width / 2,
+        y: worldPoint.y - fitted.height / 2
+      };
+
+      addNode('image', position, {
+        size: fitted,
+        image: { src: dataUrl, naturalWidth: width, naturalHeight: height }
+      });
+    },
+    [addNode]
+  );
+
+  const getPasteWorldPoint = useCallback((): Vec2 => {
+    if (lastPointerPosition) {
+      return screenToWorld(lastPointerPosition.x, lastPointerPosition.y, transform);
+    }
+
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (rect) {
+      return screenToWorld(rect.width / 2, rect.height / 2, transform);
+    }
+
+    return screenToWorld(0, 0, transform);
+  }, [lastPointerPosition, transform]);
+
+  useEffect(() => {
+    const handlePaste = async (event: ClipboardEvent) => {
+      const active = document.activeElement as HTMLElement | null;
+      const isEditable =
+        active &&
+        (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable);
+      if (isEditable) {
+        return;
+      }
+
+      const clipboardData = event.clipboardData;
+      if (!clipboardData) {
+        return;
+      }
+
+      const imageItem = Array.from(clipboardData.items).find(
+        (item) => item.kind === 'file' && item.type.startsWith('image/')
+      );
+      if (!imageItem) {
+        return;
+      }
+
+      const file = imageItem.getAsFile();
+      if (!file) {
+        return;
+      }
+
+      event.preventDefault();
+
+      try {
+        const worldPoint = getPasteWorldPoint();
+        const dataUrl = await readFileAsDataUrl(file);
+        await createImageNode(dataUrl, worldPoint);
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.error('Failed to paste image', error);
+      }
+    };
+
+    window.addEventListener('paste', handlePaste);
+    return () => {
+      window.removeEventListener('paste', handlePaste);
+    };
+  }, [createImageNode, getPasteWorldPoint]);
+
   const selectedNodes = useMemo(
     () => nodes.filter((node) => selectedNodeIds.includes(node.id)),
     [nodes, selectedNodeIds]
@@ -1115,17 +1190,7 @@ const CanvasComponent = (
 
       try {
         const dataUrl = await readFileAsDataUrl(file);
-        const { width, height } = await getImageDimensions(dataUrl);
-        const fitted = fitImageWithinBounds(width, height);
-        const position = {
-          x: worldPoint.x - fitted.width / 2,
-          y: worldPoint.y - fitted.height / 2
-        };
-
-        addNode('image', position, {
-          size: fitted,
-          image: { src: dataUrl, naturalWidth: width, naturalHeight: height }
-        });
+        await createImageNode(dataUrl, worldPoint);
       } catch (error) {
         // eslint-disable-next-line no-console
         console.error('Failed to create image node', error);
@@ -1133,7 +1198,7 @@ const CanvasComponent = (
         pendingImagePointRef.current = null;
       }
     },
-    [addNode]
+    [createImageNode]
   );
 
   const handleConnectorLabelCommit = useCallback(
@@ -3081,8 +3146,10 @@ const CanvasComponent = (
 
         if (key === 'v') {
           if (tool === 'select' && !editingNodeId) {
-            event.preventDefault();
-            pasteClipboard();
+            const handled = pasteClipboard();
+            if (handled) {
+              event.preventDefault();
+            }
           }
           return;
         }
