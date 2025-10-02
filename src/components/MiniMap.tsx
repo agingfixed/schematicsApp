@@ -1,15 +1,7 @@
 import React, { useMemo } from 'react';
 import { CanvasHandle } from './Canvas';
-import {
-  CanvasTransform,
-  ConnectorEndpoint,
-  SceneContent,
-  Vec2,
-  isAttachedConnectorEndpoint,
-  isFloatingConnectorEndpoint
-} from '../types/scene';
+import { CanvasTransform, SceneContent, Vec2 } from '../types/scene';
 import { boundsToSize, expandBounds, getSceneBounds } from '../utils/scene';
-import { getConnectorPortAnchor } from '../utils/connector';
 
 interface MiniMapProps {
   scene: SceneContent;
@@ -53,20 +45,6 @@ export const MiniMap: React.FC<MiniMapProps> = ({ scene, transform, viewport, ca
 
   const projectSize = (value: number) => value * scale;
 
-  const resolveEndpointPosition = (endpoint: ConnectorEndpoint): Vec2 | null => {
-    if (isAttachedConnectorEndpoint(endpoint)) {
-      const node = scene.nodes.find((item) => item.id === endpoint.nodeId);
-      if (!node) {
-        return null;
-      }
-      return getConnectorPortAnchor(node, endpoint.port);
-    }
-    if (isFloatingConnectorEndpoint(endpoint)) {
-      return endpoint.position;
-    }
-    return null;
-  };
-
   const viewportRect = useMemo(() => {
     if (!viewport.width || !viewport.height) {
       return null;
@@ -109,27 +87,6 @@ export const MiniMap: React.FC<MiniMapProps> = ({ scene, transform, viewport, ca
           fill="rgba(15, 23, 42, 0.85)"
           stroke="rgba(148, 163, 184, 0.2)"
         />
-        {scene.connectors.map((connector) => {
-          const startWorld = resolveEndpointPosition(connector.source);
-          const endWorld = resolveEndpointPosition(connector.target);
-          if (!startWorld || !endWorld) {
-            return null;
-          }
-          const start = projectPoint(startWorld);
-          const end = projectPoint(endWorld);
-          return (
-            <line
-              key={connector.id}
-              x1={start.x}
-              y1={start.y}
-              x2={end.x}
-              y2={end.y}
-              stroke="rgba(148, 163, 184, 0.35)"
-              strokeWidth={1.5}
-              strokeLinecap="round"
-            />
-          );
-        })}
         {scene.nodes.map((node) => {
           const topLeft = projectPoint(node.position);
           return (
