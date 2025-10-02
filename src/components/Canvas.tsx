@@ -88,7 +88,8 @@ import { ensureHttpProtocol } from '../utils/url';
 import { getImageDimensions, readFileAsDataUrl } from '../utils/image';
 import '../styles/canvas.css';
 
-const MIN_SCALE = 0.2;
+// Allow users to comfortably view very large boards by permitting deeper zoom-outs.
+const MIN_SCALE = 0.05;
 const MAX_SCALE = 4;
 const ZOOM_FACTOR = 1.1;
 const FIT_PADDING = 160;
