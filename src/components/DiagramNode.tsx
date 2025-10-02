@@ -37,8 +37,7 @@ const renderShape = (
     fillOpacity,
     stroke,
     strokeWidth,
-    className,
-    vectorEffect: 'non-scaling-stroke' as const
+    className
   };
 
   switch (node.shape) {
