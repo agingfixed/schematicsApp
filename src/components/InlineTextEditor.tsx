@@ -169,7 +169,7 @@ const InlineTextEditorComponent = (
     caretColor: node.textColor,
     fontStyle: isLinkNode ? 'italic' : undefined,
     textDecoration: isLinkNode ? 'underline' : undefined,
-    background: 'transparent'
+    background: node.textBackground ?? 'transparent'
   };
 
   const handleInput = () => {

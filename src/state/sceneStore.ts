@@ -45,6 +45,7 @@ export interface NodeStylePatch {
   fontWeight?: NodeFontWeight;
   textAlign?: TextAlign;
   textColor?: string;
+  textBackground?: string | null;
 }
 
 export interface SnapSettings {
@@ -315,6 +316,7 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
           position: { ...node.position },
           size: { ...node.size },
           stroke: { ...node.stroke },
+          textBackground: node.textBackground ?? null,
           link: node.link ? { ...node.link } : undefined,
           image: node.image ? { ...node.image } : undefined
         };
@@ -809,6 +811,10 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
         }
         if (patch.textColor !== undefined && node.textColor !== patch.textColor) {
           node.textColor = patch.textColor;
+          changed = true;
+        }
+        if (patch.textBackground !== undefined && node.textBackground !== patch.textBackground) {
+          node.textBackground = patch.textBackground;
           changed = true;
         }
       });

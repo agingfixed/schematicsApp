@@ -141,6 +141,7 @@ export const DiagramNode: React.FC<DiagramNodeProps> = ({
     fontSize: node.fontSize,
     fontWeight: node.fontWeight,
     color: node.textColor,
+    background: node.textBackground ?? 'transparent',
     fontStyle: isLinkNode ? 'italic' : undefined,
     textDecoration: isLinkNode ? 'underline' : undefined
   };

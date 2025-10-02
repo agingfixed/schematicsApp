@@ -60,6 +60,7 @@ const textNodeDefaults = {
   fontWeight: 400 as const,
   textAlign: 'left' as const,
   textColor: '#e2e8f0',
+  textBackground: null as string | null,
   fill: 'transparent',
   fillOpacity: 0,
   stroke: { color: 'transparent', width: 1 }
@@ -93,6 +94,7 @@ export const createNodeModel = (
       fontSize: textNodeDefaults.fontSize,
       fontWeight: textNodeDefaults.fontWeight,
       textColor: textNodeDefaults.textColor,
+      textBackground: textNodeDefaults.textBackground,
       fill: textNodeDefaults.fill,
       fillOpacity: textNodeDefaults.fillOpacity,
       stroke: { ...textNodeDefaults.stroke }
@@ -111,6 +113,7 @@ export const createNodeModel = (
       fontSize: 18,
       fontWeight: 600,
       textColor: '#e2e8f0',
+      textBackground: null,
       fill: '#0f172a',
       fillOpacity: 1,
       stroke: { ...imageNodeDefaults.stroke },
@@ -133,6 +136,7 @@ export const createNodeModel = (
     fontSize: 18,
     fontWeight: 600,
     textColor: '#e2e8f0',
+    textBackground: null,
     fill: appearance.fill,
     fillOpacity: 1,
     stroke: { color: appearance.stroke, width: appearance.strokeWidth }
@@ -169,6 +173,7 @@ export const cloneScene = (scene: SceneContent): SceneContent => ({
     size: { ...node.size },
     stroke: { ...node.stroke },
     textColor: node.textColor,
+    textBackground: node.textBackground ?? null,
     link: node.link ? { ...node.link } : undefined,
     image: node.image ? { ...node.image } : undefined
   })),

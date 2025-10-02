@@ -29,6 +29,7 @@ const createNode = (
   fontSize: 16,
   fontWeight: 600,
   textColor: '#ffffff',
+  textBackground: null,
   fill: '#ffffff',
   fillOpacity: 1,
   stroke: { color: '#0f172a', width: 1 },

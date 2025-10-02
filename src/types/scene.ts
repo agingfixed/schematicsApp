@@ -36,6 +36,7 @@ export interface NodeModel {
   fontSize: number;
   fontWeight: NodeFontWeight;
   textColor: string;
+  textBackground: string | null;
   fill: string;
   fillOpacity: number;
   stroke: NodeStroke;

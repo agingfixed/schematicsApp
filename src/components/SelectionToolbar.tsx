@@ -43,6 +43,8 @@ const alignOptions: Array<{ value: TextAlign; label: string; icon: string }> = [
   { value: 'right', label: 'Align right', icon: 'R' }
 ];
 
+const DEFAULT_TEXT_BACKGROUND = '#1f2937';
+
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
 const normalizeTextAlign = (value: string): TextAlign => {
@@ -137,6 +139,10 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
     createDefaultTextSelectionState(node)
   );
   const [textColorValue, setTextColorValue] = useState(node.textColor);
+  const [textBackgroundValue, setTextBackgroundValue] = useState(
+    node.textBackground ?? DEFAULT_TEXT_BACKGROUND
+  );
+  const [textBackgroundIsNone, setTextBackgroundIsNone] = useState(node.textBackground == null);
   const setNodeLink = useSceneStore((state) => state.setNodeLink);
   const [linkAddressValue, setLinkAddressValue] = useState(() =>
     ensureHttpProtocol(node.link?.url ?? '')
@@ -195,6 +201,11 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
   const fontSizeDisabled = isTextEditing ? !editorElement : textDisabled;
   const displayedTextColor = isTextEditing ? textColorValue : node.textColor;
   const textColorDisabled = isTextEditing ? !editorElement : false;
+  const textBackgroundDisabled = isTextEditing ? !editorElement : false;
+  const backgroundInputValue = isTextEditing
+    ? textBackgroundValue
+    : node.textBackground ?? textBackgroundValue;
+  const backgroundIsNone = isTextEditing ? textBackgroundIsNone : node.textBackground == null;
   const fillColor = useMemo<RGBColor>(() => {
     const parsed = parseHexColor(node.fill);
     if (parsed) {
@@ -352,8 +363,24 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
       setTextFontSizeValue(node.fontSize.toString());
       setTextColorValue(node.textColor);
       setTextSelectionState(createDefaultTextSelectionState(node));
+      setTextBackgroundValue(node.textBackground ?? DEFAULT_TEXT_BACKGROUND);
+      setTextBackgroundIsNone(node.textBackground == null);
     }
-  }, [isTextEditing, node.fontSize, node.fontWeight, node.textAlign, node.textColor]);
+  }, [
+    isTextEditing,
+    node.fontSize,
+    node.fontWeight,
+    node.textAlign,
+    node.textColor,
+    node.textBackground
+  ]);
+
+  useEffect(() => {
+    if (isTextEditing) {
+      setTextBackgroundValue(node.textBackground ?? DEFAULT_TEXT_BACKGROUND);
+      setTextBackgroundIsNone(node.textBackground == null);
+    }
+  }, [isTextEditing, node.textBackground]);
 
   useEffect(() => {
     setLinkAddressValue(ensureHttpProtocol(node.link?.url ?? ''));
@@ -531,6 +558,20 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
     }
     setTextColorValue(value);
     commands.applyStyles(nodeIds, { textColor: value });
+  };
+
+  const handleTextBackgroundChange = (value: string) => {
+    if (!value) {
+      return;
+    }
+    setTextBackgroundValue(value);
+    setTextBackgroundIsNone(false);
+    commands.applyStyles(nodeIds, { textBackground: value });
+  };
+
+  const handleClearTextBackground = () => {
+    setTextBackgroundIsNone(true);
+    commands.applyStyles(nodeIds, { textBackground: null });
   };
 
   const handleListToggle = (type: 'unordered' | 'ordered') => {
@@ -845,6 +886,30 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
                   disabled={textColorDisabled}
                 />
               </label>
+              <label
+                className="selection-toolbar__swatch"
+                title={backgroundIsNone ? 'Text background (none)' : 'Text background'}
+              >
+                <span className="selection-toolbar__swatch-indicator">Bg</span>
+                <input
+                  type="color"
+                  value={backgroundInputValue}
+                  onChange={(event) => handleTextBackgroundChange(event.target.value)}
+                  onPointerDown={handleTextColorPointerDown}
+                  disabled={textBackgroundDisabled}
+                  data-empty={backgroundIsNone || undefined}
+                />
+              </label>
+              <button
+                type="button"
+                className="selection-toolbar__button"
+                onClick={handleClearTextBackground}
+                onPointerDown={handleTextControlPointerDown}
+                disabled={textBackgroundDisabled || backgroundIsNone}
+                title="Remove text background"
+              >
+                None
+              </button>
               <button
                 type="button"
                 className="selection-toolbar__button"
