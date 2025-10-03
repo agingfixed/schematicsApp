@@ -2,6 +2,10 @@ import React, { useEffect, useRef, useState } from 'react';
 import { selectScene, useSceneStore } from '../state/sceneStore';
 import { SceneContent } from '../types/scene';
 import { cloneScene } from '../utils/scene';
+import { resolveStaticAssetHref } from '../utils/assets';
+
+const OFFLINE_SETUP_SCRIPT_PATH = 'desktop/offline-setup.sh';
+const OFFLINE_SETUP_DOWNLOAD_NAME = 'schematics-offline-setup.sh';
 
 export const BoardControls: React.FC = () => {
   const scene = useSceneStore(selectScene);
@@ -9,6 +13,7 @@ export const BoardControls: React.FC = () => {
   const [status, setStatus] = useState<string | null>(null);
   const [lastBoardName, setLastBoardName] = useState('Untitled board');
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const offlineSetupLinkRef = useRef<HTMLAnchorElement | null>(null);
 
   useEffect(() => {
     if (!status) {
@@ -56,6 +61,19 @@ export const BoardControls: React.FC = () => {
     fileInputRef.current?.click();
   };
 
+  const handleOfflineSetupDownload = () => {
+    const anchor = offlineSetupLinkRef.current;
+    if (!anchor) {
+      return;
+    }
+
+    anchor.href = resolveStaticAssetHref(OFFLINE_SETUP_SCRIPT_PATH);
+    anchor.download = OFFLINE_SETUP_DOWNLOAD_NAME;
+    anchor.rel = 'noopener noreferrer';
+    anchor.click();
+    setStatus('Offline setup script downloaded. Run it to install the desktop app.');
+  };
+
   const handleImportChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) {
@@ -93,6 +111,11 @@ export const BoardControls: React.FC = () => {
 
   return (
     <div className="board-controls">
+      <div className="board-controls__group">
+        <button type="button" className="board-controls__button" onClick={handleOfflineSetupDownload}>
+          Offline setup
+        </button>
+      </div>
       <div className="board-controls__group board-controls__group--actions">
         <button type="button" className="board-controls__button" onClick={handleExport}>
           Download
@@ -108,6 +131,9 @@ export const BoardControls: React.FC = () => {
         style={{ display: 'none' }}
         onChange={handleImportChange}
       />
+      <a ref={offlineSetupLinkRef} href="#" hidden aria-hidden="true">
+        Schematics Studio offline setup script
+      </a>
       {status && <div className="board-controls__status">{status}</div>}
     </div>
   );

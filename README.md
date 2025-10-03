@@ -15,6 +15,29 @@ If your environment blocks direct access to the public npm registry you may need
 npm config set registry https://registry.npmmirror.com
 ```
 
+## Offline setup script
+
+For an automated local setup, download the **Offline setup** script from the board controls inside the app or fetch it directly:
+
+```bash
+curl -fsSL https://<your-app-host>/desktop/offline-setup.sh -o schematics-offline-setup.sh
+chmod +x schematics-offline-setup.sh
+./schematics-offline-setup.sh
+```
+
+The script will:
+
+- Clone (or update) the `schematicsApp` repository into `~/SchematicsStudio`.
+- Install npm dependencies.
+- Start the Vite development server.
+- Open your default browser to the running app (defaults to `http://localhost:5173/`).
+
+Environment variables you can use to customise the behaviour:
+
+- `SCHEMATICS_APP_DIR` – where the repository should be stored (defaults to `~/SchematicsStudio`).
+- `SCHEMATICS_APP_BRANCH` – git branch to check out (defaults to `main`).
+- `SCHEMATICS_APP_PORT` – port for the development server (defaults to `5173`).
+
 ## Available Scripts
 
 - `npm run dev` – start the Vite development server.

@@ -1,19 +1,7 @@
 import React, { useCallback, useRef } from 'react';
+import { resolveStaticAssetHref } from '../utils/assets';
 
 const DESKTOP_ARCHIVE_PATH = 'desktop/schematics-studio.zip';
-
-const resolveDesktopAssetHref = (relativePath: string): string => {
-  const sanitizedPath = relativePath.replace(/^\/+/, '');
-  const baseUrl = import.meta.env.BASE_URL ?? '/';
-  const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
-
-  if (typeof window === 'undefined') {
-    return `${normalizedBase}${sanitizedPath}`;
-  }
-
-  const absoluteBase = new URL(normalizedBase, window.location.href);
-  return new URL(sanitizedPath, absoluteBase).toString();
-};
 
 export const DesktopDownloadSection: React.FC = () => {
   const downloadLinkRef = useRef<HTMLAnchorElement | null>(null);
@@ -24,7 +12,7 @@ export const DesktopDownloadSection: React.FC = () => {
       return;
     }
 
-    const resolvedHref = resolveDesktopAssetHref(DESKTOP_ARCHIVE_PATH);
+    const resolvedHref = resolveStaticAssetHref(DESKTOP_ARCHIVE_PATH);
     anchor.href = resolvedHref;
     anchor.download = DESKTOP_ARCHIVE_PATH.split('/').pop() ?? 'schematics-studio.zip';
     anchor.rel = 'noopener noreferrer';
