@@ -18,7 +18,7 @@ import {
   cloneConnectorEndpointStyles,
   isAttachedConnectorEndpoint
 } from '../types/scene';
-import welcomeLogo from '../assets/welcome-logo.svg';
+const welcomeLogo = 'https://i.postimg.cc/8CyDmHF7/int-icon-no-border.png';
 import {
   GRID_SIZE,
   cloneScene,
@@ -144,8 +144,8 @@ const createInitialScene = (): SceneContent => {
     '<p>Tap the note icon to learn how to run Schematics on your personal device.</p>'
   ].join('');
 
-  const logo = createNodeModel('image', { x: -160, y: -520 }, {
-    size: { width: 320, height: 320 },
+  const logo = createNodeModel('image', { x: -192, y: -560 }, {
+    size: { width: 384, height: 384 },
     image: {
       src: welcomeLogo,
       naturalWidth: 512,
@@ -153,13 +153,13 @@ const createInitialScene = (): SceneContent => {
     }
   });
 
-  const welcome = createNodeModel('text', { x: -240, y: -140 }, {
+  const welcome = createNodeModel('text', { x: -280, y: -160 }, {
     text: welcomeText,
-    size: { width: 480, height: 320 }
+    size: { width: 560, height: 400 }
   });
-  const exampleOne = createNodeModel('rectangle', { x: -420, y: 260 }, { text: 'Example' });
-  const exampleTwo = createNodeModel('rectangle', { x: -70, y: 260 }, { text: 'Example' });
-  const exampleThree = createNodeModel('rectangle', { x: 280, y: 260 }, { text: 'Example' });
+  const exampleOne = createNodeModel('rectangle', { x: -440, y: 320 }, { text: 'Example' });
+  const exampleTwo = createNodeModel('rectangle', { x: -60, y: 320 }, { text: 'Example' });
+  const exampleThree = createNodeModel('rectangle', { x: 320, y: 320 }, { text: 'Example' });
 
   const connectors: ConnectorModel[] = [
     {
