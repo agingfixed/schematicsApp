@@ -18,6 +18,7 @@ import {
   cloneConnectorEndpointStyles,
   isAttachedConnectorEndpoint
 } from '../types/scene';
+import welcomeLogo from '../assets/welcome-logo.svg';
 import {
   GRID_SIZE,
   cloneScene,
@@ -136,118 +137,46 @@ const defaultConnectorLabelStyle: ConnectorLabelStyle = {
 };
 
 const createInitialScene = (): SceneContent => {
-  const start = createNodeModel('circle', { x: -380, y: -140 }, { text: 'Start' });
-  const collect = createNodeModel('rectangle', { x: -40, y: -180 }, { text: 'Collect Input' });
-  const decision = createNodeModel('diamond', { x: 320, y: -200 }, { text: 'Valid?' });
-  const done = createNodeModel('ellipse', { x: 700, y: -160 }, { text: 'Archive' });
-  const review = createNodeModel('rectangle', { x: -40, y: 140 }, { text: 'Review Input' });
-  const retry = createNodeModel('triangle', { x: -380, y: 120 }, { text: 'Retry Capture' });
-  const notify = createNodeModel('ellipse', { x: 320, y: 160 }, { text: 'Notify Team' });
+  const welcomeText = [
+    '<h2>Welcome aboard!</h2>',
+    '<p>Use the menu in the top left to explore every button—add shapes, draw connectors, drop images, or type quick notes.</p>',
+    '<p>The <strong>Download</strong> button saves your board to your computer, and <strong>Upload</strong> brings it back so you can continue right where you left off.</p>',
+    '<p>Tap the note icon to learn how to run Schematics on your personal device.</p>'
+  ].join('');
+
+  const logo = createNodeModel('image', { x: -160, y: -520 }, {
+    size: { width: 320, height: 320 },
+    image: {
+      src: welcomeLogo,
+      naturalWidth: 512,
+      naturalHeight: 512
+    }
+  });
+
+  const welcome = createNodeModel('text', { x: -160, y: -160 }, { text: welcomeText });
+  const exampleOne = createNodeModel('rectangle', { x: -420, y: 200 }, { text: 'Example' });
+  const exampleTwo = createNodeModel('rectangle', { x: -110, y: 200 }, { text: 'Example' });
+  const exampleThree = createNodeModel('rectangle', { x: 200, y: 200 }, { text: 'Example' });
 
   const connectors: ConnectorModel[] = [
     {
       id: nanoid(),
-      source: { nodeId: start.id, port: 'right' },
-      target: { nodeId: collect.id, port: 'left' },
+      source: { nodeId: exampleOne.id, port: 'right' },
+      target: { nodeId: exampleTwo.id, port: 'left' },
       style: { ...defaultConnectorStyle },
-      endpointStyles: createDefaultConnectorEndpointStyles(),
-      label: 'Begin',
-      labelPosition: 0.5,
-      labelOffset: 18,
-      labelStyle: { ...defaultConnectorLabelStyle }
+      endpointStyles: createDefaultConnectorEndpointStyles()
     },
     {
       id: nanoid(),
-      source: { nodeId: collect.id, port: 'right' },
-      target: { nodeId: decision.id, port: 'left' },
+      source: { nodeId: exampleTwo.id, port: 'right' },
+      target: { nodeId: exampleThree.id, port: 'left' },
       style: { ...defaultConnectorStyle },
-      endpointStyles: createDefaultConnectorEndpointStyles(),
-      label: 'Forward',
-      labelPosition: 0.5,
-      labelOffset: 18,
-      labelStyle: { ...defaultConnectorLabelStyle }
-    },
-    {
-      id: nanoid(),
-      source: { nodeId: decision.id, port: 'right' },
-      target: { nodeId: done.id, port: 'left' },
-      style: { ...defaultConnectorStyle },
-      endpointStyles: createDefaultConnectorEndpointStyles(),
-      label: 'Yes',
-      labelPosition: 0.5,
-      labelOffset: 18,
-      labelStyle: { ...defaultConnectorLabelStyle }
-    },
-    {
-      id: nanoid(),
-      source: { nodeId: collect.id, port: 'bottom' },
-      target: { nodeId: review.id, port: 'top' },
-      style: { ...defaultConnectorStyle },
-      endpointStyles: createDefaultConnectorEndpointStyles(),
-      label: 'Needs Review',
-      labelPosition: 0.5,
-      labelOffset: 22,
-      labelStyle: { ...defaultConnectorLabelStyle }
-    },
-    {
-      id: nanoid(),
-      source: { nodeId: review.id, port: 'left' },
-      target: { nodeId: retry.id, port: 'right' },
-      style: { ...defaultConnectorStyle },
-      endpointStyles: createDefaultConnectorEndpointStyles(),
-      label: 'Rework',
-      labelPosition: 0.5,
-      labelOffset: 18,
-      labelStyle: { ...defaultConnectorLabelStyle }
-    },
-    {
-      id: nanoid(),
-      source: { nodeId: retry.id, port: 'top' },
-      target: { nodeId: start.id, port: 'bottom' },
-      style: { ...defaultConnectorStyle },
-      endpointStyles: createDefaultConnectorEndpointStyles(),
-      label: 'Loop Back',
-      labelPosition: 0.5,
-      labelOffset: 18,
-      labelStyle: { ...defaultConnectorLabelStyle }
-    },
-    {
-      id: nanoid(),
-      source: { nodeId: decision.id, port: 'bottom' },
-      target: { nodeId: notify.id, port: 'top' },
-      style: { ...defaultConnectorStyle },
-      endpointStyles: createDefaultConnectorEndpointStyles(),
-      label: 'No',
-      labelPosition: 0.5,
-      labelOffset: 18,
-      labelStyle: { ...defaultConnectorLabelStyle }
-    },
-    {
-      id: nanoid(),
-      source: { nodeId: notify.id, port: 'right' },
-      target: { position: { x: 620, y: 220 } },
-      style: { ...defaultConnectorStyle },
-      endpointStyles: createDefaultConnectorEndpointStyles(),
-      label: 'Webhook',
-      labelPosition: 0.5,
-      labelOffset: 18,
-      labelStyle: { ...defaultConnectorLabelStyle }
-    },
-    {
-      id: nanoid(),
-      source: { nodeId: start.id, port: 'top' },
-      target: { position: { x: -380, y: -360 } },
-      style: { ...defaultConnectorStyle },
-      endpointStyles: createDefaultConnectorEndpointStyles(),
-      label: 'Monitoring',
-      labelPosition: 0.5,
-      labelOffset: 18,
-      labelStyle: { ...defaultConnectorLabelStyle }
+      endpointStyles: createDefaultConnectorEndpointStyles()
     }
   ];
 
   return {
-    nodes: [start, collect, decision, done, review, retry, notify],
+    nodes: [logo, welcome, exampleOne, exampleTwo, exampleThree],
     connectors
   };
 };
