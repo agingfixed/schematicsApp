@@ -83,11 +83,12 @@ export const createNodeModel = (
 ): NodeModel => {
   if (shape === 'text' || shape === 'link') {
     const defaultText = shape === 'link' ? 'Link' : textNodeDefaults.text;
+    const size = options.size ?? textNodeDefaults.size;
     return {
       id: nanoid(),
       shape,
       position: { ...position },
-      size: { ...textNodeDefaults.size },
+      size: { ...size },
       text: ensureHtmlContent(options.text ?? defaultText),
       textAlign: textNodeDefaults.textAlign,
       fontSize: textNodeDefaults.fontSize,
