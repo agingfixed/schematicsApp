@@ -153,10 +153,13 @@ const createInitialScene = (): SceneContent => {
     }
   });
 
-  const welcome = createNodeModel('text', { x: -160, y: -160 }, { text: welcomeText });
-  const exampleOne = createNodeModel('rectangle', { x: -420, y: 200 }, { text: 'Example' });
-  const exampleTwo = createNodeModel('rectangle', { x: -110, y: 200 }, { text: 'Example' });
-  const exampleThree = createNodeModel('rectangle', { x: 200, y: 200 }, { text: 'Example' });
+  const welcome = createNodeModel('text', { x: -240, y: -140 }, {
+    text: welcomeText,
+    size: { width: 480, height: 320 }
+  });
+  const exampleOne = createNodeModel('rectangle', { x: -420, y: 260 }, { text: 'Example' });
+  const exampleTwo = createNodeModel('rectangle', { x: -70, y: 260 }, { text: 'Example' });
+  const exampleThree = createNodeModel('rectangle', { x: 280, y: 260 }, { text: 'Example' });
 
   const connectors: ConnectorModel[] = [
     {
