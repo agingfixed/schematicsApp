@@ -880,6 +880,10 @@ const CanvasComponent = (
 
       const clipboardData = event.clipboardData;
       if (!clipboardData) {
+        const handled = pasteClipboard();
+        if (handled) {
+          event.preventDefault();
+        }
         return;
       }
 
@@ -889,36 +893,34 @@ const CanvasComponent = (
       const file = imageItem?.getAsFile();
       const imageSource = !file ? extractImageSourceFromClipboard(clipboardData) : null;
 
-      if (!file) {
-        if (!imageSource) {
-          return;
-        }
+      if (file || (imageSource && isImageSource(imageSource))) {
+        event.preventDefault();
 
-        if (!isImageSource(imageSource)) {
+        try {
+          const worldPoint = getPasteWorldPoint();
+          let dataUrl: string;
+
+          if (file) {
+            dataUrl = await readFileAsDataUrl(file);
+          } else if (imageSource?.source.startsWith('data:image/')) {
+            dataUrl = imageSource.source;
+          } else if (imageSource) {
+            dataUrl = await fetchImageAsDataUrl(imageSource.source);
+          } else {
+            return;
+          }
+
+          await createImageNode(dataUrl, worldPoint);
           return;
+        } catch (error) {
+          // eslint-disable-next-line no-console
+          console.error('Failed to paste image', error);
         }
       }
 
-      event.preventDefault();
-
-      try {
-        const worldPoint = getPasteWorldPoint();
-        let dataUrl: string;
-
-        if (file) {
-          dataUrl = await readFileAsDataUrl(file);
-        } else if (imageSource?.source.startsWith('data:image/')) {
-          dataUrl = imageSource.source;
-        } else if (imageSource) {
-          dataUrl = await fetchImageAsDataUrl(imageSource.source);
-        } else {
-          return;
-        }
-
-        await createImageNode(dataUrl, worldPoint);
-      } catch (error) {
-        // eslint-disable-next-line no-console
-        console.error('Failed to paste image', error);
+      const handled = pasteClipboard();
+      if (handled) {
+        event.preventDefault();
       }
     };
 
@@ -926,7 +928,13 @@ const CanvasComponent = (
     return () => {
       window.removeEventListener('paste', handlePaste);
     };
-  }, [createImageNode, extractImageSourceFromClipboard, getPasteWorldPoint, isImageSource]);
+  }, [
+    createImageNode,
+    extractImageSourceFromClipboard,
+    getPasteWorldPoint,
+    isImageSource,
+    pasteClipboard
+  ]);
 
   const selectedNodes = useMemo(
     () => nodes.filter((node) => selectedNodeIds.includes(node.id)),
@@ -3225,16 +3233,6 @@ const CanvasComponent = (
           return;
         }
 
-        if (key === 'v') {
-          if (tool === 'select' && !editingNodeId) {
-            const handled = pasteClipboard();
-            if (handled) {
-              event.preventDefault();
-            }
-          }
-          return;
-        }
-
         if (key === 'b') {
           if (singleNodeSelected && !editingNodeId) {
             event.preventDefault();
@@ -3332,8 +3330,7 @@ const CanvasComponent = (
     editingNodeId,
     beginTextEditing,
     commitEditingIfNeeded,
-    copySelection,
-    pasteClipboard
+    copySelection
   ]);
 
   const gridStyle = useMemo(() => {
