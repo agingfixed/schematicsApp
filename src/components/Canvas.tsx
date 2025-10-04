@@ -868,6 +868,80 @@ const CanvasComponent = (
     return false;
   }, []);
 
+  const commitEditingIfNeeded = useCallback(() => {
+    if (editingConnectorId) {
+      setConnectorCommitSignal((value) => value + 1);
+    }
+    if (editingNodeId) {
+      inlineEditorRef.current?.commit();
+    }
+  }, [editingConnectorId, editingNodeId]);
+
+  const pasteClipboard = useCallback(() => {
+    const clipboard = clipboardRef.current;
+    if (!clipboard || (!clipboard.nodes.length && !clipboard.connectors.length)) {
+      return false;
+    }
+
+    commitEditingIfNeeded();
+
+    lastPasteOffsetRef.current = {
+      x: lastPasteOffsetRef.current.x + PASTE_OFFSET_STEP,
+      y: lastPasteOffsetRef.current.y + PASTE_OFFSET_STEP
+    };
+    const offset = lastPasteOffsetRef.current;
+
+    const nodeIdMap = new Map<string, string>();
+    const newNodes = clipboard.nodes.map((node) => {
+      const id = nanoid();
+      nodeIdMap.set(node.id, id);
+      const cloned = cloneNodeForClipboard(node);
+      cloned.id = id;
+      cloned.position = {
+        x: node.position.x + offset.x,
+        y: node.position.y + offset.y
+      };
+      return cloned;
+    });
+
+    const remapEndpoint = (endpoint: ConnectorEndpoint): ConnectorEndpoint | null => {
+      if (isAttachedConnectorEndpoint(endpoint)) {
+        const mappedId = nodeIdMap.get(endpoint.nodeId);
+        return { nodeId: mappedId ?? endpoint.nodeId, port: endpoint.port };
+      }
+      if ('position' in endpoint) {
+        return {
+          position: {
+            x: endpoint.position.x + offset.x,
+            y: endpoint.position.y + offset.y
+          }
+        };
+      }
+      return null;
+    };
+
+    const newConnectors: ConnectorModel[] = [];
+    clipboard.connectors.forEach((connector) => {
+      const nextSource = remapEndpoint(connector.source);
+      const nextTarget = remapEndpoint(connector.target);
+      if (!nextSource || !nextTarget) {
+        return;
+      }
+      const cloned = cloneConnectorForClipboard(connector);
+      cloned.id = nanoid();
+      cloned.source = nextSource;
+      cloned.target = nextTarget;
+      cloned.points = cloned.points?.map((point) => ({
+        x: point.x + offset.x,
+        y: point.y + offset.y
+      }));
+      newConnectors.push(cloned);
+    });
+
+    const selectionResult = addEntities({ nodes: newNodes, connectors: newConnectors });
+    return Boolean(selectionResult.nodeIds.length || selectionResult.connectorIds.length);
+  }, [addEntities, commitEditingIfNeeded]);
+
   useEffect(() => {
     const handlePaste = async (event: ClipboardEvent) => {
       const active = document.activeElement as HTMLElement | null;
@@ -1161,80 +1235,6 @@ const CanvasComponent = (
   }, [smartSelectionState, transform]);
 
   const editingEntryPoint = editingNodeId ? editingEntryPointRef.current : null;
-
-  const commitEditingIfNeeded = useCallback(() => {
-    if (editingConnectorId) {
-      setConnectorCommitSignal((value) => value + 1);
-    }
-    if (editingNodeId) {
-      inlineEditorRef.current?.commit();
-    }
-  }, [editingConnectorId, editingNodeId]);
-
-  const pasteClipboard = useCallback(() => {
-    const clipboard = clipboardRef.current;
-    if (!clipboard || (!clipboard.nodes.length && !clipboard.connectors.length)) {
-      return false;
-    }
-
-    commitEditingIfNeeded();
-
-    lastPasteOffsetRef.current = {
-      x: lastPasteOffsetRef.current.x + PASTE_OFFSET_STEP,
-      y: lastPasteOffsetRef.current.y + PASTE_OFFSET_STEP
-    };
-    const offset = lastPasteOffsetRef.current;
-
-    const nodeIdMap = new Map<string, string>();
-    const newNodes = clipboard.nodes.map((node) => {
-      const id = nanoid();
-      nodeIdMap.set(node.id, id);
-      const cloned = cloneNodeForClipboard(node);
-      cloned.id = id;
-      cloned.position = {
-        x: node.position.x + offset.x,
-        y: node.position.y + offset.y
-      };
-      return cloned;
-    });
-
-    const remapEndpoint = (endpoint: ConnectorEndpoint): ConnectorEndpoint | null => {
-      if (isAttachedConnectorEndpoint(endpoint)) {
-        const mappedId = nodeIdMap.get(endpoint.nodeId);
-        return { nodeId: mappedId ?? endpoint.nodeId, port: endpoint.port };
-      }
-      if ('position' in endpoint) {
-        return {
-          position: {
-            x: endpoint.position.x + offset.x,
-            y: endpoint.position.y + offset.y
-          }
-        };
-      }
-      return null;
-    };
-
-    const newConnectors: ConnectorModel[] = [];
-    clipboard.connectors.forEach((connector) => {
-      const nextSource = remapEndpoint(connector.source);
-      const nextTarget = remapEndpoint(connector.target);
-      if (!nextSource || !nextTarget) {
-        return;
-      }
-      const cloned = cloneConnectorForClipboard(connector);
-      cloned.id = nanoid();
-      cloned.source = nextSource;
-      cloned.target = nextTarget;
-      cloned.points = cloned.points?.map((point) => ({
-        x: point.x + offset.x,
-        y: point.y + offset.y
-      }));
-      newConnectors.push(cloned);
-    });
-
-    const selectionResult = addEntities({ nodes: newNodes, connectors: newConnectors });
-    return Boolean(selectionResult.nodeIds.length || selectionResult.connectorIds.length);
-  }, [addEntities, commitEditingIfNeeded]);
 
   const beginTextEditing = useCallback(
     (nodeId: string, point?: { x: number; y: number }) => {
