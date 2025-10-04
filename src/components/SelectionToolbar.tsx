@@ -60,6 +60,12 @@ const normalizeTextAlign = (value: string): TextAlign => {
   }
 };
 
+const rangesEqual = (a: Range, b: Range) =>
+  a.startContainer === b.startContainer &&
+  a.startOffset === b.startOffset &&
+  a.endContainer === b.endContainer &&
+  a.endOffset === b.endOffset;
+
 interface TextSelectionState {
   fontSize: number;
   isBold: boolean;
@@ -128,6 +134,8 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
   const pointerInteractionCleanupRef = useRef<(() => void) | null>(null);
   const pointerActiveRef = useRef(false);
   const savedSelectionRef = useRef<Range | null>(null);
+  const textColorInteractionRef = useRef(false);
+  const textColorInteractionCleanupRef = useRef<(() => void) | null>(null);
 
   const [fontSizeValue, setFontSizeValue] = useState(node.fontSize.toString());
   const [textFontSizeValue, setTextFontSizeValue] = useState(node.fontSize.toString());
@@ -309,8 +317,10 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
     if (!selection) {
       return;
     }
+    const restoredRange = range.cloneRange();
     selection.removeAllRanges();
-    selection.addRange(range);
+    selection.addRange(restoredRange);
+    savedSelectionRef.current = restoredRange;
   }, [isTextEditing]);
 
   const handleFillChange = useCallback(
@@ -380,6 +390,15 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
     [onPointerInteractionChange]
   );
 
+  useEffect(
+    () => () => {
+      if (textColorInteractionCleanupRef.current) {
+        textColorInteractionCleanupRef.current();
+      }
+    },
+    []
+  );
+
   useEffect(() => {
     if (!isTextEditing && pointerInteractionCleanupRef.current) {
       pointerInteractionCleanupRef.current();
@@ -387,6 +406,12 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
       onPointerInteractionChange?.(false);
     }
   }, [isTextEditing, onPointerInteractionChange]);
+
+  useEffect(() => {
+    if (!isTextEditing && textColorInteractionCleanupRef.current) {
+      textColorInteractionCleanupRef.current();
+    }
+  }, [isTextEditing]);
 
   useEffect(() => {
     if (!fillOpen) {
@@ -413,7 +438,25 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
       return;
     }
     updateTextSelectionFromEditor();
-    const handleSelectionChange = () => updateTextSelectionFromEditor();
+    const handleSelectionChange = () => {
+      if (textColorInteractionRef.current) {
+        const savedRange = savedSelectionRef.current;
+        if (!savedRange) {
+          return;
+        }
+        const selection = window.getSelection();
+        if (!selection || selection.rangeCount === 0) {
+          restoreSelection();
+          return;
+        }
+        const currentRange = selection.getRangeAt(0);
+        if (selection.isCollapsed || !rangesEqual(currentRange, savedRange)) {
+          restoreSelection();
+        }
+        return;
+      }
+      updateTextSelectionFromEditor();
+    };
     document.addEventListener('selectionchange', handleSelectionChange);
     const editor = getEditorElement();
     if (editor) {
@@ -427,7 +470,12 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
         editor.removeEventListener('keyup', handleSelectionChange);
       }
     };
-  }, [getEditorElement, isTextEditing, updateTextSelectionFromEditor]);
+  }, [
+    getEditorElement,
+    isTextEditing,
+    restoreSelection,
+    updateTextSelectionFromEditor
+  ]);
 
   useEffect(() => {
     if (!fillOpen) {
@@ -538,10 +586,43 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
   };
 
   const handleTextColorPointerDown = (event: React.PointerEvent<HTMLInputElement>) => {
-    if (isTextEditing) {
-      event.stopPropagation();
-      saveSelection();
+    if (!isTextEditing) {
+      return;
     }
+
+    event.stopPropagation();
+    saveSelection();
+
+    const input = event.currentTarget;
+
+    const handleBlur = () => {
+      cleanup();
+    };
+
+    const cleanup = () => {
+      if (textColorInteractionCleanupRef.current !== cleanup) {
+        return;
+      }
+      input.removeEventListener('blur', handleBlur);
+      textColorInteractionRef.current = false;
+      textColorInteractionCleanupRef.current = null;
+      restoreSelection();
+    };
+
+    if (textColorInteractionCleanupRef.current) {
+      textColorInteractionCleanupRef.current();
+    }
+
+    textColorInteractionRef.current = true;
+    textColorInteractionCleanupRef.current = cleanup;
+
+    input.addEventListener('blur', handleBlur);
+
+    requestAnimationFrame(() => {
+      if (textColorInteractionRef.current) {
+        restoreSelection();
+      }
+    });
   };
 
   const commitLinkAddress = useCallback(() => {
