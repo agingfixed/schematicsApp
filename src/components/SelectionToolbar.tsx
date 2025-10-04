@@ -317,8 +317,10 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
     if (!selection) {
       return;
     }
+    const restoredRange = range.cloneRange();
     selection.removeAllRanges();
-    selection.addRange(range);
+    selection.addRange(restoredRange);
+    savedSelectionRef.current = restoredRange;
   }, [isTextEditing]);
 
   const handleFillChange = useCallback(
