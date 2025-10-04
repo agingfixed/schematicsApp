@@ -141,10 +141,10 @@ const createInitialScene = (): SceneContent => {
     '<h2>Welcome aboard!</h2>',
     '<p>Use the menu in the top left to explore every button—add shapes, draw connectors, drop images, or type quick notes.</p>',
     '<p>The <strong>Download</strong> button saves your board to your computer, and <strong>Upload</strong> brings it back so you can continue right where you left off.</p>',
-    '<p>Tap the note icon to learn how to run Schematics on your personal device.</p>'
+    '<p>Tap the note icon to learn how to run Schematics Studio on your personal device.</p>'
   ].join('');
 
-  const logo = createNodeModel('image', { x: -192, y: -560 }, {
+  const logo = createNodeModel('image', { x: -142, y: -624.717716713148 }, {
     size: { width: 384, height: 384 },
     image: {
       src: welcomeLogo,
@@ -153,13 +153,19 @@ const createInitialScene = (): SceneContent => {
     }
   });
 
-  const welcome = createNodeModel('text', { x: -280, y: -160 }, {
+  const welcome = createNodeModel('text', { x: -230, y: -132.5403657344158 }, {
     text: welcomeText,
     size: { width: 560, height: 400 }
   });
   const exampleOne = createNodeModel('rectangle', { x: -440, y: 320 }, { text: 'Example' });
   const exampleTwo = createNodeModel('rectangle', { x: -60, y: 320 }, { text: 'Example' });
   const exampleThree = createNodeModel('rectangle', { x: 320, y: 320 }, { text: 'Example' });
+
+  const homeBaseLink = createNodeModel('link', { x: -141.49986945268174, y: -222.49308191530778 }, {
+    text: '<p style="text-align: center;">Visit our home base for crypto!</p>',
+    size: { width: 382.9997389053635, height: 89.952716180892 }
+  });
+  homeBaseLink.link = { url: 'https://intrepidinnovations.llc/' };
 
   const connectors: ConnectorModel[] = [
     {
@@ -179,7 +185,7 @@ const createInitialScene = (): SceneContent => {
   ];
 
   return {
-    nodes: [logo, welcome, exampleOne, exampleTwo, exampleThree],
+    nodes: [logo, welcome, exampleOne, exampleTwo, exampleThree, homeBaseLink],
     connectors
   };
 };
