@@ -592,22 +592,19 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
     saveSelection();
 
     const input = event.currentTarget;
-    const cleanup = () => {
-      if (textColorInteractionCleanupRef.current) {
-        document.removeEventListener('pointerup', handlePointerUp, true);
-        document.removeEventListener('pointercancel', handlePointerUp, true);
-        input.removeEventListener('blur', handleBlur);
-        textColorInteractionRef.current = false;
-        textColorInteractionCleanupRef.current = null;
-      }
-    };
-
-    const handlePointerUp = () => {
-      cleanup();
-    };
 
     const handleBlur = () => {
       cleanup();
+    };
+
+    const cleanup = () => {
+      if (textColorInteractionCleanupRef.current !== cleanup) {
+        return;
+      }
+      input.removeEventListener('blur', handleBlur);
+      textColorInteractionRef.current = false;
+      textColorInteractionCleanupRef.current = null;
+      restoreSelection();
     };
 
     if (textColorInteractionCleanupRef.current) {
@@ -617,8 +614,6 @@ const SelectionToolbarContent: React.FC<SelectionToolbarContentProps> = ({
     textColorInteractionRef.current = true;
     textColorInteractionCleanupRef.current = cleanup;
 
-    document.addEventListener('pointerup', handlePointerUp, true);
-    document.addEventListener('pointercancel', handlePointerUp, true);
     input.addEventListener('blur', handleBlur);
 
     requestAnimationFrame(() => {
