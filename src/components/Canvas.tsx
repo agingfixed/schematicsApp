@@ -85,7 +85,7 @@ import { useCommands } from '../state/commands';
 import { useFloatingMenuStore } from '../state/menuStore';
 import { CaretPoint } from '../utils/text';
 import { ensureHttpProtocol } from '../utils/url';
-import { getImageDimensions, readFileAsDataUrl } from '../utils/image';
+import { fetchImageAsDataUrl, getImageDimensions, readFileAsDataUrl } from '../utils/image';
 import '../styles/canvas.css';
 
 // Allow users to comfortably view very large boards by permitting deeper zoom-outs.
@@ -441,6 +441,7 @@ const CanvasComponent = (
   const marqueeStateRef = useRef<MarqueeState | null>(null);
   const [marqueeRect, setMarqueeRect] = useState<MarqueeRect | null>(null);
   const clipboardRef = useRef<ClipboardPayload | null>(null);
+  const clipboardSourceRef = useRef<'local' | 'external' | null>(null);
   const lastPasteOffsetRef = useRef<Vec2>({ x: 0, y: 0 });
   const releasePointerCapture = useCallback((pointerId: number) => {
     const element = containerRef.current;
@@ -725,6 +726,7 @@ const CanvasComponent = (
       nodes: selectedNodes.map(cloneNodeForClipboard),
       connectors: selectedConnectors.map(cloneConnectorForClipboard)
     };
+    clipboardSourceRef.current = 'local';
     lastPasteOffsetRef.current = { x: 0, y: 0 };
     return true;
   }, [connectors, nodes, selectedConnectorIds, selectedNodeIds]);
@@ -751,6 +753,58 @@ const CanvasComponent = (
     }
     return nodes.find((node) => node.id === selectedNodeIds[0]) ?? null;
   }, [nodes, selectedNodeIds, selectedConnectorIds.length]);
+
+  useEffect(() => {
+    const handleCopy = (event: ClipboardEvent) => {
+      const active = document.activeElement as HTMLElement | null;
+      const isEditable =
+        active &&
+        (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable);
+      if (isEditable) {
+        clipboardSourceRef.current = null;
+        return;
+      }
+
+      const copied = copySelection();
+      if (!copied) {
+        return;
+      }
+
+      clipboardSourceRef.current = 'local';
+
+      const clipboardData = event.clipboardData;
+      if (clipboardData) {
+        clipboardData.clearData();
+        clipboardData.setData('text/plain', '');
+        clipboardData.setData('application/x-schematics-clipboard', 'entities');
+        event.preventDefault();
+      }
+    };
+
+    window.addEventListener('copy', handleCopy);
+    return () => {
+      window.removeEventListener('copy', handleCopy);
+    };
+  }, [copySelection]);
+
+  useEffect(() => {
+    const resetClipboardSource = () => {
+      clipboardSourceRef.current = null;
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        resetClipboardSource();
+      }
+    };
+
+    window.addEventListener('blur', resetClipboardSource);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      window.removeEventListener('blur', resetClipboardSource);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -803,6 +857,145 @@ const CanvasComponent = (
     return screenToWorld(0, 0, transform);
   }, [lastPointerPosition, transform]);
 
+  type ClipboardImageCandidate = {
+    source: string;
+    confidence: 'high' | 'medium' | 'low';
+  };
+
+  const extractImageSourceFromClipboard = useCallback(
+    (clipboardData: DataTransfer): ClipboardImageCandidate | null => {
+      const html = clipboardData.getData('text/html');
+      if (html) {
+        try {
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(html, 'text/html');
+          const img = doc.querySelector('img');
+          if (img?.src) {
+            return { source: img.src, confidence: 'high' };
+          }
+        } catch (error) {
+          // eslint-disable-next-line no-console
+          console.error('Failed to parse clipboard HTML', error);
+        }
+      }
+
+      const uriList = clipboardData.getData('text/uri-list');
+      if (uriList) {
+        const candidate = uriList.split('\n')[0]?.trim();
+        if (candidate) {
+          return { source: candidate, confidence: 'medium' };
+        }
+      }
+
+      const text = clipboardData.getData('text/plain');
+      if (text) {
+        return { source: text.trim(), confidence: 'low' };
+      }
+
+      return null;
+    },
+    []
+  );
+
+  const isImageSource = useCallback(({ confidence, source }: ClipboardImageCandidate): boolean => {
+    if (!source) {
+      return false;
+    }
+
+    if (source.startsWith('data:image/')) {
+      return true;
+    }
+
+    if (source.startsWith('http://') || source.startsWith('https://') || source.startsWith('blob:')) {
+      if (confidence === 'high') {
+        return true;
+      }
+
+      try {
+        const url = new URL(source);
+        return /\.(png|jpe?g|gif|bmp|webp|svg)$/i.test(url.pathname);
+      } catch (error) {
+        return false;
+      }
+    }
+
+    return false;
+  }, []);
+
+  const commitEditingIfNeeded = useCallback(() => {
+    if (editingConnectorId) {
+      setConnectorCommitSignal((value) => value + 1);
+    }
+    if (editingNodeId) {
+      inlineEditorRef.current?.commit();
+    }
+  }, [editingConnectorId, editingNodeId]);
+
+  const pasteClipboard = useCallback(() => {
+    const clipboard = clipboardRef.current;
+    if (!clipboard || (!clipboard.nodes.length && !clipboard.connectors.length)) {
+      return false;
+    }
+
+    commitEditingIfNeeded();
+
+    lastPasteOffsetRef.current = {
+      x: lastPasteOffsetRef.current.x + PASTE_OFFSET_STEP,
+      y: lastPasteOffsetRef.current.y + PASTE_OFFSET_STEP
+    };
+    const offset = lastPasteOffsetRef.current;
+
+    const nodeIdMap = new Map<string, string>();
+    const newNodes = clipboard.nodes.map((node) => {
+      const id = nanoid();
+      nodeIdMap.set(node.id, id);
+      const cloned = cloneNodeForClipboard(node);
+      cloned.id = id;
+      cloned.position = {
+        x: node.position.x + offset.x,
+        y: node.position.y + offset.y
+      };
+      return cloned;
+    });
+
+    const remapEndpoint = (endpoint: ConnectorEndpoint): ConnectorEndpoint | null => {
+      if (isAttachedConnectorEndpoint(endpoint)) {
+        const mappedId = nodeIdMap.get(endpoint.nodeId);
+        return { nodeId: mappedId ?? endpoint.nodeId, port: endpoint.port };
+      }
+      if ('position' in endpoint) {
+        return {
+          position: {
+            x: endpoint.position.x + offset.x,
+            y: endpoint.position.y + offset.y
+          }
+        };
+      }
+      return null;
+    };
+
+    const newConnectors: ConnectorModel[] = [];
+    clipboard.connectors.forEach((connector) => {
+      const nextSource = remapEndpoint(connector.source);
+      const nextTarget = remapEndpoint(connector.target);
+      if (!nextSource || !nextTarget) {
+        return;
+      }
+      const cloned = cloneConnectorForClipboard(connector);
+      cloned.id = nanoid();
+      cloned.source = nextSource;
+      cloned.target = nextTarget;
+      cloned.points = cloned.points?.map((point) => ({
+        x: point.x + offset.x,
+        y: point.y + offset.y
+      }));
+      newConnectors.push(cloned);
+    });
+
+    const selectionResult = addEntities({ nodes: newNodes, connectors: newConnectors });
+    return Boolean(selectionResult.nodeIds.length || selectionResult.connectorIds.length);
+  }, [addEntities, commitEditingIfNeeded]);
+
   useEffect(() => {
     const handlePaste = async (event: ClipboardEvent) => {
       const active = document.activeElement as HTMLElement | null;
@@ -813,32 +1006,63 @@ const CanvasComponent = (
         return;
       }
 
+      const hasLocalClipboard =
+        clipboardSourceRef.current === 'local' &&
+        clipboardRef.current &&
+        (clipboardRef.current.nodes.length > 0 || clipboardRef.current.connectors.length > 0);
+
+      if (hasLocalClipboard) {
+        const handled = pasteClipboard();
+        if (handled) {
+          event.preventDefault();
+          return;
+        }
+      }
+
       const clipboardData = event.clipboardData;
       if (!clipboardData) {
+        const handled = pasteClipboard();
+        if (handled) {
+          event.preventDefault();
+        }
         return;
       }
 
       const imageItem = Array.from(clipboardData.items).find(
         (item) => item.kind === 'file' && item.type.startsWith('image/')
       );
-      if (!imageItem) {
-        return;
+      const file = imageItem?.getAsFile();
+      const imageSource = !file ? extractImageSourceFromClipboard(clipboardData) : null;
+
+      if (file || (imageSource && isImageSource(imageSource))) {
+        event.preventDefault();
+
+        try {
+          const worldPoint = getPasteWorldPoint();
+          let dataUrl: string;
+
+          if (file) {
+            dataUrl = await readFileAsDataUrl(file);
+          } else if (imageSource?.source.startsWith('data:image/')) {
+            dataUrl = imageSource.source;
+          } else if (imageSource) {
+            dataUrl = await fetchImageAsDataUrl(imageSource.source);
+          } else {
+            return;
+          }
+
+          await createImageNode(dataUrl, worldPoint);
+          clipboardSourceRef.current = 'external';
+          return;
+        } catch (error) {
+          // eslint-disable-next-line no-console
+          console.error('Failed to paste image', error);
+        }
       }
 
-      const file = imageItem.getAsFile();
-      if (!file) {
-        return;
-      }
-
-      event.preventDefault();
-
-      try {
-        const worldPoint = getPasteWorldPoint();
-        const dataUrl = await readFileAsDataUrl(file);
-        await createImageNode(dataUrl, worldPoint);
-      } catch (error) {
-        // eslint-disable-next-line no-console
-        console.error('Failed to paste image', error);
+      const handled = pasteClipboard();
+      if (handled) {
+        event.preventDefault();
       }
     };
 
@@ -846,7 +1070,13 @@ const CanvasComponent = (
     return () => {
       window.removeEventListener('paste', handlePaste);
     };
-  }, [createImageNode, getPasteWorldPoint]);
+  }, [
+    createImageNode,
+    extractImageSourceFromClipboard,
+    getPasteWorldPoint,
+    isImageSource,
+    pasteClipboard
+  ]);
 
   const selectedNodes = useMemo(
     () => nodes.filter((node) => selectedNodeIds.includes(node.id)),
@@ -1073,80 +1303,6 @@ const CanvasComponent = (
   }, [smartSelectionState, transform]);
 
   const editingEntryPoint = editingNodeId ? editingEntryPointRef.current : null;
-
-  const commitEditingIfNeeded = useCallback(() => {
-    if (editingConnectorId) {
-      setConnectorCommitSignal((value) => value + 1);
-    }
-    if (editingNodeId) {
-      inlineEditorRef.current?.commit();
-    }
-  }, [editingConnectorId, editingNodeId]);
-
-  const pasteClipboard = useCallback(() => {
-    const clipboard = clipboardRef.current;
-    if (!clipboard || (!clipboard.nodes.length && !clipboard.connectors.length)) {
-      return false;
-    }
-
-    commitEditingIfNeeded();
-
-    lastPasteOffsetRef.current = {
-      x: lastPasteOffsetRef.current.x + PASTE_OFFSET_STEP,
-      y: lastPasteOffsetRef.current.y + PASTE_OFFSET_STEP
-    };
-    const offset = lastPasteOffsetRef.current;
-
-    const nodeIdMap = new Map<string, string>();
-    const newNodes = clipboard.nodes.map((node) => {
-      const id = nanoid();
-      nodeIdMap.set(node.id, id);
-      const cloned = cloneNodeForClipboard(node);
-      cloned.id = id;
-      cloned.position = {
-        x: node.position.x + offset.x,
-        y: node.position.y + offset.y
-      };
-      return cloned;
-    });
-
-    const remapEndpoint = (endpoint: ConnectorEndpoint): ConnectorEndpoint | null => {
-      if (isAttachedConnectorEndpoint(endpoint)) {
-        const mappedId = nodeIdMap.get(endpoint.nodeId);
-        return { nodeId: mappedId ?? endpoint.nodeId, port: endpoint.port };
-      }
-      if ('position' in endpoint) {
-        return {
-          position: {
-            x: endpoint.position.x + offset.x,
-            y: endpoint.position.y + offset.y
-          }
-        };
-      }
-      return null;
-    };
-
-    const newConnectors: ConnectorModel[] = [];
-    clipboard.connectors.forEach((connector) => {
-      const nextSource = remapEndpoint(connector.source);
-      const nextTarget = remapEndpoint(connector.target);
-      if (!nextSource || !nextTarget) {
-        return;
-      }
-      const cloned = cloneConnectorForClipboard(connector);
-      cloned.id = nanoid();
-      cloned.source = nextSource;
-      cloned.target = nextTarget;
-      cloned.points = cloned.points?.map((point) => ({
-        x: point.x + offset.x,
-        y: point.y + offset.y
-      }));
-      newConnectors.push(cloned);
-    });
-
-    const selectionResult = addEntities({ nodes: newNodes, connectors: newConnectors });
-    return Boolean(selectionResult.nodeIds.length || selectionResult.connectorIds.length);
-  }, [addEntities, commitEditingIfNeeded]);
 
   const beginTextEditing = useCallback(
     (nodeId: string, point?: { x: number; y: number }) => {
@@ -3135,26 +3291,6 @@ const CanvasComponent = (
       if (event.metaKey || event.ctrlKey) {
         const key = event.key.toLowerCase();
 
-        if (key === 'c') {
-          if (tool === 'select' && !editingNodeId) {
-            const copied = copySelection();
-            if (copied) {
-              event.preventDefault();
-            }
-          }
-          return;
-        }
-
-        if (key === 'v') {
-          if (tool === 'select' && !editingNodeId) {
-            const handled = pasteClipboard();
-            if (handled) {
-              event.preventDefault();
-            }
-          }
-          return;
-        }
-
         if (key === 'b') {
           if (singleNodeSelected && !editingNodeId) {
             event.preventDefault();
@@ -3252,8 +3388,7 @@ const CanvasComponent = (
     editingNodeId,
     beginTextEditing,
     commitEditingIfNeeded,
-    copySelection,
-    pasteClipboard
+    copySelection
   ]);
 
   const gridStyle = useMemo(() => {
