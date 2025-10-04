@@ -85,7 +85,7 @@ import { useCommands } from '../state/commands';
 import { useFloatingMenuStore } from '../state/menuStore';
 import { CaretPoint } from '../utils/text';
 import { ensureHttpProtocol } from '../utils/url';
-import { getImageDimensions, readFileAsDataUrl } from '../utils/image';
+import { fetchImageAsDataUrl, getImageDimensions, readFileAsDataUrl } from '../utils/image';
 import '../styles/canvas.css';
 
 // Allow users to comfortably view very large boards by permitting deeper zoom-outs.
@@ -803,6 +803,71 @@ const CanvasComponent = (
     return screenToWorld(0, 0, transform);
   }, [lastPointerPosition, transform]);
 
+  type ClipboardImageCandidate = {
+    source: string;
+    confidence: 'high' | 'medium' | 'low';
+  };
+
+  const extractImageSourceFromClipboard = useCallback(
+    (clipboardData: DataTransfer): ClipboardImageCandidate | null => {
+      const html = clipboardData.getData('text/html');
+      if (html) {
+        try {
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(html, 'text/html');
+          const img = doc.querySelector('img');
+          if (img?.src) {
+            return { source: img.src, confidence: 'high' };
+          }
+        } catch (error) {
+          // eslint-disable-next-line no-console
+          console.error('Failed to parse clipboard HTML', error);
+        }
+      }
+
+      const uriList = clipboardData.getData('text/uri-list');
+      if (uriList) {
+        const candidate = uriList.split('\n')[0]?.trim();
+        if (candidate) {
+          return { source: candidate, confidence: 'medium' };
+        }
+      }
+
+      const text = clipboardData.getData('text/plain');
+      if (text) {
+        return { source: text.trim(), confidence: 'low' };
+      }
+
+      return null;
+    },
+    []
+  );
+
+  const isImageSource = useCallback(({ confidence, source }: ClipboardImageCandidate): boolean => {
+    if (!source) {
+      return false;
+    }
+
+    if (source.startsWith('data:image/')) {
+      return true;
+    }
+
+    if (source.startsWith('http://') || source.startsWith('https://') || source.startsWith('blob:')) {
+      if (confidence === 'high') {
+        return true;
+      }
+
+      try {
+        const url = new URL(source);
+        return /\.(png|jpe?g|gif|bmp|webp|svg)$/i.test(url.pathname);
+      } catch (error) {
+        return false;
+      }
+    }
+
+    return false;
+  }, []);
+
   useEffect(() => {
     const handlePaste = async (event: ClipboardEvent) => {
       const active = document.activeElement as HTMLElement | null;
@@ -821,20 +886,35 @@ const CanvasComponent = (
       const imageItem = Array.from(clipboardData.items).find(
         (item) => item.kind === 'file' && item.type.startsWith('image/')
       );
-      if (!imageItem) {
-        return;
-      }
+      const file = imageItem?.getAsFile();
+      const imageSource = !file ? extractImageSourceFromClipboard(clipboardData) : null;
 
-      const file = imageItem.getAsFile();
       if (!file) {
-        return;
+        if (!imageSource) {
+          return;
+        }
+
+        if (!isImageSource(imageSource)) {
+          return;
+        }
       }
 
       event.preventDefault();
 
       try {
         const worldPoint = getPasteWorldPoint();
-        const dataUrl = await readFileAsDataUrl(file);
+        let dataUrl: string;
+
+        if (file) {
+          dataUrl = await readFileAsDataUrl(file);
+        } else if (imageSource?.source.startsWith('data:image/')) {
+          dataUrl = imageSource.source;
+        } else if (imageSource) {
+          dataUrl = await fetchImageAsDataUrl(imageSource.source);
+        } else {
+          return;
+        }
+
         await createImageNode(dataUrl, worldPoint);
       } catch (error) {
         // eslint-disable-next-line no-console
@@ -846,7 +926,7 @@ const CanvasComponent = (
     return () => {
       window.removeEventListener('paste', handlePaste);
     };
-  }, [createImageNode, getPasteWorldPoint]);
+  }, [createImageNode, extractImageSourceFromClipboard, getPasteWorldPoint, isImageSource]);
 
   const selectedNodes = useMemo(
     () => nodes.filter((node) => selectedNodeIds.includes(node.id)),
