@@ -7,6 +7,7 @@ interface DiagramNodeProps {
   selected: boolean;
   hovered: boolean;
   tool: Tool;
+  showConnectorHandles?: boolean;
   editing: boolean;
   onPointerDown: (event: React.PointerEvent<SVGGElement>) => void;
   onPointerUp: (event: React.PointerEvent<SVGGElement>) => void;
@@ -80,6 +81,7 @@ export const DiagramNode: React.FC<DiagramNodeProps> = ({
   selected,
   hovered,
   tool,
+  showConnectorHandles = true,
   editing,
   onPointerDown,
   onPointerUp,
@@ -105,7 +107,8 @@ export const DiagramNode: React.FC<DiagramNodeProps> = ({
     className: 'diagram-node__outline'
   });
 
-  const cursor = tool === 'connector' ? 'crosshair' : 'move';
+  const isConnectorTool = tool === 'connector';
+  const cursor = isConnectorTool ? 'crosshair' : 'move';
 
   const connectorHandleOffset = 20;
   const connectorAnchors = getConnectorPortPositions(node);
@@ -189,7 +192,7 @@ export const DiagramNode: React.FC<DiagramNodeProps> = ({
         <DiagramNodeImage node={node} />
       )}
       {outlineElement}
-      {tool === 'connector' && (
+      {isConnectorTool && showConnectorHandles && (
         <g className="diagram-node__connector-handles">
           {connectorHandles.map((handle) => (
             <circle

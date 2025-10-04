@@ -3560,6 +3560,7 @@ const CanvasComponent = (
               selected={selectedNodeIds.includes(node.id)}
               hovered={hoveredNodeId === node.id}
               tool={tool as Tool}
+              showConnectorHandles={pendingConnection === null}
               editing={editingNodeId === node.id}
               onPointerDown={(event) => handleNodePointerDown(event, node)}
               onPointerUp={(event) => handleNodePointerUp(event, node)}
