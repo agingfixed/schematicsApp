@@ -112,6 +112,7 @@ interface SceneStoreActions {
   replaceScene: (scene: SceneContent, options?: ReplaceSceneOptions) => void;
   resetScene: () => void;
   addDrawing: (stroke: DrawStroke) => void;
+  removeDrawings: (ids: string[]) => void;
 }
 
 export type SceneStore = SceneStoreState & SceneStoreActions;
@@ -872,6 +873,23 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
         ...stroke,
         points: stroke.points.map((point) => ({ ...point }))
       });
+
+      return withSceneChange(current, scene);
+    }),
+  removeDrawings: (ids) =>
+    set((current) => {
+      if (!ids.length) {
+        return {};
+      }
+
+      const toRemove = new Set(ids);
+      const existing = current.scene.drawings;
+      if (!existing.some((stroke) => toRemove.has(stroke.id))) {
+        return {};
+      }
+
+      const scene = cloneScene(current.scene);
+      scene.drawings = scene.drawings.filter((stroke) => !toRemove.has(stroke.id));
 
       return withSceneChange(current, scene);
     })

@@ -445,6 +445,51 @@ const buildStrokePath = (points: Vec2[]) => {
 
 const distanceBetweenPoints = (a: Vec2, b: Vec2) => Math.hypot(a.x - b.x, a.y - b.y);
 
+const distanceFromPointToSegment = (point: Vec2, start: Vec2, end: Vec2) => {
+  const segmentX = end.x - start.x;
+  const segmentY = end.y - start.y;
+  const lengthSquared = segmentX * segmentX + segmentY * segmentY;
+
+  if (lengthSquared === 0) {
+    return distanceBetweenPoints(point, start);
+  }
+
+  const t = clamp(
+    ((point.x - start.x) * segmentX + (point.y - start.y) * segmentY) / lengthSquared,
+    0,
+    1
+  );
+
+  const projection = {
+    x: start.x + t * segmentX,
+    y: start.y + t * segmentY
+  };
+
+  return distanceBetweenPoints(point, projection);
+};
+
+const isPointNearStroke = (point: Vec2, stroke: DrawStroke, radius: number) => {
+  const effectiveRadius = Math.max(radius, stroke.size * 0.5 + 2);
+  const { points } = stroke;
+  if (!points.length) {
+    return false;
+  }
+
+  for (const sample of points) {
+    if (distanceBetweenPoints(point, sample) <= effectiveRadius) {
+      return true;
+    }
+  }
+
+  for (let index = 0; index < points.length - 1; index += 1) {
+    if (distanceFromPointToSegment(point, points[index], points[index + 1]) <= effectiveRadius) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
 const CanvasComponent = (
   { onTransformChange, onViewportChange }: CanvasProps,
   ref: ForwardedRef<CanvasHandle>
@@ -498,6 +543,7 @@ const CanvasComponent = (
   const equalizeSpacing = useSceneStore((state) => state.equalizeSpacing);
   const setNodeLink = useSceneStore((state) => state.setNodeLink);
   const addDrawing = useSceneStore((state) => state.addDrawing);
+  const removeDrawings = useSceneStore((state) => state.removeDrawings);
   const drawSettings = useDrawStore(selectDrawSettings);
   const isDrawToolActive = tool === 'draw';
   const { applyStyles, setText } = useCommands();
@@ -545,6 +591,7 @@ const CanvasComponent = (
   const connectorLabelEntryPointRef = useRef<CaretPoint | null>(null);
   const drawingSurfaceRef = useRef<HTMLDivElement | null>(null);
   const drawingStateRef = useRef<{ pointerId: number; stroke: DrawStroke } | null>(null);
+  const erasingPointerRef = useRef<number | null>(null);
   const [liveStroke, setLiveStroke] = useState<DrawStroke | null>(null);
   const clearFloatingMenuPlacement = useFloatingMenuStore((state) => state.clearSharedPlacement);
   const hadFloatingMenuRef = useRef(false);
@@ -961,6 +1008,28 @@ const CanvasComponent = (
     }
   }, [editingConnectorId, editingNodeId]);
 
+  const eraseAtPoint = useCallback(
+    (worldPoint: Vec2) => {
+      if (!drawings.length) {
+        return;
+      }
+
+      const radius = Math.max(drawSettings.size, 8);
+      const toRemove: string[] = [];
+
+      drawings.forEach((stroke) => {
+        if (isPointNearStroke(worldPoint, stroke, radius)) {
+          toRemove.push(stroke.id);
+        }
+      });
+
+      if (toRemove.length) {
+        removeDrawings(toRemove);
+      }
+    },
+    [drawSettings.size, drawings, removeDrawings]
+  );
+
   const finishDrawing = useCallback(
     (pointerId: number, commit: boolean) => {
       const active = drawingStateRef.current;
@@ -1001,6 +1070,16 @@ const CanvasComponent = (
     commitEditingIfNeeded();
 
     const worldPoint = getWorldPoint(event);
+    const surface = drawingSurfaceRef.current;
+
+    if (drawSettings.mode === 'erase') {
+      erasingPointerRef.current = event.pointerId;
+      surface?.setPointerCapture(event.pointerId);
+      eraseAtPoint(worldPoint);
+      setLiveStroke(null);
+      return;
+    }
+
     const size = Math.max(1, Math.min(drawSettings.size, 64));
     const stroke: DrawStroke = {
       id: nanoid(),
@@ -1013,11 +1092,18 @@ const CanvasComponent = (
     drawingStateRef.current = { pointerId: event.pointerId, stroke };
     setLiveStroke(stroke);
 
-    const surface = drawingSurfaceRef.current;
     surface?.setPointerCapture(event.pointerId);
   };
 
   const handleDrawingPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (erasingPointerRef.current === event.pointerId) {
+      event.preventDefault();
+      event.stopPropagation();
+      const worldPoint = getWorldPoint(event);
+      eraseAtPoint(worldPoint);
+      return;
+    }
+
     const active = drawingStateRef.current;
     if (!active || active.pointerId !== event.pointerId) {
       return;
@@ -1042,6 +1128,19 @@ const CanvasComponent = (
   };
 
   const handleDrawingPointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (erasingPointerRef.current === event.pointerId) {
+      event.preventDefault();
+      event.stopPropagation();
+
+      const surface = drawingSurfaceRef.current;
+      if (surface && surface.hasPointerCapture(event.pointerId)) {
+        surface.releasePointerCapture(event.pointerId);
+      }
+
+      erasingPointerRef.current = null;
+      return;
+    }
+
     const active = drawingStateRef.current;
     if (!active || active.pointerId !== event.pointerId) {
       return;
@@ -1053,6 +1152,16 @@ const CanvasComponent = (
   };
 
   const handleDrawingPointerCancel = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (erasingPointerRef.current === event.pointerId) {
+      const surface = drawingSurfaceRef.current;
+      if (surface && surface.hasPointerCapture(event.pointerId)) {
+        surface.releasePointerCapture(event.pointerId);
+      }
+
+      erasingPointerRef.current = null;
+      return;
+    }
+
     const active = drawingStateRef.current;
     if (!active || active.pointerId !== event.pointerId) {
       return;

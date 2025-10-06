@@ -104,6 +104,14 @@ export const Toolbar: React.FC<ToolbarProps> = ({ canvasRef }) => {
     setTool(nextValue);
   };
 
+  const handleToolButtonClick = (id: Exclude<Tool, NodeTool>) => {
+    if (id === 'draw' && tool === 'draw') {
+      setTool('select');
+      return;
+    }
+    setTool(id);
+  };
+
   const handleZoom = (type: 'in' | 'out' | 'fit' | 'hundred') => {
     const canvas = canvasRef.current;
     if (!canvas) {
@@ -155,7 +163,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({ canvasRef }) => {
                   type="button"
                   className={`toolbar__button ${tool === button.id ? 'is-active' : ''}`}
                   aria-pressed={tool === button.id}
-                  onClick={() => setTool(button.id)}
+                  onClick={() => handleToolButtonClick(button.id)}
                   aria-label={`${button.label} tool${button.shortcut ? ` (${button.shortcut})` : ''}`}
                   data-tooltip={button.tooltip}
                 >
@@ -173,7 +181,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({ canvasRef }) => {
               type="button"
               className={`toolbar__button ${tool === button.id ? 'is-active' : ''}`}
               aria-pressed={tool === button.id}
-              onClick={() => setTool(button.id)}
+              onClick={() => handleToolButtonClick(button.id)}
               aria-label={`${button.label} tool${button.shortcut ? ` (${button.shortcut})` : ''}`}
               data-tooltip={button.tooltip}
             >
