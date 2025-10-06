@@ -115,12 +115,13 @@ export const BoardControls: React.FC = () => {
         typeof (parsed as { name?: unknown }).name === 'string'
           ? ((parsed as { name?: string }).name as string)
           : file.name;
-      const { normalized: normalizedImportedName } = deriveNameParts(rawImportedName);
-      const nextBoardName = normalizedImportedName.length > 0 ? normalizedImportedName : DEFAULT_BOARD_NAME;
+      const { normalized: normalizedImportedName, withoutExtension } = deriveNameParts(rawImportedName);
+      const nextBoardName = withoutExtension.length > 0 ? withoutExtension : DEFAULT_BOARD_NAME;
+      const nextDisplayName = normalizedImportedName.length > 0 ? normalizedImportedName : DEFAULT_BOARD_NAME;
 
       replaceScene(sceneData, { resetHistory: true, resetTransform: true });
       setBoardName(nextBoardName);
-      setStatus(`Loaded "${nextBoardName}" from file.`);
+      setStatus(`Loaded "${nextDisplayName}" from file.`);
     } catch (error) {
       console.error('Failed to import board', error);
       setStatus('Could not load the selected file.');
