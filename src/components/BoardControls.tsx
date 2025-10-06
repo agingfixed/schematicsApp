@@ -111,13 +111,24 @@ export const BoardControls: React.FC = () => {
         throw new Error('Invalid scene');
       }
 
-      const rawImportedName =
+      const uploadedFileNameParts = deriveNameParts(file.name);
+      const parsedSceneName =
         typeof (parsed as { name?: unknown }).name === 'string'
           ? ((parsed as { name?: string }).name as string)
-          : file.name;
-      const { normalized: normalizedImportedName, withoutExtension } = deriveNameParts(rawImportedName);
-      const nextBoardName = withoutExtension.length > 0 ? withoutExtension : DEFAULT_BOARD_NAME;
-      const nextDisplayName = normalizedImportedName.length > 0 ? normalizedImportedName : DEFAULT_BOARD_NAME;
+          : null;
+      const sceneNameParts = parsedSceneName ? deriveNameParts(parsedSceneName) : null;
+
+      const nextBoardName = uploadedFileNameParts.withoutExtension.length > 0
+        ? uploadedFileNameParts.withoutExtension
+        : sceneNameParts?.withoutExtension.length
+          ? sceneNameParts.withoutExtension
+          : DEFAULT_BOARD_NAME;
+
+      const nextDisplayName = sceneNameParts?.normalized.length
+        ? sceneNameParts.normalized
+        : uploadedFileNameParts.normalized.length
+          ? uploadedFileNameParts.normalized
+          : DEFAULT_BOARD_NAME;
 
       replaceScene(sceneData, { resetHistory: true, resetTransform: true });
       setBoardName(nextBoardName);
