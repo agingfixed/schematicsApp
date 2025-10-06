@@ -3,11 +3,22 @@ import { selectScene, useSceneStore } from '../state/sceneStore';
 import { SceneContent } from '../types/scene';
 import { cloneScene } from '../utils/scene';
 
+const INVALID_NAME_CHARACTERS = /[\\/:*?"<>|]/;
+const DEFAULT_BOARD_NAME = 'Untitled board';
+const DEFAULT_FILE_BASENAME = 'board';
+
+const deriveNameParts = (value: string) => {
+  const trimmed = value.trim();
+  const withoutExtension = trimmed.replace(/\.json$/i, '');
+  const normalized = withoutExtension.replace(/\s+/g, ' ').trim();
+  return { withoutExtension, normalized };
+};
+
 export const BoardControls: React.FC = () => {
   const scene = useSceneStore(selectScene);
   const replaceScene = useSceneStore((state) => state.replaceScene);
   const [status, setStatus] = useState<string | null>(null);
-  const [boardName, setBoardName] = useState('Untitled board');
+  const [boardName, setBoardName] = useState(DEFAULT_BOARD_NAME);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [isNoteOpen, setIsNoteOpen] = useState(false);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -17,20 +28,12 @@ export const BoardControls: React.FC = () => {
   const nameInputId = useId();
   const nameErrorId = useId();
 
-  const {
-    displayName,
-    downloadFileName,
-    isNameValid,
-    nameError
-  } = useMemo(() => {
-    const trimmed = boardName.trim();
-    const withoutExtension = trimmed.replace(/\.json$/i, '');
-    const normalized = withoutExtension.replace(/\s+/g, ' ').trim();
-    const invalidCharacterPattern = /[\\/:*?"<>|]/;
-    const hasInvalidCharacters = invalidCharacterPattern.test(withoutExtension);
+  const { displayName, downloadFileName, isNameValid, nameError } = useMemo(() => {
+    const { withoutExtension, normalized } = deriveNameParts(boardName);
+    const hasInvalidCharacters = INVALID_NAME_CHARACTERS.test(withoutExtension);
     const isValid = normalized.length > 0 && !hasInvalidCharacters;
-    const safeDisplayName = isValid ? normalized : 'Untitled board';
-    const fileBase = isValid ? normalized : 'board';
+    const safeDisplayName = isValid ? normalized : DEFAULT_BOARD_NAME;
+    const fileBase = isValid ? normalized : DEFAULT_FILE_BASENAME;
     const errorMessage = !normalized.length
       ? 'Enter a name before downloading.'
       : hasInvalidCharacters
@@ -108,14 +111,16 @@ export const BoardControls: React.FC = () => {
         throw new Error('Invalid scene');
       }
 
-      const importedName =
+      const rawImportedName =
         typeof (parsed as { name?: unknown }).name === 'string'
           ? ((parsed as { name?: string }).name as string)
-          : file.name.replace(/\.json$/i, '');
+          : file.name;
+      const { normalized: normalizedImportedName } = deriveNameParts(rawImportedName);
+      const nextBoardName = normalizedImportedName.length > 0 ? normalizedImportedName : DEFAULT_BOARD_NAME;
 
       replaceScene(sceneData, { resetHistory: true, resetTransform: true });
-      setBoardName(importedName || 'Untitled board');
-      setStatus(`Loaded "${importedName}" from file.`);
+      setBoardName(nextBoardName);
+      setStatus(`Loaded "${nextBoardName}" from file.`);
     } catch (error) {
       console.error('Failed to import board', error);
       setStatus('Could not load the selected file.');
