@@ -5,6 +5,7 @@
   padding: 16px;
   gap: 16px;
   position: relative;
+  min-height: 100vh;
 }
 
 .toolbar {
@@ -205,6 +206,9 @@
   display: flex;
   flex: 1;
   min-height: 0;
+  gap: 24px;
+  align-items: stretch;
+  height: 100%;
 }
 
 .workspace__main {
@@ -214,6 +218,19 @@
   flex: 1;
   min-height: 0;
   min-width: 0;
+  min-height: clamp(360px, calc(100vh - 220px), 100%);
+}
+
+.workspace__draw-menu {
+  position: absolute;
+  left: 16px;
+  top: 16px;
+  z-index: 4;
+  pointer-events: none;
+}
+
+.workspace__draw-menu .draw-menu {
+  pointer-events: auto;
 }
 
 .workspace__status {

@@ -5,9 +5,11 @@ import { MiniMap } from './components/MiniMap';
 import {
   selectScene,
   selectShowMiniMap,
+  selectTool,
   selectTransform,
   useSceneStore
 } from './state/sceneStore';
+import { DrawMenu } from './components/DrawMenu';
 import { BoardControls } from './components/BoardControls';
 import './App.css';
 
@@ -15,16 +17,21 @@ export const App: React.FC = () => {
   const canvasRef = useRef<CanvasHandle>(null);
   const [viewport, setViewport] = useState<{ width: number; height: number }>({ width: 0, height: 0 });
   const showMiniMap = useSceneStore(selectShowMiniMap);
+  const tool = useSceneStore(selectTool);
   const transform = useSceneStore(selectTransform);
   const scene = useSceneStore(selectScene);
 
   const nodeCount = scene.nodes.length;
   const connectorCount = scene.connectors.length;
+  const drawingCount = scene.drawings.length;
 
-  const statusText = useMemo(
-    () => `${nodeCount} nodes · ${connectorCount} connectors`,
-    [nodeCount, connectorCount]
-  );
+  const statusText = useMemo(() => {
+    const parts = [`${nodeCount} nodes`, `${connectorCount} connectors`];
+    if (drawingCount) {
+      parts.push(`${drawingCount} drawings`);
+    }
+    return parts.join(' · ');
+  }, [nodeCount, connectorCount, drawingCount]);
 
   return (
     <div className="app-shell">
@@ -32,6 +39,11 @@ export const App: React.FC = () => {
       <Toolbar canvasRef={canvasRef} />
       <div className="workspace">
         <div className="workspace__main">
+          {tool === 'draw' && (
+            <div className="workspace__draw-menu">
+              <DrawMenu />
+            </div>
+          )}
           <Canvas ref={canvasRef} onViewportChange={setViewport} />
           <div className="workspace__status">{statusText}</div>
           {showMiniMap && (

@@ -1,6 +1,7 @@
 import { nanoid } from 'nanoid';
 import {
   CanvasTransform,
+  DrawStroke,
   NodeImageData,
   NodeKind,
   NodeModel,
@@ -163,6 +164,11 @@ const defaultLabel = (type: NodeKind) => {
   return type.charAt(0).toUpperCase() + type.slice(1);
 };
 
+const cloneDrawStroke = (stroke: DrawStroke): DrawStroke => ({
+  ...stroke,
+  points: stroke.points.map((point) => ({ ...point }))
+});
+
 export const cloneScene = (scene: SceneContent): SceneContent => ({
   nodes: scene.nodes.map((node) => ({
     ...node,
@@ -181,7 +187,8 @@ export const cloneScene = (scene: SceneContent): SceneContent => ({
     labelStyle: connector.labelStyle ? { ...connector.labelStyle } : undefined,
     endpointStyles: cloneConnectorEndpointStyles(connector.endpointStyles),
     points: connector.points?.map((point) => ({ ...point }))
-  }))
+  })),
+  drawings: (scene.drawings ?? []).map((stroke) => cloneDrawStroke(stroke))
 });
 
 export const snapToGrid = (value: number, gridSize = GRID_SIZE): number =>
@@ -230,9 +237,7 @@ export const getSceneBounds = (scene: SceneContent, nodeIds?: string[]): Bounds 
     ? scene.nodes.filter((node) => nodeIds.includes(node.id))
     : scene.nodes;
 
-  if (!nodes.length) {
-    return null;
-  }
+  const drawings = scene.drawings ?? [];
 
   const initial = {
     minX: Number.POSITIVE_INFINITY,
@@ -241,13 +246,39 @@ export const getSceneBounds = (scene: SceneContent, nodeIds?: string[]): Bounds 
     maxY: Number.NEGATIVE_INFINITY
   };
 
-  const bounds = nodes.reduce((acc, node) => {
+  const boundsFromNodes = nodes.reduce((acc, node) => {
     acc.minX = Math.min(acc.minX, node.position.x);
     acc.minY = Math.min(acc.minY, node.position.y);
     acc.maxX = Math.max(acc.maxX, node.position.x + node.size.width);
     acc.maxY = Math.max(acc.maxY, node.position.y + node.size.height);
     return acc;
   }, initial);
+
+  const bounds = drawings.reduce((acc, stroke) => {
+    stroke.points.forEach((point) => {
+      acc.minX = Math.min(acc.minX, point.x);
+      acc.minY = Math.min(acc.minY, point.y);
+      acc.maxX = Math.max(acc.maxX, point.x);
+      acc.maxY = Math.max(acc.maxY, point.y);
+    });
+    return acc;
+  }, boundsFromNodes);
+
+  const hasContent =
+    nodes.length > 0 || drawings.some((stroke) => stroke.points && stroke.points.length > 0);
+
+  if (!hasContent) {
+    return null;
+  }
+
+  if (
+    bounds.minX === Number.POSITIVE_INFINITY ||
+    bounds.minY === Number.POSITIVE_INFINITY ||
+    bounds.maxX === Number.NEGATIVE_INFINITY ||
+    bounds.maxY === Number.NEGATIVE_INFINITY
+  ) {
+    return null;
+  }
 
   return bounds;
 };

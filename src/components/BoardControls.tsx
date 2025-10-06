@@ -61,7 +61,11 @@ export const BoardControls: React.FC = () => {
       return false;
     }
     const candidate = value as SceneContent;
-    return Array.isArray(candidate.nodes) && Array.isArray(candidate.connectors);
+    const hasNodes = Array.isArray(candidate.nodes);
+    const hasConnectors = Array.isArray(candidate.connectors);
+    const hasValidDrawings =
+      !('drawings' in candidate) || Array.isArray((candidate as { drawings?: unknown }).drawings);
+    return hasNodes && hasConnectors && hasValidDrawings;
   };
 
   const handleExport = () => {
@@ -130,7 +134,12 @@ export const BoardControls: React.FC = () => {
           ? uploadedFileNameParts.normalized
           : DEFAULT_BOARD_NAME;
 
-      replaceScene(sceneData, { resetHistory: true, resetTransform: true });
+      const normalizedScene: SceneContent = {
+        ...sceneData,
+        drawings: Array.isArray(sceneData.drawings) ? sceneData.drawings : []
+      };
+
+      replaceScene(normalizedScene, { resetHistory: true, resetTransform: true });
       setBoardName(nextBoardName);
       setStatus(`Loaded "${nextDisplayName}" from file.`);
     } catch (error) {
