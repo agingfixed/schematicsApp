@@ -1,4 +1,4 @@
-import React, { useEffect, useId, useRef, useState } from 'react';
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { selectScene, useSceneStore } from '../state/sceneStore';
 import { SceneContent } from '../types/scene';
 import { cloneScene } from '../utils/scene';
@@ -7,13 +7,43 @@ export const BoardControls: React.FC = () => {
   const scene = useSceneStore(selectScene);
   const replaceScene = useSceneStore((state) => state.replaceScene);
   const [status, setStatus] = useState<string | null>(null);
-  const [lastBoardName, setLastBoardName] = useState('Untitled board');
+  const [boardName, setBoardName] = useState('Untitled board');
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [isNoteOpen, setIsNoteOpen] = useState(false);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   const noteTitleId = useId();
   const noteDescriptionId = useId();
   const noteDialogId = useId();
+  const nameInputId = useId();
+  const nameErrorId = useId();
+
+  const {
+    displayName,
+    downloadFileName,
+    isNameValid,
+    nameError
+  } = useMemo(() => {
+    const trimmed = boardName.trim();
+    const withoutExtension = trimmed.replace(/\.json$/i, '');
+    const normalized = withoutExtension.replace(/\s+/g, ' ').trim();
+    const invalidCharacterPattern = /[\\/:*?"<>|]/;
+    const hasInvalidCharacters = invalidCharacterPattern.test(withoutExtension);
+    const isValid = normalized.length > 0 && !hasInvalidCharacters;
+    const safeDisplayName = isValid ? normalized : 'Untitled board';
+    const fileBase = isValid ? normalized : 'board';
+    const errorMessage = !normalized.length
+      ? 'Enter a name before downloading.'
+      : hasInvalidCharacters
+        ? 'Name cannot include \\ / : * ? " < > | characters.'
+        : null;
+
+    return {
+      displayName: safeDisplayName,
+      downloadFileName: `${fileBase}.json`,
+      isNameValid: isValid,
+      nameError: errorMessage
+    };
+  }, [boardName]);
 
   useEffect(() => {
     if (!status) {
@@ -22,13 +52,6 @@ export const BoardControls: React.FC = () => {
     const timeout: ReturnType<typeof setTimeout> = setTimeout(() => setStatus(null), 2400);
     return () => clearTimeout(timeout);
   }, [status]);
-
-  const sanitizeFileName = (name: string) => {
-    const fallback = 'board';
-    const trimmed = name.trim().toLowerCase();
-    const slug = trimmed.replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-    return slug || fallback;
-  };
 
   const isSceneContent = (value: unknown): value is SceneContent => {
     if (!value || typeof value !== 'object') {
@@ -39,7 +62,12 @@ export const BoardControls: React.FC = () => {
   };
 
   const handleExport = () => {
-    const exportName = lastBoardName.trim() ? lastBoardName.trim() : 'Untitled board';
+    if (!isNameValid) {
+      setStatus('Please provide a valid file name before downloading.');
+      return;
+    }
+
+    const exportName = displayName;
     const payload = {
       name: exportName,
       scene: cloneScene(scene),
@@ -49,7 +77,7 @@ export const BoardControls: React.FC = () => {
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
     anchor.href = url;
-    anchor.download = `${sanitizeFileName(exportName)}.json`;
+    anchor.download = downloadFileName;
     document.body.appendChild(anchor);
     anchor.click();
     anchor.remove();
@@ -86,7 +114,7 @@ export const BoardControls: React.FC = () => {
           : file.name.replace(/\.json$/i, '');
 
       replaceScene(sceneData, { resetHistory: true, resetTransform: true });
-      setLastBoardName(importedName || 'Untitled board');
+      setBoardName(importedName || 'Untitled board');
       setStatus(`Loaded "${importedName}" from file.`);
     } catch (error) {
       console.error('Failed to import board', error);
@@ -148,13 +176,36 @@ export const BoardControls: React.FC = () => {
         </button>
       </div>
       <div className="board-controls__group board-controls__group--actions">
-        <button type="button" className="board-controls__button" onClick={handleExport}>
+        <label className="board-controls__name-field" htmlFor={nameInputId}>
+          <span className="board-controls__name-label">File name</span>
+          <input
+            id={nameInputId}
+            className={`board-controls__name-input${nameError ? ' board-controls__name-input--invalid' : ''}`}
+            type="text"
+            value={boardName}
+            onChange={(event) => setBoardName(event.target.value)}
+            aria-invalid={Boolean(nameError)}
+            aria-describedby={nameError ? nameErrorId : undefined}
+            placeholder="Untitled board"
+          />
+        </label>
+        <button
+          type="button"
+          className="board-controls__button"
+          onClick={handleExport}
+          disabled={!isNameValid}
+        >
           Download
         </button>
         <button type="button" className="board-controls__button" onClick={handleImportClick}>
           Upload
         </button>
       </div>
+      {nameError && (
+        <p id={nameErrorId} className="board-controls__name-error">
+          {nameError}
+        </p>
+      )}
       <input
         ref={fileInputRef}
         type="file"

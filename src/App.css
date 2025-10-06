@@ -380,6 +380,50 @@
 
 .board-controls__group--actions {
   margin-left: auto;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.board-controls__name-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 180px;
+}
+
+.board-controls__name-label {
+  font-size: 12px;
+  color: rgba(226, 232, 240, 0.82);
+  font-weight: 500;
+}
+
+.board-controls__name-input {
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 10px;
+  padding: 8px 12px;
+  background: rgba(15, 23, 42, 0.65);
+  color: #e2e8f0;
+  font-size: 14px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.board-controls__name-input:focus-visible {
+  outline: none;
+  border-color: rgba(96, 165, 250, 0.6);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25);
+}
+
+.board-controls__name-input--invalid {
+  border-color: rgba(248, 113, 113, 0.75);
+}
+
+.board-controls__name-error {
+  width: 100%;
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 12px;
+  color: rgba(248, 113, 113, 0.85);
+  text-align: right;
 }
 
 .board-controls__icon-button {
