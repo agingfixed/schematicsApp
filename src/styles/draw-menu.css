@@ -1,0 +1,235 @@
+.draw-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  width: 230px;
+  padding: 18px;
+  border-radius: 20px;
+  background: rgba(15, 23, 42, 0.82);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  box-shadow: 0 18px 40px rgba(2, 6, 23, 0.45);
+  color: #e2e8f0;
+  font-family: inherit;
+  backdrop-filter: blur(14px);
+}
+
+.draw-menu__tool {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: none;
+  border-radius: 16px;
+  padding: 12px 14px;
+  background: rgba(30, 41, 59, 0.65);
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.2s ease, transform 0.12s ease, box-shadow 0.2s ease;
+}
+
+.draw-menu__tool.is-active {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.35), rgba(14, 165, 233, 0.35));
+  box-shadow: 0 12px 32px rgba(59, 130, 246, 0.35);
+}
+
+.draw-menu__tool:focus-visible,
+.draw-menu__tool:hover {
+  outline: none;
+  background: rgba(37, 99, 235, 0.45);
+}
+
+.draw-menu__tool-icon {
+  font-size: 24px;
+  line-height: 1;
+}
+
+.draw-menu__tool-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.draw-menu__tool-title {
+  font-weight: 600;
+  font-size: 16px;
+}
+
+.draw-menu__tool-subtitle {
+  font-size: 13px;
+  color: rgba(226, 232, 240, 0.75);
+}
+
+.draw-menu__section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.draw-menu__label {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(148, 163, 184, 0.9);
+}
+
+.draw-menu__chips {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.draw-menu__chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(30, 41, 59, 0.6);
+  border: 1px solid transparent;
+  border-radius: 14px;
+  padding: 10px 12px;
+  color: inherit;
+  cursor: pointer;
+  transition: border 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.draw-menu__chip:hover,
+.draw-menu__chip:focus-visible {
+  outline: none;
+  border-color: rgba(59, 130, 246, 0.5);
+}
+
+.draw-menu__chip.is-active {
+  border-color: rgba(59, 130, 246, 0.85);
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.28), rgba(14, 165, 233, 0.24));
+  box-shadow: 0 10px 28px rgba(59, 130, 246, 0.32);
+}
+
+.draw-menu__chip-icon {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.draw-menu__chip-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.draw-menu__chip-label {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.draw-menu__chip-description {
+  font-size: 12px;
+  color: rgba(226, 232, 240, 0.7);
+}
+
+.draw-menu__sizes {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.draw-menu__size {
+  width: 40px;
+  height: 40px;
+  border-radius: 14px;
+  border: 1px solid transparent;
+  background: rgba(30, 41, 59, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: border 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.draw-menu__size-dot {
+  display: inline-block;
+  border-radius: 999px;
+  background: currentColor;
+  transition: transform 0.2s ease;
+}
+
+.draw-menu__size.is-active {
+  border-color: rgba(59, 130, 246, 0.85);
+  background: rgba(37, 99, 235, 0.35);
+  box-shadow: 0 10px 28px rgba(59, 130, 246, 0.32);
+}
+
+.draw-menu__size.is-active .draw-menu__size-dot {
+  transform: scale(1.05);
+}
+
+.draw-menu__current {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: rgba(226, 232, 240, 0.85);
+}
+
+.draw-menu__current-swatch {
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  border: 1px solid rgba(15, 23, 42, 0.6);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.45);
+}
+
+.draw-menu__colors {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.draw-menu__color {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.2s ease, border 0.2s ease;
+}
+
+.draw-menu__color:hover,
+.draw-menu__color:focus-visible {
+  outline: none;
+  transform: translateY(-2px);
+}
+
+.draw-menu__color.is-active {
+  border-color: rgba(59, 130, 246, 0.85);
+  box-shadow: 0 8px 18px rgba(59, 130, 246, 0.35);
+}
+
+.draw-menu__color--dropper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(30, 41, 59, 0.75);
+  color: rgba(226, 232, 240, 0.85);
+}
+
+.draw-menu__color--dropper:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.draw-menu__dropper-icon {
+  width: 18px;
+  height: 18px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

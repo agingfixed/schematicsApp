@@ -2,6 +2,7 @@ import React, { useMemo, useRef, useState } from 'react';
 import { Canvas, CanvasHandle } from './components/Canvas';
 import { Toolbar } from './components/Toolbar';
 import { MiniMap } from './components/MiniMap';
+import { DrawMenu } from './components/DrawMenu';
 import {
   selectScene,
   selectShowMiniMap,
@@ -20,17 +21,24 @@ export const App: React.FC = () => {
 
   const nodeCount = scene.nodes.length;
   const connectorCount = scene.connectors.length;
+  const drawingCount = scene.drawings.length;
 
-  const statusText = useMemo(
-    () => `${nodeCount} nodes · ${connectorCount} connectors`,
-    [nodeCount, connectorCount]
-  );
+  const statusText = useMemo(() => {
+    const parts = [`${nodeCount} nodes`, `${connectorCount} connectors`];
+    if (drawingCount) {
+      parts.push(`${drawingCount} drawings`);
+    }
+    return parts.join(' · ');
+  }, [nodeCount, connectorCount, drawingCount]);
 
   return (
     <div className="app-shell">
       <BoardControls />
       <Toolbar canvasRef={canvasRef} />
       <div className="workspace">
+        <div className="workspace__sidebar">
+          <DrawMenu />
+        </div>
         <div className="workspace__main">
           <Canvas ref={canvasRef} onViewportChange={setViewport} />
           <div className="workspace__status">{statusText}</div>

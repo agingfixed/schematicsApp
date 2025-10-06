@@ -17,6 +17,7 @@ import {
   ConnectorEndpoint,
   ConnectorEndpointCap,
   ConnectorModel,
+  DrawStroke,
   NodeKind,
   NodeModel,
   SelectionState,
@@ -55,6 +56,7 @@ import {
 } from '../utils/connector';
 import {
   selectConnectors,
+  selectDrawings,
   selectEditingNodeId,
   selectGridVisible,
   selectNodes,
@@ -63,6 +65,7 @@ import {
   selectTool,
   useSceneStore
 } from '../state/sceneStore';
+import { selectDrawSettings, useDrawStore } from '../state/drawStore';
 import {
   ActiveSnapMatches,
   DistanceBadge as SnapDistanceBadge,
@@ -146,6 +149,12 @@ const clampConnectorLabelRadius = (value: number) =>
   Math.max(0, Math.min(MAX_CONNECTOR_LABEL_DISTANCE, Math.abs(value)));
 
 const CONNECTOR_SNAP_RATIO = 0.5;
+const DRAW_SAMPLE_DISTANCE = 1;
+const DRAW_STYLE_OPACITY: Record<DrawStroke['style'], number> = {
+  pen: 1,
+  marker: 0.65,
+  highlighter: 0.35
+};
 
 interface ConnectorSnapTargets {
   x: number[];
@@ -422,6 +431,20 @@ const RESIZE_HANDLES: Array<{ key: ResizeHandle; x: number; y: number; cursor: s
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
+const buildStrokePath = (points: Vec2[]) => {
+  if (!points.length) {
+    return '';
+  }
+  const [first, ...rest] = points;
+  let path = `M ${first.x} ${first.y}`;
+  rest.forEach((point) => {
+    path += ` L ${point.x} ${point.y}`;
+  });
+  return path;
+};
+
+const distanceBetweenPoints = (a: Vec2, b: Vec2) => Math.hypot(a.x - b.x, a.y - b.y);
+
 const CanvasComponent = (
   { onTransformChange, onViewportChange }: CanvasProps,
   ref: ForwardedRef<CanvasHandle>
@@ -452,6 +475,7 @@ const CanvasComponent = (
 
   const nodes = useSceneStore(selectNodes);
   const connectors = useSceneStore(selectConnectors);
+  const drawings = useSceneStore(selectDrawings);
   const selection = useSceneStore(selectSelection);
   const tool = useSceneStore(selectTool);
   const gridVisible = useSceneStore(selectGridVisible);
@@ -473,6 +497,9 @@ const CanvasComponent = (
   const setEditingNode = useSceneStore((state) => state.setEditingNode);
   const equalizeSpacing = useSceneStore((state) => state.equalizeSpacing);
   const setNodeLink = useSceneStore((state) => state.setNodeLink);
+  const addDrawing = useSceneStore((state) => state.addDrawing);
+  const drawSettings = useDrawStore(selectDrawSettings);
+  const isDrawToolActive = tool === 'draw';
   const { applyStyles, setText } = useCommands();
 
   const selectedNodeIds = selection.nodeIds;
@@ -516,6 +543,9 @@ const CanvasComponent = (
   const connectorLabelToolbarInteractionRef = useRef(false);
   const selectionToolbarInteractionRef = useRef(false);
   const connectorLabelEntryPointRef = useRef<CaretPoint | null>(null);
+  const drawingSurfaceRef = useRef<HTMLDivElement | null>(null);
+  const drawingStateRef = useRef<{ pointerId: number; stroke: DrawStroke } | null>(null);
+  const [liveStroke, setLiveStroke] = useState<DrawStroke | null>(null);
   const clearFloatingMenuPlacement = useFloatingMenuStore((state) => state.clearSharedPlacement);
   const hadFloatingMenuRef = useRef(false);
   const imageFileInputRef = useRef<HTMLInputElement | null>(null);
@@ -930,6 +960,135 @@ const CanvasComponent = (
       inlineEditorRef.current?.commit();
     }
   }, [editingConnectorId, editingNodeId]);
+
+  const finishDrawing = useCallback(
+    (pointerId: number, commit: boolean) => {
+      const active = drawingStateRef.current;
+      if (!active || active.pointerId !== pointerId) {
+        return;
+      }
+
+      drawingStateRef.current = null;
+
+      const surface = drawingSurfaceRef.current;
+      if (surface && surface.hasPointerCapture(pointerId)) {
+        surface.releasePointerCapture(pointerId);
+      }
+
+      if (commit && active.stroke.points.length) {
+        const strokeToCommit =
+          active.stroke.points.length >= 2
+            ? active.stroke
+            : {
+                ...active.stroke,
+                points: [...active.stroke.points, { ...active.stroke.points[0] }]
+              };
+        addDrawing(strokeToCommit);
+      }
+
+      setLiveStroke(null);
+    },
+    [addDrawing]
+  );
+
+  const handleDrawingPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (tool !== 'draw' || event.button !== 0) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    commitEditingIfNeeded();
+
+    const worldPoint = getWorldPoint(event);
+    const size = Math.max(1, Math.min(drawSettings.size, 64));
+    const stroke: DrawStroke = {
+      id: nanoid(),
+      style: drawSettings.style,
+      color: drawSettings.color,
+      size,
+      points: [worldPoint]
+    };
+
+    drawingStateRef.current = { pointerId: event.pointerId, stroke };
+    setLiveStroke(stroke);
+
+    const surface = drawingSurfaceRef.current;
+    surface?.setPointerCapture(event.pointerId);
+  };
+
+  const handleDrawingPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const active = drawingStateRef.current;
+    if (!active || active.pointerId !== event.pointerId) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const worldPoint = getWorldPoint(event);
+    const points = active.stroke.points;
+    const lastPoint = points[points.length - 1];
+    if (lastPoint && distanceBetweenPoints(lastPoint, worldPoint) < DRAW_SAMPLE_DISTANCE) {
+      return;
+    }
+
+    const nextStroke: DrawStroke = {
+      ...active.stroke,
+      points: [...points, worldPoint]
+    };
+    drawingStateRef.current = { pointerId: active.pointerId, stroke: nextStroke };
+    setLiveStroke(nextStroke);
+  };
+
+  const handleDrawingPointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
+    const active = drawingStateRef.current;
+    if (!active || active.pointerId !== event.pointerId) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    finishDrawing(event.pointerId, true);
+  };
+
+  const handleDrawingPointerCancel = (event: React.PointerEvent<HTMLDivElement>) => {
+    const active = drawingStateRef.current;
+    if (!active || active.pointerId !== event.pointerId) {
+      return;
+    }
+    finishDrawing(event.pointerId, false);
+  };
+
+  const renderStroke = useCallback(
+    (stroke: DrawStroke, key: string) => {
+      const path = buildStrokePath(stroke.points);
+      if (!path) {
+        return null;
+      }
+
+      const opacity = DRAW_STYLE_OPACITY[stroke.style] ?? 1;
+      const blendStyle =
+        stroke.style === 'highlighter'
+          ? ({ mixBlendMode: 'multiply' } as React.CSSProperties)
+          : undefined;
+
+      return (
+        <path
+          key={key}
+          d={path}
+          stroke={stroke.color}
+          strokeWidth={stroke.size}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          fill="none"
+          strokeOpacity={opacity}
+          style={blendStyle}
+        />
+      );
+    },
+    []
+  );
 
   const pasteClipboard = useCallback(() => {
     const clipboard = clipboardRef.current;
@@ -3600,6 +3759,22 @@ const CanvasComponent = (
           )}
         </g>
       </svg>
+      <div
+        ref={drawingSurfaceRef}
+        className={`canvas-drawing-surface ${isDrawToolActive ? 'is-active' : ''}`}
+        onPointerDown={handleDrawingPointerDown}
+        onPointerMove={handleDrawingPointerMove}
+        onPointerUp={handleDrawingPointerUp}
+        onPointerCancel={handleDrawingPointerCancel}
+        aria-hidden
+      >
+        <svg className="canvas-drawings" aria-hidden>
+          <g transform={`translate(${transform.x} ${transform.y}) scale(${transform.scale})`}>
+            {drawings.map((stroke) => renderStroke(stroke, stroke.id))}
+            {liveStroke ? renderStroke(liveStroke, 'live-stroke') : null}
+          </g>
+        </svg>
+      </div>
       <div className="canvas-overlays" aria-hidden>
         {marqueeRect && (
           <div
