@@ -206,16 +206,7 @@
   flex: 1;
   min-height: 0;
   gap: 24px;
-  align-items: flex-start;
-}
-
-.workspace__sidebar {
-  flex-shrink: 0;
-  display: flex;
-  align-items: flex-start;
-  position: sticky;
-  top: 16px;
-  height: fit-content;
+  align-items: stretch;
 }
 
 .workspace__main {
@@ -225,6 +216,18 @@
   flex: 1;
   min-height: 0;
   min-width: 0;
+}
+
+.workspace__draw-menu {
+  position: absolute;
+  left: 16px;
+  top: 16px;
+  z-index: 4;
+  pointer-events: none;
+}
+
+.workspace__draw-menu .draw-menu {
+  pointer-events: auto;
 }
 
 .workspace__status {
