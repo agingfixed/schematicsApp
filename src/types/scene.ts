@@ -12,6 +12,16 @@ export interface Vec2 {
   y: number;
 }
 
+export type PenStyle = 'pen' | 'marker' | 'highlighter';
+
+export interface DrawStroke {
+  id: string;
+  points: Vec2[];
+  color: string;
+  size: number;
+  style: PenStyle;
+}
+
 export type TextAlign = 'left' | 'center' | 'right';
 
 export type NodeFontWeight = 400 | 600 | 700;
@@ -127,6 +137,7 @@ export interface ConnectorModel {
 export interface SceneContent {
   nodes: NodeModel[];
   connectors: ConnectorModel[];
+  drawings: DrawStroke[];
 }
 
 export interface SelectionState {
@@ -145,7 +156,8 @@ export type Tool =
   | 'connector'
   | 'text'
   | 'link'
-  | 'image';
+  | 'image'
+  | 'draw';
 
 export interface CanvasTransform {
   x: number;

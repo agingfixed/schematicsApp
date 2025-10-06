@@ -103,6 +103,34 @@ export const MiniMap: React.FC<MiniMapProps> = ({ scene, transform, viewport, ca
             />
           );
         })}
+        {scene.drawings.map((stroke) => {
+          if (!stroke.points.length) {
+            return null;
+          }
+          const path = stroke.points
+            .map((point, index) => {
+              const projected = projectPoint(point);
+              return `${index === 0 ? 'M' : 'L'}${projected.x} ${projected.y}`;
+            })
+            .join(' ');
+          if (!path) {
+            return null;
+          }
+          const opacity =
+            stroke.style === 'highlighter' ? 0.4 : stroke.style === 'marker' ? 0.7 : 1;
+          return (
+            <path
+              key={stroke.id}
+              d={path}
+              stroke={stroke.color}
+              strokeWidth={Math.max(projectSize(stroke.size), 0.75)}
+              strokeOpacity={opacity}
+              fill="none"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          );
+        })}
         {viewportRect && (
           <rect
             className="minimap__viewport"

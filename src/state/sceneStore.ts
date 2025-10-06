@@ -7,6 +7,7 @@ import {
   ConnectorEndpointStyles,
   ConnectorModel,
   ConnectorLabelStyle,
+  DrawStroke,
   NodeFontWeight,
   NodeKind,
   NodeModel,
@@ -110,6 +111,8 @@ interface SceneStoreActions {
   setNodeLink: (nodeId: string, url: string | null) => void;
   replaceScene: (scene: SceneContent, options?: ReplaceSceneOptions) => void;
   resetScene: () => void;
+  addDrawing: (stroke: DrawStroke) => void;
+  removeDrawings: (ids: string[]) => void;
 }
 
 export type SceneStore = SceneStoreState & SceneStoreActions;
@@ -186,7 +189,8 @@ const createInitialScene = (): SceneContent => {
 
   return {
     nodes: [logo, welcome, exampleOne, exampleTwo, exampleThree, homeBaseLink],
-    connectors
+    connectors,
+    drawings: []
   };
 };
 
@@ -827,7 +831,11 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
     set(() => {
       const { resetHistory = true, resetTransform = true } = options ?? {};
       const updates: Partial<SceneStoreState> = {
-        scene: cloneScene(scene),
+        scene: cloneScene({
+          nodes: scene.nodes,
+          connectors: scene.connectors,
+          drawings: scene.drawings ?? []
+        }),
         selection: { nodeIds: [], connectorIds: [] },
         tool: 'select',
         editingNodeId: null,
@@ -853,12 +861,44 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
       editingNodeId: null,
       isTransaction: false,
       transform: { x: 0, y: 0, scale: 1 }
-    }))
+    })),
+  addDrawing: (stroke) =>
+    set((current) => {
+      if (!stroke.points.length) {
+        return {};
+      }
+
+      const scene = cloneScene(current.scene);
+      scene.drawings.push({
+        ...stroke,
+        points: stroke.points.map((point) => ({ ...point }))
+      });
+
+      return withSceneChange(current, scene);
+    }),
+  removeDrawings: (ids) =>
+    set((current) => {
+      if (!ids.length) {
+        return {};
+      }
+
+      const toRemove = new Set(ids);
+      const existing = current.scene.drawings;
+      if (!existing.some((stroke) => toRemove.has(stroke.id))) {
+        return {};
+      }
+
+      const scene = cloneScene(current.scene);
+      scene.drawings = scene.drawings.filter((stroke) => !toRemove.has(stroke.id));
+
+      return withSceneChange(current, scene);
+    })
 }));
 
 export const selectScene = (state: SceneStore) => state.scene;
 export const selectNodes = (state: SceneStore) => state.scene.nodes;
 export const selectConnectors = (state: SceneStore) => state.scene.connectors;
+export const selectDrawings = (state: SceneStore) => state.scene.drawings;
 export const selectSelection = (state: SceneStore) => state.selection;
 export const selectTool = (state: SceneStore) => state.tool;
 export const selectGridVisible = (state: SceneStore) => state.gridVisible;

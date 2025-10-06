@@ -74,6 +74,7 @@ const toolButtons: Array<{
 }> = [
   { id: 'select', label: 'Select', icon: <SelectCursorIcon />, shortcut: 'V', tooltip: 'Select' },
   { id: 'pan', label: 'Pan', icon: '✋', shortcut: 'Space', tooltip: 'Pan' },
+  { id: 'draw', label: 'Draw', icon: '🖌️', shortcut: 'D', tooltip: 'Draw' },
   { id: 'text', label: 'Text box', icon: 'T', shortcut: 'T', tooltip: 'Text box' },
   { id: 'link', label: 'Link', icon: '🔗', tooltip: 'Link' },
   { id: 'image', label: 'Image', icon: <ImageToolIcon />, tooltip: 'Image' },
@@ -101,6 +102,14 @@ export const Toolbar: React.FC<ToolbarProps> = ({ canvasRef }) => {
       return;
     }
     setTool(nextValue);
+  };
+
+  const handleToolButtonClick = (id: Exclude<Tool, NodeTool>) => {
+    if (id === 'draw' && tool === 'draw') {
+      setTool('select');
+      return;
+    }
+    setTool(id);
   };
 
   const handleZoom = (type: 'in' | 'out' | 'fit' | 'hundred') => {
@@ -154,7 +163,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({ canvasRef }) => {
                   type="button"
                   className={`toolbar__button ${tool === button.id ? 'is-active' : ''}`}
                   aria-pressed={tool === button.id}
-                  onClick={() => setTool(button.id)}
+                  onClick={() => handleToolButtonClick(button.id)}
                   aria-label={`${button.label} tool${button.shortcut ? ` (${button.shortcut})` : ''}`}
                   data-tooltip={button.tooltip}
                 >
@@ -172,7 +181,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({ canvasRef }) => {
               type="button"
               className={`toolbar__button ${tool === button.id ? 'is-active' : ''}`}
               aria-pressed={tool === button.id}
-              onClick={() => setTool(button.id)}
+              onClick={() => handleToolButtonClick(button.id)}
               aria-label={`${button.label} tool${button.shortcut ? ` (${button.shortcut})` : ''}`}
               data-tooltip={button.tooltip}
             >
