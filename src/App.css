@@ -475,9 +475,9 @@
 .board-controls__icon-button[data-tooltip]::after {
   content: attr(data-tooltip);
   position: absolute;
-  left: 50%;
-  bottom: calc(100% + 10px);
-  transform: translate(-50%, 6px) scale(0.95);
+  left: calc(100% + 12px);
+  top: 50%;
+  transform: translateY(-50%) scale(0.95);
   background: rgba(15, 23, 42, 0.92);
   color: rgba(226, 232, 240, 0.95);
   padding: 6px 10px;
@@ -495,11 +495,11 @@
 .board-controls__icon-button[data-tooltip]::before {
   content: '';
   position: absolute;
-  left: 50%;
-  bottom: calc(100% + 6px);
+  left: calc(100% + 4px);
+  top: 50%;
   width: 10px;
   height: 10px;
-  transform: translate(-50%, 8px) rotate(45deg);
+  transform: translateY(-50%) rotate(45deg);
   background: rgba(15, 23, 42, 0.92);
   opacity: 0;
   transition: opacity 0.15s ease, transform 0.15s ease;
@@ -510,13 +510,13 @@
 .board-controls__icon-button[data-tooltip]:hover::after,
 .board-controls__icon-button[data-tooltip]:focus-visible::after {
   opacity: 1;
-  transform: translate(-50%, 0) scale(1);
+  transform: translateY(-50%) scale(1);
 }
 
 .board-controls__icon-button[data-tooltip]:hover::before,
 .board-controls__icon-button[data-tooltip]:focus-visible::before {
   opacity: 1;
-  transform: translate(-50%, 2px) rotate(45deg);
+  transform: translateY(-50%) rotate(45deg);
 }
 
 .board-controls__button {
