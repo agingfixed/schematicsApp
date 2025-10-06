@@ -385,16 +385,17 @@
 }
 
 .board-controls__name-field {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 180px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 220px;
 }
 
 .board-controls__name-label {
   font-size: 12px;
   color: rgba(226, 232, 240, 0.82);
   font-weight: 500;
+  white-space: nowrap;
 }
 
 .board-controls__name-input {
