@@ -233,19 +233,6 @@
   pointer-events: auto;
 }
 
-.workspace__status {
-  position: absolute;
-  left: 16px;
-  bottom: 16px;
-  padding: 6px 12px;
-  border-radius: 999px;
-  font-size: 13px;
-  background: rgba(15, 23, 42, 0.72);
-  color: rgba(226, 232, 240, 0.8);
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  backdrop-filter: blur(10px);
-}
-
 .minimap {
   position: absolute;
   right: 24px;

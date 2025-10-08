@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Canvas, CanvasHandle } from './components/Canvas';
 import { Toolbar } from './components/Toolbar';
 import { MiniMap } from './components/MiniMap';
@@ -21,18 +21,6 @@ export const App: React.FC = () => {
   const transform = useSceneStore(selectTransform);
   const scene = useSceneStore(selectScene);
 
-  const nodeCount = scene.nodes.length;
-  const connectorCount = scene.connectors.length;
-  const drawingCount = scene.drawings.length;
-
-  const statusText = useMemo(() => {
-    const parts = [`${nodeCount} nodes`, `${connectorCount} connectors`];
-    if (drawingCount) {
-      parts.push(`${drawingCount} drawings`);
-    }
-    return parts.join(' · ');
-  }, [nodeCount, connectorCount, drawingCount]);
-
   return (
     <div className="app-shell">
       <BoardControls />
@@ -45,7 +33,6 @@ export const App: React.FC = () => {
             </div>
           )}
           <Canvas ref={canvasRef} onViewportChange={setViewport} />
-          <div className="workspace__status">{statusText}</div>
           {showMiniMap && (
             <MiniMap
               canvasRef={canvasRef}
